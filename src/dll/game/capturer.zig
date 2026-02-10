@@ -36,7 +36,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             };
             const camera_manager = game_memory.camera_manager.toConstPointer();
             const camera = captureCamera(camera_manager);
-            // const walls = captureWalls(&game_memory.walls, player_1, player_2); // Disable unfinished feature for release.
+            const walls = captureWalls(&game_memory.walls, player_1, player_2);
             return .{
                 .frames_since_round_start = frames_from_round_start,
                 .floor_z = floor_z,
@@ -44,7 +44,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 .camera = camera,
                 .main_player_id = main_player_id,
                 .left_player_id = left_player_id,
-                // .walls = walls, // Disable unfinished feature for release.
+                .walls = walls,
             };
         }
 

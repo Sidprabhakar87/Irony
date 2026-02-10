@@ -47,7 +47,7 @@ pub const View = struct {
         ui.drawIngameCamera(&settings.ingame_camera, frame, direction, matrix);
         ui.drawCollisionSpheres(&settings.collision_spheres, frame, matrix, inverse_matrix);
         self.hurt_cylinders.draw(&settings.hurt_cylinders, frame, direction, matrix, inverse_matrix);
-        // ui.drawWalls(frame, direction, matrix); // Disable unfinished feature for release.
+        ui.drawWalls(frame, direction, matrix);
         ui.drawFloor(&settings.floor, frame, direction, matrix);
         ui.drawForwardDirections(&settings.forward_directions, frame, direction, matrix);
         ui.drawSkeletons(&settings.skeletons, frame, matrix);

@@ -468,6 +468,9 @@ pub fn SceneComponent(comptime game_id: build_info.Game) type {
 
 // T7: TekkenWallActor, T8: PolarisStageWallActor
 pub fn Wall(comptime game_id: build_info.Game) type {
+    const HiddenPolaris = sdk.memory.Bitfield(u8, &.{
+        .{ .name = "value", .backing_value = 1 },
+    });
     const CollisionEnabled = sdk.memory.Bitfield(u8, &.{
         .{ .name = "value", .backing_value = 1 },
     });
@@ -478,15 +481,31 @@ pub fn Wall(comptime game_id: build_info.Game) type {
             field(0x160, "root_component", RootComponent, &.fromPointer(null)), // UE: RootComponent
             field(0x390, "floor_number", u32, &0), // T7: FloorNo
         }),
-        .t8 => sdk.memory.StructWithOffsets(0x3A9, &.{
-            field(0x05D, "collision_enabled", CollisionEnabled, &.{}),
+        .t8 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x059, "hidden_polaris", HiddenPolaris, &.{}), // UE/T8 : bHidden_Polaris
+            field(0x05D, "collision_enabled", CollisionEnabled, &.{}), // UE : bActorEnableCollision
             field(0x1A0, "root_component", RootComponent, &.fromPointer(null)), // UE: RootComponent
-            field(0x2B0, "state", u8, &0), // T8: State
+            field(0x2B0, "state", StageGimmickState, &.init), // T8: State
             field(0x2B4, "set_number", u32, &0), // T8: SetNo
             field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
+            field(0x2C2, "tk_collision_enabled", Bool, &.false), // T8: TKCollisionEnable
         }),
     };
 }
+
+// T8: EStageGimmickState
+pub const StageGimmickState = enum(u8) {
+    init = 0,
+    main = 1,
+    damage = 2,
+    @"break" = 3,
+    vanish_wait = 4,
+    vanish_start = 5,
+    vanish = 6,
+    revival = 7,
+    end = 8,
+    _,
+};
 
 // UE: TArray
 pub fn UnrealArrayList(comptime Element: type) type {

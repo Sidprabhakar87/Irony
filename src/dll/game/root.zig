@@ -49,6 +49,7 @@ pub const Animation = @import("types.zig").Animation;
 pub const CameraManager = @import("types.zig").CameraManager;
 pub const SceneComponent = @import("types.zig").SceneComponent;
 pub const Wall = @import("types.zig").Wall;
+pub const StageGimmickState = @import("types.zig").StageGimmickState;
 pub const UnrealArrayList = @import("types.zig").UnrealArrayList;
 pub const UnrealObjectFlags = @import("types.zig").UnrealObjectFlags;
 pub const UnrealInternalObjectFlags = @import("types.zig").UnrealInternalObjectFlags;

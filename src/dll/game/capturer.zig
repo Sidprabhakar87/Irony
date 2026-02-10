@@ -495,8 +495,10 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 if (!wall.collision_enabled.value or wall.floor_number != floor_number) {
                     continue;
                 }
-                if (game_id == .t8 and wall.set_number != set_number) {
-                    continue;
+                if (game_id == .t8) {
+                    if (wall.hidden_polaris.value or wall.state == .init or wall.set_number != set_number) {
+                        continue;
+                    }
                 }
                 const root = wall.root_component.toConstPointer() orelse continue;
                 result.buffer[result.len] = .{

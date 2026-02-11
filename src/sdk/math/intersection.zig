@@ -86,6 +86,8 @@ pub fn doSlicesIntersect(Element: type, a: []const Element, b: []const Element) 
 }
 
 pub fn findRayRectangleIntersection(ray: math.Ray2, rect: math.Rectangle) ?math.RayHit2 {
+    const eps_1 = 1e-6;
+    const eps_2 = 0.01;
     const local_ray = math.Ray2{
         .origin = ray.origin.subtract(rect.center).rotateZ(-rect.rotation),
         .direction = ray.direction.rotateZ(-rect.rotation),
@@ -95,8 +97,8 @@ pub fn findRayRectangleIntersection(ray: math.Ray2, rect: math.Rectangle) ?math.
     var t_min: f32 = -std.math.inf(f32);
     var t_max: f32 = std.math.inf(f32);
     var local_hit_normal = math.Vec2.zero;
-    if (@abs(local_ray.direction.x()) < 1e-6) {
-        if (local_ray.origin.x() < min.x() or local_ray.origin.x() > max.x()) {
+    if (@abs(local_ray.direction.x()) < eps_1) {
+        if (local_ray.origin.x() - min.x() < eps_2 or local_ray.origin.x() - max.x() > -eps_2) {
             return null;
         }
     } else {
@@ -117,8 +119,8 @@ pub fn findRayRectangleIntersection(ray: math.Ray2, rect: math.Rectangle) ?math.
             return null;
         }
     }
-    if (@abs(local_ray.direction.y()) < 1e-6) {
-        if (local_ray.origin.y() < min.y() or local_ray.origin.y() > max.y()) {
+    if (@abs(local_ray.direction.y()) < eps_1) {
+        if (local_ray.origin.y() - min.y() < eps_2 or local_ray.origin.y() - max.y() > -eps_2) {
             return null;
         }
     } else {
@@ -287,6 +289,7 @@ test "findRayRectangleIntersection should return correct value" {
     try testing.expectApproxEqAbs(2, hit_3.?.t, 0.00001);
 
     try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(10, 1), vec(3, 4)), rect));
+    try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(5, -4), vec(3, 4)), rect));
     try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(1, -1), vec(1, 0)), rect));
     try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(1, -1), vec(-3, -4)), rect));
     try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(4, 18), vec(-1, 2)), rect));

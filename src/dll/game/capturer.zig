@@ -457,6 +457,41 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             return result;
         }
 
+        fn captureWalls(
+            wall_pointers: []const sdk.memory.Pointer(game.Wall(game_id)),
+            player_1: ?*const GamePlayer,
+            player_2: ?*const GamePlayer,
+        ) model.Walls {
+            const floor_number = captureFloorNumber(player_1, player_2) orelse return .{};
+            const set_number = captureStageSetNumber(player_1, player_2);
+            var rectangles_buffer: [game.Memory(game_id).max_walls]sdk.math.Rectangle = undefined;
+            const rectangles = captureWallRectangles(&rectangles_buffer, wall_pointers, floor_number, set_number);
+            const midpoint = findMidpoint(rectangles) orelse return .{};
+
+            var hit = rayCastRectangles(.{ .origin = midpoint, .direction = .plus_x }, rectangles) orelse return .{};
+            var result = model.Walls{};
+            var hit_opposite_side = false;
+            while (result.len < result.buffer.len) {
+                const rotation = comptime sdk.math.Mat2.fromZRotation(-0.5 * std.math.pi);
+                const ray = sdk.math.Ray2{
+                    .origin = hit.position,
+                    .direction = hit.normal.multiply(rotation),
+                };
+                hit = rayCastRectangles(ray, rectangles) orelse break;
+                const diff = hit.position.subtract(midpoint);
+                if (diff.x() < 0 and diff.y() < 0) {
+                    hit_opposite_side = true;
+                }
+                if (hit_opposite_side and diff.y() > 0) {
+                    break;
+                }
+                result.buffer[result.len] = .{ .edge = hit.position };
+                result.len += 1;
+            }
+
+            return result;
+        }
+
         fn captureFloorNumber(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?u32 {
             if (player_1) |p1| {
                 return p1.floor_number;
@@ -479,16 +514,19 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             }
         }
 
-        fn captureWalls(wall_pointers: []const sdk.memory.Pointer(game.Wall(game_id)), player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) model.Walls {
-            const floor_number = captureFloorNumber(player_1, player_2) orelse return .{};
-            const set_number = captureStageSetNumber(player_1, player_2);
+        fn captureWallRectangles(
+            buffer: []sdk.math.Rectangle,
+            wall_pointers: []const sdk.memory.Pointer(game.Wall(game_id)),
+            floor_number: u32,
+            set_number: ?u32,
+        ) []sdk.math.Rectangle {
             const wall_mesh_half_size = switch (game_id) {
                 .t7 => 128,
                 .t8 => 50,
             };
-            var result: model.Walls = .{};
+            var len: usize = 0;
             for (wall_pointers) |wall_pointer| {
-                if (result.len >= result.buffer.len) {
+                if (len >= buffer.len) {
                     break;
                 }
                 const wall = wall_pointer.toConstPointer() orelse continue;
@@ -501,14 +539,36 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                     }
                 }
                 const root = wall.root_component.toConstPointer() orelse continue;
-                result.buffer[result.len] = .{
+                buffer[len] = .{
                     .center = root.relative_position.convert().swizzle("xy"),
                     .half_size = root.relative_scale.convert().swizzle("xy").scale(wall_mesh_half_size),
                     .rotation = root.relative_rotation.convert().y(),
                 };
-                result.len += 1;
+                len += 1;
             }
-            return result;
+            return buffer[0..len];
+        }
+
+        fn findMidpoint(rectangles: []const sdk.math.Rectangle) ?sdk.math.Vec2 {
+            if (rectangles.len == 0) {
+                return null;
+            }
+            var sum = sdk.math.Vec2.zero;
+            for (rectangles) |*rect| {
+                sum = sum.add(rect.center);
+            }
+            return sum.scaleDown(@floatFromInt(rectangles.len));
+        }
+
+        fn rayCastRectangles(ray: sdk.math.Ray2, rectangles: []const sdk.math.Rectangle) ?sdk.math.RayHit2 {
+            var min_hit: ?sdk.math.RayHit2 = null;
+            for (rectangles) |rect| {
+                const hit = sdk.math.findRayRectangleIntersection(ray, rect) orelse continue;
+                if (min_hit == null or hit.t < min_hit.?.t) {
+                    min_hit = hit;
+                }
+            }
+            return min_hit;
         }
     };
 }

@@ -1,10 +1,7 @@
 const std = @import("std");
 const math = @import("root.zig");
 
-pub fn checkCylinderLineSegmentIntersection(
-    cylinder: math.Cylinder,
-    line: math.LineSegment3,
-) bool {
+pub fn checkCylinderLineSegmentIntersection(cylinder: math.Cylinder, line: math.LineSegment3) bool {
     const z_interval_1 = Interval{
         .min = cylinder.center.z() - cylinder.half_height,
         .max = cylinder.center.z() + cylinder.half_height,
@@ -33,10 +30,7 @@ pub fn checkCylinderLineSegmentIntersection(
     );
 }
 
-pub fn checkCircleLineSegmentIntersection(
-    circle: math.Circle,
-    line: math.LineSegment2,
-) bool {
+pub fn checkCircleLineSegmentIntersection(circle: math.Circle, line: math.LineSegment2) bool {
     const p1 = line.point_1.subtract(circle.center);
     const p2 = line.point_2.subtract(circle.center);
 
@@ -89,6 +83,71 @@ pub fn doSlicesIntersect(Element: type, a: []const Element, b: []const Element) 
     const b_min = @intFromPtr(&b[0]);
     const b_max = @intFromPtr(&b[b.len - 1]);
     return (a_max >= b_min) and (b_max >= a_min);
+}
+
+pub fn findRayRectangleIntersection(ray: math.Ray2, rect: math.Rectangle) ?math.RayHit2 {
+    const local_ray = math.Ray2{
+        .origin = ray.origin.subtract(rect.center).rotateZ(-rect.rotation),
+        .direction = ray.direction.rotateZ(-rect.rotation),
+    };
+    const min = rect.half_size.scale(-1.0);
+    const max = rect.half_size;
+    var t_min: f32 = -std.math.inf(f32);
+    var t_max: f32 = std.math.inf(f32);
+    var local_hit_normal = math.Vec2.zero;
+    if (@abs(local_ray.direction.x()) < 1e-6) {
+        if (local_ray.origin.x() < min.x() or local_ray.origin.x() > max.x()) {
+            return null;
+        }
+    } else {
+        const inv_dx = 1.0 / local_ray.direction.x();
+        var tx1 = (min.x() - local_ray.origin.x()) * inv_dx;
+        var tx2 = (max.x() - local_ray.origin.x()) * inv_dx;
+        var nx = math.Vec2.minus_x;
+        if (tx1 > tx2) {
+            std.mem.swap(f32, &tx1, &tx2);
+            nx = math.Vec2.plus_x;
+        }
+        if (tx1 > t_min) {
+            t_min = tx1;
+            local_hit_normal = nx;
+        }
+        t_max = @min(t_max, tx2);
+        if (t_min > t_max) {
+            return null;
+        }
+    }
+    if (@abs(local_ray.direction.y()) < 1e-6) {
+        if (local_ray.origin.y() < min.y() or local_ray.origin.y() > max.y()) {
+            return null;
+        }
+    } else {
+        const inv_dy = 1.0 / local_ray.direction.y();
+        var ty1 = (min.y() - local_ray.origin.y()) * inv_dy;
+        var ty2 = (max.y() - local_ray.origin.y()) * inv_dy;
+        var ny = math.Vec2.minus_y;
+        if (ty1 > ty2) {
+            std.mem.swap(f32, &ty1, &ty2);
+            ny = math.Vec2.plus_y;
+        }
+        if (ty1 > t_min) {
+            t_min = ty1;
+            local_hit_normal = ny;
+        }
+        t_max = @min(t_max, ty2);
+        if (t_min > t_max) {
+            return null;
+        }
+    }
+    if (t_min < 0.0) {
+        return null;
+    }
+    const local_hit_position = local_ray.origin.add(local_ray.direction.scale(t_min));
+    return .{
+        .position = local_hit_position.rotateZ(rect.rotation).add(rect.center),
+        .normal = local_hit_normal.rotateZ(rect.rotation),
+        .t = t_min,
+    };
 }
 
 const testing = std.testing;
@@ -181,4 +240,54 @@ test "doSlicesIntersect should return correct value" {
     try testing.expectEqual(true, doSlicesIntersect(i32, data[2..9], data[1..8]));
     try testing.expectEqual(true, doSlicesIntersect(i32, data[1..9], data[4..6]));
     try testing.expectEqual(true, doSlicesIntersect(i32, data[4..6], data[1..9]));
+}
+
+test "findRayRectangleIntersection should return correct value" {
+    const vec = struct {
+        fn call(x: f32, y: f32) math.Vec2 {
+            return math.Vec2.fromArray(.{ x, y });
+        }
+    }.call;
+    const ray = struct {
+        fn call(origin: math.Vec2, direction: math.Vec2) math.Ray2 {
+            return .{
+                .origin = origin,
+                .direction = direction,
+            };
+        }
+    }.call;
+    const rect = math.Rectangle{
+        .center = .fromArray(.{ 10, 11 }),
+        .half_size = .fromArray(.{ 5, 10 }),
+        .rotation = -std.math.atan2(@as(f32, 6), @as(f32, 8)),
+    };
+
+    const hit_1 = findRayRectangleIntersection(ray(vec(1, -1), vec(3, 4)), rect);
+    try testing.expect(hit_1 != null);
+    try testing.expectEqual(vec(4, 3), hit_1.?.position);
+    try testing.expectEqual(vec(0, -1).rotateZ(rect.rotation), hit_1.?.normal);
+    try testing.expectEqual(1, hit_1.?.t);
+
+    const hit_2 = findRayRectangleIntersection(ray(vec(4, 18), vec(1, -2)), rect);
+    try testing.expect(hit_2 != null);
+    try testing.expectEqual(vec(6, 14), hit_2.?.position);
+    try testing.expectEqual(vec(-1, 0).rotateZ(rect.rotation), hit_2.?.normal);
+    try testing.expectEqual(2, hit_2.?.t);
+
+    const hit_3 = findRayRectangleIntersection(ray(vec(16, 21), vec(0, -1)), rect);
+    try testing.expect(hit_3 != null);
+    try testing.expectEqual(vec(16, 19), hit_3.?.position);
+    try testing.expectEqual(vec(0, 1).rotateZ(rect.rotation), hit_3.?.normal);
+    try testing.expectApproxEqAbs(2, hit_3.?.t, 0.00001);
+
+    const hit_4 = findRayRectangleIntersection(ray(vec(19, 12), vec(-1, 0)), rect);
+    try testing.expect(hit_4 != null);
+    try testing.expectEqual(vec(17, 12), hit_4.?.position);
+    try testing.expectEqual(vec(1, 0).rotateZ(rect.rotation), hit_4.?.normal);
+    try testing.expectApproxEqAbs(2, hit_3.?.t, 0.00001);
+
+    try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(10, 1), vec(3, 4)), rect));
+    try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(1, -1), vec(1, 0)), rect));
+    try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(1, -1), vec(-3, -4)), rect));
+    try testing.expectEqual(null, findRayRectangleIntersection(ray(vec(4, 18), vec(-1, 2)), rect));
 }

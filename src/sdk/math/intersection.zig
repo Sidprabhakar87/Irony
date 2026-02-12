@@ -85,6 +85,33 @@ pub fn doSlicesIntersect(Element: type, a: []const Element, b: []const Element) 
     return (a_max >= b_min) and (b_max >= a_min);
 }
 
+pub fn findRayLineSegmentIntersection(ray: math.Ray2, line: math.LineSegment2) ?math.RayHit2 {
+    const eps: f32 = 1e-6;
+    const line_diff = line.point_2.subtract(line.point_1);
+    const ray_cross_line = ray.direction.cross(line_diff);
+    const origin_to_point_1 = line.point_1.subtract(ray.origin);
+    const point_1_cross_direction = origin_to_point_1.cross(ray.direction);
+    if (@abs(ray_cross_line) < eps) {
+        return null;
+    }
+    const t = origin_to_point_1.cross(line_diff) / ray_cross_line;
+    const u = point_1_cross_direction / ray_cross_line;
+    if (t < 0 or u < 0 or u > 1) {
+        return null;
+    }
+    const hit_pos = ray.origin.add(ray.direction.scale(t));
+    var normal = math.Vec2.fromArray(.{ -line_diff.y(), line_diff.x() });
+    normal = normal.normalize();
+    if (normal.dot(ray.direction) > 0.0) {
+        normal = normal.scale(-1.0);
+    }
+    return math.RayHit2{
+        .position = hit_pos,
+        .normal = normal,
+        .t = t,
+    };
+}
+
 pub fn findRayRectangleIntersection(ray: math.Ray2, rect: math.Rectangle) ?math.RayHit2 {
     const eps_1 = 1e-6;
     const eps_2 = 0.01;
@@ -242,6 +269,54 @@ test "doSlicesIntersect should return correct value" {
     try testing.expectEqual(true, doSlicesIntersect(i32, data[2..9], data[1..8]));
     try testing.expectEqual(true, doSlicesIntersect(i32, data[1..9], data[4..6]));
     try testing.expectEqual(true, doSlicesIntersect(i32, data[4..6], data[1..9]));
+}
+
+test "findRayLineSegmentIntersection should return correct value" {
+    const vec = struct {
+        fn call(x: f32, y: f32) math.Vec2 {
+            return math.Vec2.fromArray(.{ x, y });
+        }
+    }.call;
+    const ray = struct {
+        fn call(origin: math.Vec2, direction: math.Vec2) math.Ray2 {
+            return .{
+                .origin = origin,
+                .direction = direction,
+            };
+        }
+    }.call;
+    const line = math.LineSegment2{
+        .point_1 = .fromArray(.{ 8, 2 }),
+        .point_2 = .fromArray(.{ 2, 5 }),
+    };
+
+    const hit_1 = findRayLineSegmentIntersection(ray(vec(2, 0), vec(1, 2)), line);
+    try testing.expect(hit_1 != null);
+    try testing.expectEqual(vec(4, 4), hit_1.?.position);
+    try testing.expectEqual(vec(-1, -2).normalize(), hit_1.?.normal);
+    try testing.expectEqual(2, hit_1.?.t);
+
+    const hit_2 = findRayLineSegmentIntersection(ray(vec(8, 3), vec(-1, 0)), line);
+    try testing.expect(hit_2 != null);
+    try testing.expectEqual(vec(6, 3), hit_2.?.position);
+    try testing.expectEqual(vec(1, 2).normalize(), hit_2.?.normal);
+    try testing.expectEqual(2, hit_2.?.t);
+
+    const hit_3 = findRayLineSegmentIntersection(ray(vec(0, 3), vec(1, 1)), line);
+    try testing.expect(hit_3 != null);
+    try testing.expectEqual(vec(2, 5), hit_3.?.position);
+    try testing.expectEqual(vec(-1, -2).normalize(), hit_3.?.normal);
+    try testing.expectEqual(2, hit_3.?.t);
+
+    const hit_4 = findRayLineSegmentIntersection(ray(vec(6, 0), vec(1, 1)), line);
+    try testing.expect(hit_4 != null);
+    try testing.expectEqual(vec(8, 2), hit_4.?.position);
+    try testing.expectEqual(vec(-1, -2).normalize(), hit_4.?.normal);
+    try testing.expectEqual(2, hit_4.?.t);
+
+    try testing.expectEqual(null, findRayLineSegmentIntersection(ray(vec(3, 6), vec(2, -1)), line));
+    try testing.expectEqual(null, findRayLineSegmentIntersection(ray(vec(6, 4), vec(2, 1)), line));
+    try testing.expectEqual(null, findRayLineSegmentIntersection(ray(vec(9, 1), vec(1, 1)), line));
 }
 
 test "findRayRectangleIntersection should return correct value" {

@@ -4,6 +4,7 @@ pub const checkCylinderLineSegmentIntersection = @import("intersection.zig").che
 pub const checkCircleLineSegmentIntersection = @import("intersection.zig").checkCircleLineSegmentIntersection;
 pub const findIntervalIntersection = @import("intersection.zig").findIntervalIntersection;
 pub const doSlicesIntersect = @import("intersection.zig").doSlicesIntersect;
+pub const findRayLineSegmentIntersection = @import("intersection.zig").findRayLineSegmentIntersection;
 pub const findRayRectangleIntersection = @import("intersection.zig").findRayRectangleIntersection;
 pub const vector_tag = @import("vector.zig").vector_tag;
 pub const Vector = @import("vector.zig").Vector;

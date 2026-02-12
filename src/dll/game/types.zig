@@ -428,6 +428,28 @@ pub fn CameraManager(comptime game_id: build_info.Game) type {
     };
 }
 
+// UE: AActor
+pub fn Actor(comptime game_id: build_info.Game) type {
+    const HiddenPolaris = sdk.memory.Bitfield(u8, &.{
+        .{ .name = "value", .backing_value = 1 },
+    });
+    const CollisionEnabled = sdk.memory.Bitfield(u8, &.{
+        .{ .name = "value", .backing_value = 1 },
+    });
+    const RootComponent = sdk.memory.Pointer(SceneComponent(game_id));
+    return switch (game_id) {
+        .t7 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x07E, "collision_enabled", CollisionEnabled, &.{}), // UE : bActorEnableCollision
+            field(0x160, "root_component", RootComponent, &.fromPointer(null)), // UE: RootComponent
+        }),
+        .t8 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x059, "hidden_polaris", HiddenPolaris, &.{}), // UE/T8 : bHidden_Polaris
+            field(0x05D, "collision_enabled", CollisionEnabled, &.{}), // UE : bActorEnableCollision
+            field(0x1A0, "root_component", RootComponent, &.fromPointer(null)), // UE: RootComponent
+        }),
+    };
+}
+
 // UE: USceneComponent
 pub fn SceneComponent(comptime game_id: build_info.Game) type {
     const Float = switch (game_id) {
@@ -468,23 +490,13 @@ pub fn SceneComponent(comptime game_id: build_info.Game) type {
 
 // T7: TekkenWallActor, T8: PolarisStageWallActor
 pub fn Wall(comptime game_id: build_info.Game) type {
-    const HiddenPolaris = sdk.memory.Bitfield(u8, &.{
-        .{ .name = "value", .backing_value = 1 },
-    });
-    const CollisionEnabled = sdk.memory.Bitfield(u8, &.{
-        .{ .name = "value", .backing_value = 1 },
-    });
-    const RootComponent = sdk.memory.Pointer(SceneComponent(game_id));
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x07E, "collision_enabled", CollisionEnabled, &.{}), // UE : bActorEnableCollision
-            field(0x160, "root_component", RootComponent, &.fromPointer(null)), // UE: RootComponent
+            field(0x000, "actor", Actor(.t7), &.{}), // parent
             field(0x390, "floor_number", u32, &0), // T7: FloorNo
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x059, "hidden_polaris", HiddenPolaris, &.{}), // UE/T8 : bHidden_Polaris
-            field(0x05D, "collision_enabled", CollisionEnabled, &.{}), // UE : bActorEnableCollision
-            field(0x1A0, "root_component", RootComponent, &.fromPointer(null)), // UE: RootComponent
+            field(0x000, "actor", Actor(.t8), &.{}), // parent
             field(0x2B0, "state", StageGimmickState, &.init), // T8: State
             field(0x2B4, "set_number", u32, &0), // T8: SetNo
             field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
@@ -506,6 +518,93 @@ pub const StageGimmickState = enum(u8) {
     end = 8,
     _,
 };
+
+// T7: TekkenWallActor, T8: PolarisStageWallActor
+pub fn PlayerStart(comptime game_id: build_info.Game) type {
+    return switch (game_id) {
+        .t7 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x000, "actor", Actor(.t7), &.{}), // parent
+            field(0x3B0, "floor_number", u32, &0), // T7: FloorNo
+            field(0x3B8, "type", PlayerStartType(.t7), &.drama_start), // T7: PosType
+        }),
+        .t8 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x000, "actor", Actor(.t8), &.{}), // parent
+            field(0x2D4, "floor_number", u32, &0), // T8: FloorId
+            field(0x2D0, "type", PlayerStartType(.t8), &.drama_start), // T8: StagePositionTypeId
+        }),
+    };
+}
+
+// T7: ETekkenPlayerStart, T8: EStagePositionTypeId
+pub fn PlayerStartType(comptime game_id: build_info.Game) type {
+    return switch (game_id) {
+        .t7 => enum(u8) {
+            drama_start = 0,
+            game_start = 1,
+            drama_win = 2,
+            drama_continue = 3,
+            drama_special = 4,
+            _,
+
+            const Self = @This();
+
+            pub fn isGameStart(self: Self) bool {
+                return self == .game_start;
+            }
+        },
+        .t8 => enum(u8) {
+            drama_start = 0,
+            game_start = 1,
+            drama_win = 2,
+            drama_continue = 3,
+            drama_special = 4,
+            game_start_2 = 5,
+            game_start_3 = 6,
+            game_start_4 = 7,
+            game_start_5 = 8,
+            game_start_6 = 9,
+            game_start_7 = 10,
+            game_start_8 = 11,
+            game_start_9 = 12,
+            drama_fate_1P = 13,
+            drama_fate_2P = 14,
+            drama_fate_set_0 = 15,
+            drama_fate_set_1 = 16,
+            drama_fate_set_2 = 17,
+            drama_fate_set_3 = 18,
+            drama_fate_set_4 = 19,
+            _,
+
+            const Self = @This();
+
+            pub fn isGameStart(self: Self) bool {
+                return switch (self) {
+                    .drama_start => false,
+                    .game_start => true,
+                    .drama_win => false,
+                    .drama_continue => false,
+                    .drama_special => false,
+                    .game_start_2 => true,
+                    .game_start_3 => true,
+                    .game_start_4 => true,
+                    .game_start_5 => true,
+                    .game_start_6 => true,
+                    .game_start_7 => true,
+                    .game_start_8 => true,
+                    .game_start_9 => true,
+                    .drama_fate_1P => false,
+                    .drama_fate_2P => false,
+                    .drama_fate_set_0 => false,
+                    .drama_fate_set_1 => false,
+                    .drama_fate_set_2 => false,
+                    .drama_fate_set_3 => false,
+                    .drama_fate_set_4 => false,
+                    _ => false,
+                };
+            }
+        },
+    };
+}
 
 // UE: TArray
 pub fn UnrealArrayList(comptime Element: type) type {

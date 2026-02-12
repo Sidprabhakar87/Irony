@@ -10,6 +10,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         player_2: PlayerProxy,
         camera_manager: CameraManagerPointer = .fromPointer(null),
         walls: [max_walls]WallPointer = [1]WallPointer{.fromPointer(null)} ** max_walls,
+        player_starts: [max_player_starts]PlayerStartPointer = [1]PlayerStartPointer{.fromPointer(null)} ** max_player_starts,
         functions: Functions,
         unreal_classes: UnrealClasses = .{},
 
@@ -17,6 +18,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         const PlayerProxy = sdk.memory.Proxy(game.Player(game_id));
         const CameraManagerPointer = sdk.memory.Pointer(game.CameraManager(game_id));
         const WallPointer = sdk.memory.Pointer(game.Wall(game_id));
+        const PlayerStartPointer = sdk.memory.Pointer(game.PlayerStart(game_id));
         pub const Functions = struct {
             tick: ?*const game.TickFunction(game_id) = null,
             unrealFree: ?*const game.UnrealFreeFunction = null,
@@ -33,10 +35,12 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub const UnrealClasses = struct {
             camera_manager: ?*const game.UnrealClass = null,
             wall: ?*const game.UnrealClass = null,
+            player_start: ?*const game.UnrealClass = null,
         };
 
         const pattern_cache_file_name = "pattern_cache_" ++ @tagName(game_id) ++ ".json";
         pub const max_walls = 256;
+        pub const max_player_starts = 32;
 
         pub fn init(allocator: std.mem.Allocator, base_dir: ?*const sdk.misc.BaseDir) Self {
             var cache = initPatternCache(allocator, base_dir, pattern_cache_file_name) catch |err| block: {
@@ -58,6 +62,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             player_2: ?*const game.Player(game_id) = null,
             camera_manager: ?*const game.CameraManager(game_id) = null,
             walls: []const game.Wall(game_id) = &.{},
+            player_starts: []const game.PlayerStart(game_id) = &.{},
             functions: Functions = .{},
             unreal_classes: UnrealClasses = .{},
         }) Self {
@@ -66,27 +71,29 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             }
             const player_1_address = if (params.player_1) |p| @intFromPtr(p) else 0;
             const player_2_address = if (params.player_2) |p| @intFromPtr(p) else 0;
-            var walls = [1]WallPointer{.{ .address = 0 }} ** max_walls;
+            var walls = [1]WallPointer{.fromPointer(null)} ** max_walls;
             for (params.walls, 0..) |*wall, index| {
-                if (index >= max_walls) {
+                if (index >= walls.len) {
                     break;
                 }
                 walls[index] = .fromPointer(wall);
+            }
+            var player_starts = [1]PlayerStartPointer{.fromPointer(null)} ** max_player_starts;
+            for (params.player_starts, 0..) |*start, index| {
+                if (index >= player_starts.len) {
+                    break;
+                }
+                player_starts[index] = .fromPointer(start);
             }
             return .{
                 .player_1 = .fromArray(.{player_1_address}),
                 .player_2 = .fromArray(.{player_2_address}),
                 .camera_manager = .fromPointer(params.camera_manager),
+                .player_starts = player_starts,
                 .walls = walls,
                 .functions = params.functions,
                 .unreal_classes = params.unreal_classes,
             };
-        }
-
-        pub fn updateUnrealActorAddresses(self: *Self) void {
-            self.updateUnrealClasses();
-            self.updateCameraManagerAddress();
-            self.updateWallAddresses();
         }
 
         fn t7Init(cache: *?sdk.memory.PatternCache) Self {
@@ -175,6 +182,13 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             return self;
         }
 
+        pub fn updateUnrealActorAddresses(self: *Self) void {
+            self.updateUnrealClasses();
+            self.updateUnrealObjectAddresses((&self.camera_manager)[0..1], self.unreal_classes.camera_manager);
+            self.updateUnrealObjectAddresses(&self.walls, self.unreal_classes.wall);
+            self.updateUnrealObjectAddresses(&self.player_starts, self.unreal_classes.player_start);
+        }
+
         fn updateUnrealClasses(self: *Self) void {
             const findClass = self.functions.findUnrealClass orelse return;
             const w = std.unicode.utf8ToUtf16LeStringLiteral;
@@ -188,40 +202,39 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     .t8 => findClass(null, w("/Script/Polaris.PolarisStageWallActor"), true),
                 };
             }
-        }
-
-        fn updateCameraManagerAddress(self: *Self) void {
-            const findUnrealObjectsOfClass = self.functions.findUnrealObjectsOfClass orelse return;
-            const unrealFree = self.functions.unrealFree orelse return;
-            const class = self.unreal_classes.camera_manager orelse return;
-
-            var list = game.UnrealArrayList(*game.UnrealObject).empty;
-            findUnrealObjectsOfClass(class, &list, true, .default_exclude, .{});
-            defer list.free(unrealFree);
-
-            const slice = list.asSlice();
-            if (slice.len > 0) {
-                self.camera_manager.address = @intFromPtr(slice[0]);
-            } else {
-                self.camera_manager.address = 0;
+            if (classes.player_start == null) {
+                classes.player_start = switch (game_id) {
+                    .t7 => findClass(null, w("/Script/TekkenGame.TekkenPlayerStart"), true),
+                    .t8 => findClass(null, w("/Script/Polaris.PolarisBattlePlayerStart"), true),
+                };
             }
         }
 
-        fn updateWallAddresses(self: *Self) void {
+        fn updateUnrealObjectAddresses(
+            self: *const Self,
+            pointers: anytype,
+            class_maybe: ?*const game.UnrealClass,
+        ) void {
+            if (@typeInfo(@TypeOf(pointers)) != .pointer) {
+                @compileError(
+                    "Expecting pointers array to be passed by reference but the passed type is: " ++
+                        @typeName(@TypeOf(pointers)),
+                );
+            }
             const findUnrealObjectsOfClass = self.functions.findUnrealObjectsOfClass orelse return;
             const unrealFree = self.functions.unrealFree orelse return;
-            const class = self.unreal_classes.wall orelse return;
+            const class = class_maybe orelse return;
 
             var list = game.UnrealArrayList(*game.UnrealObject).empty;
             findUnrealObjectsOfClass(class, &list, true, .default_exclude, .{});
             defer list.free(unrealFree);
 
             const slice = list.asSlice();
-            for (0..self.walls.len) |index| {
+            for (0..pointers.len) |index| {
                 if (index < slice.len) {
-                    self.walls[index].address = @intFromPtr(slice[index]);
+                    pointers[index].address = @intFromPtr(slice[index]);
                 } else {
-                    self.walls[index].address = 0;
+                    pointers[index].address = 0;
                 }
             }
         }

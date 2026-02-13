@@ -108,7 +108,6 @@ test {
     _ = @import("dll/ui/data.zig");
     _ = @import("dll/ui/details.zig");
     _ = @import("dll/ui/file_menu.zig");
-    _ = @import("dll/ui/floor.zig");
     _ = @import("dll/ui/forward_directions.zig");
     _ = @import("dll/ui/frame_window.zig");
     _ = @import("dll/ui/game_memory_window.zig");
@@ -122,13 +121,13 @@ test {
     _ = @import("dll/ui/message_window.zig");
     _ = @import("dll/ui/navigation_layout.zig");
     _ = @import("dll/ui/quadrant_layout.zig");
+    _ = @import("dll/ui/stage.zig");
     _ = @import("dll/ui/settings_window.zig");
     _ = @import("dll/ui/shapes.zig");
     _ = @import("dll/ui/skeletons.zig");
     _ = @import("dll/ui/ui.zig");
     _ = @import("dll/ui/version_info.zig");
     _ = @import("dll/ui/view.zig");
-    _ = @import("dll/ui/walls.zig");
 
     _ = struct {
         test "should have no memory leaks after de-initializing UI testing context" {

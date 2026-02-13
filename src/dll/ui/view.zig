@@ -47,8 +47,7 @@ pub const View = struct {
         ui.drawIngameCamera(&settings.ingame_camera, frame, direction, matrix);
         ui.drawCollisionSpheres(&settings.collision_spheres, frame, matrix, inverse_matrix);
         self.hurt_cylinders.draw(&settings.hurt_cylinders, frame, direction, matrix, inverse_matrix);
-        ui.drawWalls(frame, direction, matrix);
-        ui.drawFloor(&settings.floor, frame, direction, matrix);
+        ui.drawStage(&settings.stage, frame, direction, matrix, inverse_matrix);
         ui.drawForwardDirections(&settings.forward_directions, frame, direction, matrix);
         ui.drawSkeletons(&settings.skeletons, frame, matrix);
         self.hit_lines.draw(&settings.hit_lines, frame, matrix);

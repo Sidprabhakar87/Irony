@@ -137,10 +137,10 @@ pub const SettingsWindow = struct {
                 }.call,
             },
             .{
-                .name = "Floor",
+                .name = "Stage",
                 .content = struct {
                     fn call(c: *const Context) void {
-                        drawFloorSettings(&c.settings.floor, &default_settings.floor);
+                        drawStageSettings(&c.settings.stage, &default_settings.stage);
                     }
                 }.call,
             },
@@ -671,13 +671,29 @@ fn drawForwardDirectionsSettings(
     drawThickness("Thickness", &value.thickness, &default.thickness);
 }
 
-fn drawFloorSettings(value: *model.FloorSettings, default: *const model.FloorSettings) void {
+fn drawStageSettings(value: *model.StageSettings, default: *const model.StageSettings) void {
+    const drawColorAndThickness = struct {
+        fn call(
+            label: [:0]const u8,
+            v: *model.StageSettings.ColorAndThickness,
+            d: *const model.StageSettings.ColorAndThickness,
+        ) void {
+            imgui.igText("%s", label.ptr);
+            imgui.igPushID_Str(label);
+            defer imgui.igPopID();
+            imgui.igIndent(0);
+            defer imgui.igUnindent(0);
+            drawColor("Color", &v.color, &d.color);
+            drawThickness("Thickness", &v.thickness, &d.thickness);
+        }
+    }.call;
+
     drawBool("Enabled", &value.enabled, &default.enabled);
     imgui.igBeginDisabled(!value.enabled);
     defer imgui.igEndDisabled();
 
-    drawColor("Color", &value.color, &default.color);
-    drawThickness("Thickness", &value.thickness, &default.thickness);
+    drawColorAndThickness("Foreground", &value.foreground, &default.foreground);
+    drawColorAndThickness("Background", &value.background, &default.background);
 }
 
 fn drawIngameCameraSettings(value: *model.IngameCameraSettings, default: *const model.IngameCameraSettings) void {
@@ -880,7 +896,7 @@ test "reset settings to defaults button should set settings to default value whe
             ctx.itemClick("**/Miscellaneous", imgui.ImGuiMouseButton_Left, 0);
             ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
 
-            settings.floor.thickness = 123;
+            settings.ingame_camera.thickness = 123;
             try testing.expect(!std.meta.eql(default_settings, settings));
 
             ctx.itemClick("Reset Settings To Defaults", imgui.ImGuiMouseButton_Left, 0);
@@ -915,7 +931,7 @@ test "reload settings button should load the same settings that the save button 
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {
             sdk.ui.toasts.update(100);
-            settings.floor.thickness = 123;
+            settings.ingame_camera.thickness = 123;
 
             ctx.setRef(SettingsWindow.name);
             ctx.itemClick("Save", imgui.ImGuiMouseButton_Left, 0);
@@ -928,7 +944,7 @@ test "reload settings button should load the same settings that the save button 
             try ctx.expectItemExists("Save");
 
             const saved_settings = settings;
-            settings.floor.thickness = 456;
+            settings.ingame_camera.thickness = 456;
             try testing.expect(!std.meta.eql(settings, saved_settings));
             try ctx.expectItemExists("//toast-0/Settings saved successfully.");
             sdk.ui.toasts.update(100);
@@ -1424,7 +1440,7 @@ test "forward directions settings should function correctly" {
     try context.runTest(.{}, Test.guiFunction, Test.testFunction);
 }
 
-test "floor settings should function correctly" {
+test "stage settings should function correctly" {
     const Test = struct {
         const default_settings = model.Settings{};
         var settings = default_settings;
@@ -1435,11 +1451,11 @@ test "floor settings should function correctly" {
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {
-            const current = &settings.floor;
-            const default = &default_settings.floor;
+            const current = &settings.stage;
+            const default = &default_settings.stage;
 
             ctx.setRef(SettingsWindow.name);
-            ctx.itemClick("**/Floor", imgui.ImGuiMouseButton_Left, 0);
+            ctx.itemClick("**/Stage", imgui.ImGuiMouseButton_Left, 0);
             ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
 
             ctx.itemUncheck("Enabled", 0);
@@ -1449,15 +1465,25 @@ test "floor settings should function correctly" {
             ctx.itemCheck("Enabled", 0);
             try testing.expectEqual(true, current.enabled);
 
-            ctx.itemInputValueFloat("Color/##X", 153);
-            try testing.expectEqual(0.6, current.color.x());
-            ctx.itemClick("Color/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.color, current.color);
+            ctx.itemInputValueFloat("Foreground/Color/##X", 153);
+            try testing.expectEqual(0.6, current.foreground.color.x());
+            ctx.itemClick("Foreground/Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.foreground.color, current.foreground.color);
 
-            ctx.itemInputValueFloat("Thickness", 123);
-            try testing.expectEqual(123, current.thickness);
-            ctx.itemClick("Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.thickness, current.thickness);
+            ctx.itemInputValueFloat("Foreground/Thickness", 123);
+            try testing.expectEqual(123, current.foreground.thickness);
+            ctx.itemClick("Foreground/Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.foreground.thickness, current.foreground.thickness);
+
+            ctx.itemInputValueFloat("Background/Color/##X", 153);
+            try testing.expectEqual(0.6, current.background.color.x());
+            ctx.itemClick("Background/Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.background.color, current.background.color);
+
+            ctx.itemInputValueFloat("Background/Thickness", 123);
+            try testing.expectEqual(123, current.background.thickness);
+            ctx.itemClick("Background/Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.background.thickness, current.background.thickness);
         }
     };
     Test.window = .init(testing.allocator);

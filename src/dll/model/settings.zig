@@ -9,7 +9,7 @@ pub const Settings = struct {
     collision_spheres: PlayerSettings(CollisionSpheresSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
     skeletons: PlayerSettings(SkeletonSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
     forward_directions: PlayerSettings(ForwardDirectionSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
-    floor: FloorSettings = .{},
+    stage: StageSettings = .{},
     ingame_camera: IngameCameraSettings = .{},
     measure_tool: MeasureToolSettings = .{},
     details: DetailsSettings = .{},
@@ -274,10 +274,21 @@ pub const ForwardDirectionSettings = struct {
     thickness: f32 = 1.0,
 };
 
-pub const FloorSettings = struct {
+pub const StageSettings = struct {
     enabled: bool = true,
-    color: sdk.math.Vec4 = .fromArray(.{ 0.0, 1.0, 0.0, 1.0 }),
-    thickness: f32 = 1.0,
+    foreground: ColorAndThickness = .{
+        .color = .fromArray(.{ 0.0, 1.0, 0.0, 1.0 }),
+        .thickness = 1.0,
+    },
+    background: ColorAndThickness = .{
+        .color = .fromArray(.{ 0.0, 1.0, 0.0, 0.3 }),
+        .thickness = 1.0,
+    },
+
+    pub const ColorAndThickness = struct {
+        color: sdk.math.Vec4,
+        thickness: f32,
+    };
 };
 
 pub const IngameCameraSettings = struct {
@@ -426,7 +437,7 @@ const testing = std.testing;
 
 test "Settings.load should load the same settings that Settings.save saves" {
     const expected_settings = Settings{
-        .floor = .{
+        .ingame_camera = .{
             .thickness = 123.0,
         },
     };

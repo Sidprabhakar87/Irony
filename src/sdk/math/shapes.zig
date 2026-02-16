@@ -31,14 +31,3 @@ pub const Rectangle = struct {
     half_size: math.Vec2,
     rotation: f32,
 };
-
-pub const Ray2 = struct {
-    origin: math.Vec2,
-    direction: math.Vec2,
-};
-
-pub const RayHit2 = struct {
-    position: math.Vec2,
-    normal: math.Vec2,
-    t: f32,
-};

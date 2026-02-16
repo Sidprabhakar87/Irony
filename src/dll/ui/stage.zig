@@ -146,25 +146,17 @@ fn findWallsCrossSection(
     origin: sdk.math.Vec2,
     right_direction: sdk.math.Vec2,
 ) ?LeftRightEdge {
-    const left_ray = sdk.math.Ray2{ .origin = origin, .direction = right_direction.negate() };
-    const right_ray = sdk.math.Ray2{ .origin = origin, .direction = right_direction };
+    const ray = sdk.math.Ray2{ .origin = origin, .direction = right_direction };
 
-    var min_hit: ?sdk.math.RayHit2 = null;
-    var max_hit: ?sdk.math.RayHit2 = null;
+    var min_hit: ?sdk.math.RaycastLineSegmentResult.Hit = null;
+    var max_hit: ?sdk.math.RaycastLineSegmentResult.Hit = null;
     for (walls, 0..walls.len) |*wall, index| {
         const next_index = if (index + 1 < walls.len) index + 1 else 0;
         const next_wall = walls[next_index];
         const line = sdk.math.LineSegment2{ .point_1 = wall.edge, .point_2 = next_wall.edge };
-        const hit = block: {
-            if (sdk.math.findRayLineSegmentIntersection(left_ray, line)) |minus_ray| {
-                var ray = minus_ray;
-                ray.t *= -1;
-                break :block ray;
-            } else if (sdk.math.findRayLineSegmentIntersection(right_ray, line)) |ray| {
-                break :block ray;
-            } else {
-                continue;
-            }
+        const hit = switch (sdk.math.raycastLineSegment(ray, line)) {
+            .hit => |hit| hit,
+            .overlap, .miss => continue,
         };
         if (min_hit == null or hit.t < min_hit.?.t) {
             min_hit = hit;

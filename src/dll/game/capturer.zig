@@ -610,12 +610,23 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             return result;
         }
 
-        fn rayCastRectangles(ray: sdk.math.Ray2, rectangles: []const sdk.math.Rectangle) ?sdk.math.RayHit2 {
-            var min_hit: ?sdk.math.RayHit2 = null;
+        fn rayCastRectangles(
+            ray: sdk.math.Ray2,
+            rectangles: []const sdk.math.Rectangle,
+        ) ?sdk.math.RaycastRectangleResult.HitPoint {
+            var min_hit: ?sdk.math.RaycastRectangleResult.HitPoint = null;
             for (rectangles) |rect| {
-                const hit = sdk.math.findRayRectangleIntersection(ray, rect) orelse continue;
-                if (min_hit == null or hit.t < min_hit.?.t) {
-                    min_hit = hit;
+                switch (sdk.math.raycastRectangle(ray, rect)) {
+                    .hit => |hit| {
+                        const t = hit.entrance.t;
+                        if (t < 0) {
+                            continue;
+                        }
+                        if (min_hit == null or t < min_hit.?.t) {
+                            min_hit = hit.entrance;
+                        }
+                    },
+                    .side_scrape, .miss => {},
                 }
             }
             return min_hit;

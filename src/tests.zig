@@ -27,9 +27,10 @@ test {
 
     _ = @import("sdk/math/easing.zig");
     _ = @import("sdk/math/intersection.zig");
+    _ = @import("sdk/math/matrix.zig");
+    _ = @import("sdk/math/raycasting.zig");
     _ = @import("sdk/math/shapes.zig");
     _ = @import("sdk/math/vector.zig");
-    _ = @import("sdk/math/matrix.zig");
 
     _ = @import("sdk/memory/bitfield.zig");
     _ = @import("sdk/memory/boolean.zig");

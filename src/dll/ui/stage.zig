@@ -31,7 +31,7 @@ fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Fr
             .point_1 = wall.edge.extend(floor_z),
             .point_2 = next_wall.edge.extend(floor_z),
         };
-        ui.drawLine(line, settings.foreground.color, settings.foreground.thickness, matrix);
+        ui.drawLine(line, settings.foreground.color, settings.foreground.thickness, 0, matrix);
     }
 }
 
@@ -56,7 +56,7 @@ fn drawStageFromSide(
             .point_1 = top_left.swizzle("xy").extend(floor_z),
             .point_2 = bottom_right.swizzle("xy").extend(floor_z),
         };
-        ui.drawLine(line, settings.foreground.color, settings.foreground.thickness, matrix);
+        ui.drawLine(line, settings.foreground.color, settings.foreground.thickness, 0, matrix);
         return;
     }
 
@@ -70,14 +70,14 @@ fn drawStageFromSide(
             .point_1 = world_position.extend(floor_z),
             .point_2 = world_position.extend(top_left.z()),
         };
-        ui.drawLine(line, settings.background.color, settings.background.thickness, matrix);
+        ui.drawLine(line, settings.background.color, settings.background.thickness, 0, matrix);
     }
     if (findMinMaxEdges(walls, floor_z, matrix)) |edges| {
         const line = sdk.math.LineSegment3{
             .point_1 = edges.left_edge.extend(floor_z),
             .point_2 = edges.right_edge.extend(floor_z),
         };
-        ui.drawLine(line, settings.background.color, settings.background.thickness, matrix);
+        ui.drawLine(line, settings.background.color, settings.background.thickness, 0, matrix);
     }
 
     const center = window_pos.add(window_size).scale(0.5).extend(0.5).pointTransform(inverse_matrix).swizzle("xy");
@@ -95,9 +95,9 @@ fn drawStageFromSide(
             .point_1 = cross_section.right_edge.extend(floor_z),
             .point_2 = cross_section.right_edge.extend(top_left.z()),
         };
-        ui.drawLine(floor, settings.foreground.color, settings.foreground.thickness, matrix);
-        ui.drawLine(left_wall, settings.foreground.color, settings.foreground.thickness, matrix);
-        ui.drawLine(right_wall, settings.foreground.color, settings.foreground.thickness, matrix);
+        ui.drawLine(floor, settings.foreground.color, settings.foreground.thickness, 0, matrix);
+        ui.drawLine(left_wall, settings.foreground.color, settings.foreground.thickness, 0, matrix);
+        ui.drawLine(right_wall, settings.foreground.color, settings.foreground.thickness, 0, matrix);
     }
 }
 

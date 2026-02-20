@@ -112,7 +112,7 @@ pub const MeasureTool = struct {
         if (hovered_point != null) {
             imgui.igSetMouseCursor(imgui.ImGuiMouseCursor_Hand);
         }
-        ui.drawLine(line, settings.line.color, settings.line.thickness, matrix);
+        ui.drawLine(line, settings.line.color, settings.line.thickness, 0, matrix);
         ui.drawPoint(line.point_1, point_1_color, point_1_thickness, matrix);
         ui.drawPoint(line.point_2, point_2_color, point_2_thickness, matrix);
         drawLineText(line, settings.text_color, matrix);

@@ -21,18 +21,32 @@ pub fn drawPoint(position: sdk.math.Vec3, color: sdk.math.Vec4, thickness: f32, 
     }
 }
 
-pub fn drawLine(line: sdk.math.LineSegment3, color: sdk.math.Vec4, thickness: f32, matrix: sdk.math.Mat4) void {
+pub fn drawLine(
+    line: sdk.math.LineSegment3,
+    color: sdk.math.Vec4,
+    thickness: f32,
+    offset: f32,
+    matrix: sdk.math.Mat4,
+) void {
     const draw_list = imgui.igGetWindowDrawList();
     const point_1 = line.point_1.pointTransform(matrix).swizzle("xy");
     const point_2 = line.point_2.pointTransform(matrix).swizzle("xy");
+    const rotate_90 = comptime sdk.math.Mat2.fromZRotation(0.5 * std.math.pi);
+    const difference = point_2.subtract(point_1);
+    const offset_vector = switch (difference.isZero(1e-6)) {
+        true => sdk.math.Vec2.zero,
+        false => difference.normalize().multiply(rotate_90).scale(offset),
+    };
+    const offset_point_1 = point_1.add(offset_vector);
+    const offset_point_2 = point_2.add(offset_vector);
     const u32_color = imgui.igGetColorU32_Vec4(color.toImVec());
 
-    imgui.ImDrawList_AddLine(draw_list, point_1.toImVec(), point_2.toImVec(), u32_color, thickness);
+    imgui.ImDrawList_AddLine(draw_list, offset_point_1.toImVec(), offset_point_2.toImVec(), u32_color, thickness);
 
     if (builtin.is_test) {
         testing_shapes.append(.{ .line = .{
             .world_line = line,
-            .screen_line = .{ .point_1 = point_1, .point_2 = point_2 },
+            .screen_line = .{ .point_1 = offset_point_1, .point_2 = offset_point_2 },
             .color = color,
             .thickness = thickness,
         } });
@@ -337,6 +351,7 @@ test "should put correct shapes into testing shapes" {
                 .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
                 .fromArray(.{ 7, 8, 9, 10 }),
                 11,
+                0,
                 matrix,
             );
             drawSphere(

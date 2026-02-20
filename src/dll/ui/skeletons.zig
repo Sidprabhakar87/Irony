@@ -61,7 +61,7 @@ fn drawBone(
         .point_1 = skeleton.get(point_1),
         .point_2 = skeleton.get(point_2),
     };
-    ui.drawLine(line, color, thickness, matrix);
+    ui.drawLine(line, color, thickness, 0, matrix);
 }
 
 const testing = std.testing;

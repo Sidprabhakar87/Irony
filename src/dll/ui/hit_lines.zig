@@ -89,7 +89,7 @@ pub const HitLines = struct {
                 const line = hit_line.line;
                 const color = line_settings.outline.colors.get(player.attack_type orelse .not_attack);
                 const thickness = line_settings.fill.thickness + (2.0 * line_settings.outline.thickness);
-                ui.drawLine(line, color, thickness, matrix);
+                ui.drawLine(line, color, thickness, 0, matrix);
             }
         }
         for (model.PlayerId.all) |player_id| {
@@ -113,7 +113,7 @@ pub const HitLines = struct {
                 const line = hit_line.line;
                 const color = line_settings.fill.colors.get(player.attack_type orelse .not_attack);
                 const thickness = line_settings.fill.thickness;
-                ui.drawLine(line, color, thickness, matrix);
+                ui.drawLine(line, color, thickness, 0, matrix);
             }
         }
     }
@@ -150,7 +150,7 @@ pub const HitLines = struct {
             color.asColor().a *= 1.0 - (completion * completion * completion * completion);
             const thickness = line_settings.fill.thickness + (2.0 * line_settings.outline.thickness);
 
-            ui.drawLine(line, color, thickness, matrix);
+            ui.drawLine(line, color, thickness, 0, matrix);
         }
         for (0..self.lingering.len) |index| {
             const hit_line = self.lingering.get(index) catch unreachable;
@@ -178,7 +178,7 @@ pub const HitLines = struct {
             color.asColor().a *= 1.0 - (completion * completion * completion * completion);
             const thickness = line_settings.fill.thickness;
 
-            ui.drawLine(line, color, thickness, matrix);
+            ui.drawLine(line, color, thickness, 0, matrix);
         }
     }
 };

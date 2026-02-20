@@ -26,7 +26,7 @@ pub fn drawForwardDirections(
             .point_1 = position,
             .point_2 = position.add(delta),
         };
-        ui.drawLine(line, player_settings.color, player_settings.thickness, matrix);
+        ui.drawLine(line, player_settings.color, player_settings.thickness, 0, matrix);
     }
 }
 

@@ -284,6 +284,32 @@ pub const StageSettings = struct {
         .color = .fromArray(.{ 0.0, 1.0, 0.0, 0.3 }),
         .thickness = 1.0,
     },
+    broken: ColorAndThickness = .{
+        .color = .fromArray(.{ 0.5, 0.5, 0.5, 0.3 }),
+        .thickness = 1.0,
+    },
+    wall_gimmicks: std.EnumArray(model.WallGimmick, ColorAndThickness) = .init(.{
+        .none = .{
+            .color = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
+            .thickness = 10.0,
+        },
+        .wall_break = .{
+            .color = .fromArray(.{ 0.5, 0.5, 0.5, 0.3 }),
+            .thickness = 10.0,
+        },
+        .balcony_break = .{
+            .color = .fromArray(.{ 0.0, 1.0, 1.0, 0.3 }),
+            .thickness = 10.0,
+        },
+        .wall_blast = .{
+            .color = .fromArray(.{ 1.0, 1.0, 0.0, 0.3 }),
+            .thickness = 10.0,
+        },
+        .wall_bound = .{
+            .color = .fromArray(.{ 1.0, 0.5, 0.0, 0.3 }),
+            .thickness = 10.0,
+        },
+    }),
 
     pub const ColorAndThickness = struct {
         color: sdk.math.Vec4,

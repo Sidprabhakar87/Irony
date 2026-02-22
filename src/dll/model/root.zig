@@ -46,4 +46,7 @@ pub const SkeletonPointId = @import("skeleton.zig").SkeletonPointId;
 pub const SkeletonPoint = @import("skeleton.zig").SkeletonPoint;
 pub const Skeleton = @import("skeleton.zig").Skeleton;
 pub const Wall = @import("walls.zig").Wall;
+pub const WallProperties = @import("walls.zig").WallProperties;
+pub const WallGimmick = @import("walls.zig").WallGimmick;
+pub const WallFlags = @import("walls.zig").WallFlags;
 pub const Walls = @import("walls.zig").Walls;

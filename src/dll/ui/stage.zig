@@ -24,14 +24,15 @@ pub fn drawStage(
 fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Frame, matrix: sdk.math.Mat4) void {
     const floor_z = frame.floor_z orelse return;
     const walls: []const model.Wall = frame.walls.asSlice();
-    for (walls, 0..walls.len) |*wall, index| {
-        const next_index = if (index + 1 < walls.len) index + 1 else 0;
-        const next_wall = walls[next_index];
+    for (walls) |*wall| {
+        if (wall.edge_2_index >= walls.len) {
+            continue;
+        }
         const line = sdk.math.LineSegment3{
-            .point_1 = wall.edge.extend(floor_z),
-            .point_2 = next_wall.edge.extend(floor_z),
+            .point_1 = wall.edge_1.extend(floor_z),
+            .point_2 = walls[wall.edge_2_index].edge_1.extend(floor_z),
         };
-        ui.drawLine(line, settings.foreground.color, settings.foreground.thickness, 0, matrix);
+        drawWall(settings, &wall.properties, line, matrix);
     }
 }
 
@@ -41,8 +42,10 @@ fn drawStageFromSide(
     matrix: sdk.math.Mat4,
     inverse_matrix: sdk.math.Mat4,
 ) void {
-    const floor_z = frame.floor_z orelse return;
     const walls: []const model.Wall = frame.walls.asSlice();
+    const floor_z = frame.floor_z orelse return;
+    const midpoint = getPlayersMidpoint(frame) orelse return;
+    const midpoint_depth = midpoint.extend(floor_z).pointTransform(matrix).z();
 
     var window_pos: sdk.math.Vec2 = undefined;
     imgui.igGetCursorScreenPos(window_pos.asImVec());
@@ -60,66 +63,18 @@ fn drawStageFromSide(
         return;
     }
 
-    for (walls) |*wall| {
-        const world_position = wall.edge;
-        const screen_position = world_position.extend(floor_z).pointTransform(matrix);
-        if (screen_position.z() < 0.5) {
-            continue;
-        }
-        const line = sdk.math.LineSegment3{
-            .point_1 = world_position.extend(floor_z),
-            .point_2 = world_position.extend(top_left.z()),
-        };
-        ui.drawLine(line, settings.background.color, settings.background.thickness, 0, matrix);
-    }
-    if (findMinMaxEdges(walls, floor_z, matrix)) |edges| {
-        const line = sdk.math.LineSegment3{
-            .point_1 = edges.left_edge.extend(floor_z),
-            .point_2 = edges.right_edge.extend(floor_z),
-        };
-        ui.drawLine(line, settings.background.color, settings.background.thickness, 0, matrix);
-    }
-
-    const center = window_pos.add(window_size).scale(0.5).extend(0.5).pointTransform(inverse_matrix).swizzle("xy");
-    const right_direction = sdk.math.Vec3.plus_x.directionTransform(inverse_matrix).swizzle("xy");
-    if (findWallsCrossSection(walls, center, right_direction)) |cross_section| {
-        const floor = sdk.math.LineSegment3{
-            .point_1 = cross_section.left_edge.extend(floor_z),
-            .point_2 = cross_section.right_edge.extend(floor_z),
-        };
-        const left_wall = sdk.math.LineSegment3{
-            .point_1 = cross_section.left_edge.extend(floor_z),
-            .point_2 = cross_section.left_edge.extend(top_left.z()),
-        };
-        const right_wall = sdk.math.LineSegment3{
-            .point_1 = cross_section.right_edge.extend(floor_z),
-            .point_2 = cross_section.right_edge.extend(top_left.z()),
-        };
-        ui.drawLine(floor, settings.foreground.color, settings.foreground.thickness, 0, matrix);
-        ui.drawLine(left_wall, settings.foreground.color, settings.foreground.thickness, 0, matrix);
-        ui.drawLine(right_wall, settings.foreground.color, settings.foreground.thickness, 0, matrix);
-    }
-}
-
-const LeftRightEdge = struct {
-    left_edge: sdk.math.Vec2,
-    right_edge: sdk.math.Vec2,
-};
-
-fn findMinMaxEdges(walls: []const model.Wall, floor_z: f32, matrix: sdk.math.Mat4) ?LeftRightEdge {
     const Edge = struct {
         world_position: sdk.math.Vec3,
         screen_position: sdk.math.Vec3,
     };
-
     var min_edge: ?Edge = null;
     var max_edge: ?Edge = null;
-    for (walls) |*wall| {
+    for (walls, 0..) |*wall, index| {
         const edge = Edge{
-            .world_position = wall.edge.extend(floor_z),
-            .screen_position = wall.edge.extend(floor_z).pointTransform(matrix),
+            .world_position = wall.edge_1.extend(floor_z),
+            .screen_position = wall.edge_1.extend(floor_z).pointTransform(matrix),
         };
-        if (edge.screen_position.z() < 0.5) {
+        if (edge.screen_position.z() < midpoint_depth) {
             continue;
         }
         if (min_edge == null or edge.screen_position.x() < min_edge.?.screen_position.x()) {
@@ -128,33 +83,45 @@ fn findMinMaxEdges(walls: []const model.Wall, floor_z: f32, matrix: sdk.math.Mat
         if (max_edge == null or edge.screen_position.x() > max_edge.?.screen_position.x()) {
             max_edge = edge;
         }
+        const line = sdk.math.LineSegment3{
+            .point_1 = edge.world_position,
+            .point_2 = edge.world_position.swizzle("xy").extend(top_left.z()),
+        };
+        const style = switch (wall.properties.flags.broken) {
+            false => for (walls) |*w| {
+                if (w.properties.flags.broken and w.edge_2_index == index) {
+                    break &settings.broken;
+                }
+            } else &settings.background,
+            true => &settings.broken,
+        };
+        ui.drawLine(line, style.color, style.thickness, 0, matrix);
     }
-
     if (min_edge) |min| {
         if (max_edge) |max| {
-            return .{
-                .left_edge = min.world_position.swizzle("xy"),
-                .right_edge = max.world_position.swizzle("xy"),
+            const line = sdk.math.LineSegment3{
+                .point_1 = min.world_position,
+                .point_2 = max.world_position,
             };
+            ui.drawLine(line, settings.background.color, settings.background.thickness, 0, matrix);
         }
     }
-    return null;
-}
 
-fn findWallsCrossSection(
-    walls: []const model.Wall,
-    origin: sdk.math.Vec2,
-    right_direction: sdk.math.Vec2,
-) ?LeftRightEdge {
-    const ray = sdk.math.Ray2{ .origin = origin, .direction = right_direction };
-
+    const ray = sdk.math.Ray2{
+        .origin = midpoint,
+        .direction = sdk.math.Vec3.plus_x.directionTransform(inverse_matrix).swizzle("xy"),
+    };
     var min_hit: ?sdk.math.RaycastLineSegmentResult.Hit = null;
     var max_hit: ?sdk.math.RaycastLineSegmentResult.Hit = null;
-    for (walls, 0..walls.len) |*wall, index| {
-        const next_index = if (index + 1 < walls.len) index + 1 else 0;
-        const next_wall = walls[next_index];
-        const line = sdk.math.LineSegment2{ .point_1 = wall.edge, .point_2 = next_wall.edge };
-        const hit = switch (sdk.math.raycastLineSegment(ray, line)) {
+    for (walls) |*wall| {
+        if (wall.edge_2_index >= walls.len) {
+            continue;
+        }
+        const wall_line = sdk.math.LineSegment2{
+            .point_1 = wall.edge_1,
+            .point_2 = walls[wall.edge_2_index].edge_1,
+        };
+        const hit = switch (sdk.math.raycastLineSegment(ray, wall_line)) {
             .hit => |hit| hit,
             .overlap, .miss => continue,
         };
@@ -164,15 +131,69 @@ fn findWallsCrossSection(
         if (max_hit == null or hit.t > max_hit.?.t) {
             max_hit = hit;
         }
+        const line = switch (hit.t < 0) {
+            true => sdk.math.LineSegment3{
+                .point_1 = hit.position.extend(floor_z),
+                .point_2 = hit.position.extend(top_left.z()),
+            },
+            false => sdk.math.LineSegment3{
+                .point_1 = hit.position.extend(top_left.z()),
+                .point_2 = hit.position.extend(floor_z),
+            },
+        };
+        drawWall(settings, &wall.properties, line, matrix);
     }
-
     if (min_hit) |min| {
         if (max_hit) |max| {
-            return .{
-                .left_edge = min.position,
-                .right_edge = max.position,
+            const line = sdk.math.LineSegment3{
+                .point_1 = min.position.extend(floor_z),
+                .point_2 = max.position.extend(floor_z),
             };
+            ui.drawLine(line, settings.foreground.color, settings.foreground.thickness, 0, matrix);
         }
     }
-    return null;
+}
+
+fn getPlayersMidpoint(frame: *const model.Frame) ?sdk.math.Vec2 {
+    const player_1_pos = frame.players[0].getPosition();
+    const player_2_pos = frame.players[1].getPosition();
+    if (player_1_pos) |p1| {
+        if (player_2_pos) |p2| {
+            return p1.swizzle("xy").add(p2.swizzle("xy")).scale(0.5);
+        } else {
+            return p1.swizzle("xy");
+        }
+    } else if (player_2_pos) |p2| {
+        return p2.swizzle("xy");
+    } else {
+        return null;
+    }
+}
+
+fn drawWall(
+    settings: *const model.StageSettings,
+    wall_properties: *const model.WallProperties,
+    line: sdk.math.LineSegment3,
+    matrix: sdk.math.Mat4,
+) void {
+    const flags = wall_properties.flags;
+    if (flags.broken) {
+        ui.drawLine(line, settings.broken.color, settings.broken.thickness, 0, matrix);
+        return;
+    }
+    const active_gimmick = switch (flags.gimmick_used_up) {
+        true => model.WallGimmick.none,
+        false => wall_properties.gimmick,
+    };
+    const gimmick = settings.wall_gimmicks.getPtrConst(active_gimmick);
+    const foreground = &settings.foreground;
+    const gimmick_offset = switch (flags.hard and !flags.damaged) {
+        false => -0.5 * gimmick.thickness,
+        true => (-0.5 * gimmick.thickness) + (-4 * foreground.thickness),
+    };
+    ui.drawLine(line, gimmick.color, gimmick.thickness, gimmick_offset, matrix);
+    ui.drawLine(line, foreground.color, foreground.thickness, 0, matrix);
+    if (flags.hard and !flags.damaged) {
+        ui.drawLine(line, foreground.color, foreground.thickness, -4 * foreground.thickness, matrix);
+    }
 }

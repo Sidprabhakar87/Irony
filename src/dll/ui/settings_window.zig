@@ -687,6 +687,30 @@ fn drawStageSettings(value: *model.StageSettings, default: *const model.StageSet
             drawThickness("Thickness", &v.thickness, &d.thickness);
         }
     }.call;
+    const drawWallGimmicks = struct {
+        fn call(
+            label: [:0]const u8,
+            v: *std.EnumArray(model.WallGimmick, model.StageSettings.ColorAndThickness),
+            d: *const std.EnumArray(model.WallGimmick, model.StageSettings.ColorAndThickness),
+        ) void {
+            imgui.igText("%s", label.ptr);
+            imgui.igPushID_Str(label);
+            defer imgui.igPopID();
+            imgui.igIndent(0);
+            defer imgui.igUnindent(0);
+            inline for (@typeInfo(model.WallGimmick).@"enum".fields) |*field| {
+                const gimmick: model.WallGimmick = @enumFromInt(field.value);
+                const gimmick_label = switch (gimmick) {
+                    .none => "None / Used Up",
+                    .wall_break => "Wall Break",
+                    .balcony_break => "Balcony Break",
+                    .wall_blast => "Wall Blast",
+                    .wall_bound => "Wall Bound",
+                };
+                drawColorAndThickness(gimmick_label, v.getPtr(gimmick), d.getPtrConst(gimmick));
+            }
+        }
+    }.call;
 
     drawBool("Enabled", &value.enabled, &default.enabled);
     imgui.igBeginDisabled(!value.enabled);
@@ -694,6 +718,8 @@ fn drawStageSettings(value: *model.StageSettings, default: *const model.StageSet
 
     drawColorAndThickness("Foreground", &value.foreground, &default.foreground);
     drawColorAndThickness("Background", &value.background, &default.background);
+    drawColorAndThickness("Broken", &value.broken, &default.broken);
+    drawWallGimmicks("Wall Gimmicks", &value.wall_gimmicks, &default.wall_gimmicks);
 }
 
 fn drawIngameCameraSettings(value: *model.IngameCameraSettings, default: *const model.IngameCameraSettings) void {
@@ -1475,8 +1501,8 @@ test "stage settings should function correctly" {
             ctx.itemClick("Foreground/Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.foreground.thickness, current.foreground.thickness);
 
-            ctx.itemInputValueFloat("Background/Color/##X", 153);
-            try testing.expectEqual(0.6, current.background.color.x());
+            ctx.itemInputValueFloat("Background/Color/##Y", 153);
+            try testing.expectEqual(0.6, current.background.color.y());
             ctx.itemClick("Background/Color/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.background.color, current.background.color);
 
@@ -1484,6 +1510,48 @@ test "stage settings should function correctly" {
             try testing.expectEqual(123, current.background.thickness);
             ctx.itemClick("Background/Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.background.thickness, current.background.thickness);
+
+            ctx.itemInputValueFloat("Broken/Color/##Z", 153);
+            try testing.expectEqual(0.6, current.broken.color.z());
+            ctx.itemClick("Broken/Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.broken.color, current.broken.color);
+
+            ctx.itemInputValueFloat("Broken/Thickness", 123);
+            try testing.expectEqual(123, current.broken.thickness);
+            ctx.itemClick("Broken/Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.broken.thickness, current.broken.thickness);
+
+            ctx.itemInputValueFloat("Wall Gimmicks/Wall Break/Color/##W", 153);
+            try testing.expectEqual(0.6, current.wall_gimmicks.getPtrConst(.wall_break).color.w());
+            ctx.itemClick("Wall Gimmicks/Wall Break/Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.wall_gimmicks.getPtrConst(.wall_break).color,
+                current.wall_gimmicks.getPtrConst(.wall_break).color,
+            );
+
+            ctx.itemInputValueFloat("Wall Gimmicks/Wall Break/Thickness", 123);
+            try testing.expectEqual(123, current.wall_gimmicks.getPtr(.wall_break).thickness);
+            ctx.itemClick("Wall Gimmicks/Wall Break/Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.wall_gimmicks.getPtrConst(.wall_break).thickness,
+                current.wall_gimmicks.getPtrConst(.wall_break).thickness,
+            );
+
+            ctx.itemInputValueFloat("Wall Gimmicks/Balcony Break/Color/##X", 153);
+            try testing.expectEqual(0.6, current.wall_gimmicks.getPtrConst(.balcony_break).color.x());
+            ctx.itemClick("Wall Gimmicks/Balcony Break/Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.wall_gimmicks.getPtrConst(.balcony_break).color,
+                current.wall_gimmicks.getPtrConst(.balcony_break).color,
+            );
+
+            ctx.itemInputValueFloat("Wall Gimmicks/Balcony Break/Thickness", 123);
+            try testing.expectEqual(123, current.wall_gimmicks.getPtrConst(.balcony_break).thickness);
+            ctx.itemClick("Wall Gimmicks/Balcony Break/Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.wall_gimmicks.getPtrConst(.balcony_break).thickness,
+                current.wall_gimmicks.getPtrConst(.balcony_break).thickness,
+            );
         }
     };
     Test.window = .init(testing.allocator);

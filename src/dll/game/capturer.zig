@@ -22,6 +22,10 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             .t8 => struct {},
         };
         const GamePlayer = game.Player(game_id);
+        const WallRectangle = struct {
+            rectangle: sdk.math.Rectangle,
+            properties: model.WallProperties,
+        };
 
         pub fn captureFrame(self: *Self, game_memory: *const game.Memory(game_id)) model.Frame {
             const player_1 = game_memory.player_1.toConstPointer();
@@ -465,15 +469,9 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         ) model.Walls {
             const floor_number = captureFloorNumber(player_1, player_2) orelse return .{};
             const set_number = captureStageSetNumber(player_1, player_2);
-            var rectangles_buffer: [game.Memory(game_id).max_walls]sdk.math.Rectangle = undefined;
+            const midpoint = captureFloorMidpoint(start_pointers, floor_number) orelse return .{};
+            var rectangles_buffer: [game.Memory(game_id).max_walls]WallRectangle = undefined;
             const rectangles = captureWallRectangles(&rectangles_buffer, wall_pointers, floor_number, set_number);
-            const players_midpoint = capturePlayersMidpoint(player_1, player_2) orelse return .{};
-            const midpoint = findStageMidpoint(
-                rectangles,
-                start_pointers,
-                floor_number,
-                players_midpoint,
-            ) orelse return .{};
             return computeWallsPolygon(rectangles, midpoint);
         }
 
@@ -499,29 +497,37 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             }
         }
 
-        fn capturePlayersMidpoint(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?sdk.math.Vec2 {
-            if (player_1) |p1| {
-                const pos_1 = p1.collision_spheres.lower_torso.convert().center.swizzle("xy");
-                if (player_2) |p2| {
-                    const pos_2 = p2.collision_spheres.lower_torso.convert().center.swizzle("xy");
-                    return pos_1.add(pos_2).scale(0.5);
-                } else {
-                    return pos_1;
+        fn captureFloorMidpoint(
+            start_pointers: []const sdk.memory.Pointer(game.PlayerStart(game_id)),
+            floor_number: u32,
+        ) ?sdk.math.Vec2 {
+            var min_position: ?sdk.math.Vec2 = null;
+            var min_breaks: u8 = std.math.maxInt(u8);
+            for (start_pointers) |start_pointer| {
+                const start = start_pointer.toConstPointer() orelse continue;
+                if (start.floor_number != floor_number or !start.type.isGameStart()) {
+                    continue;
                 }
-            } else if (player_2) |p2| {
-                const pos_2 = p2.collision_spheres.lower_torso.convert().center.swizzle("xy");
-                return pos_2;
-            } else {
-                return null;
+                const breaks = switch (game_id) {
+                    .t7 => 0,
+                    .t8 => @popCount(start.stage_broken_history),
+                };
+                if (min_breaks < breaks) {
+                    continue;
+                }
+                const root = start.actor.root_component.toConstPointer() orelse continue;
+                min_position = root.relative_position.convert().swizzle("xy");
+                min_breaks = breaks;
             }
+            return min_position;
         }
 
         fn captureWallRectangles(
-            buffer: []sdk.math.Rectangle,
+            buffer: []WallRectangle,
             wall_pointers: []const sdk.memory.Pointer(game.Wall(game_id)),
             floor_number: u32,
             set_number: ?u32,
-        ) []sdk.math.Rectangle {
+        ) []WallRectangle {
             const wall_mesh_half_size = switch (game_id) {
                 .t7 => 128,
                 .t8 => 50,
@@ -532,7 +538,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                     break;
                 }
                 const wall = wall_pointer.toConstPointer() orelse continue;
-                if (!wall.actor.collision_enabled.value or wall.floor_number != floor_number) {
+                if (wall.floor_number != floor_number) {
                     continue;
                 }
                 if (game_id == .t8) {
@@ -542,59 +548,213 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 }
                 const root = wall.actor.root_component.toConstPointer() orelse continue;
                 buffer[len] = .{
-                    .center = root.relative_position.convert().swizzle("xy"),
-                    .half_size = root.relative_scale.convert().swizzle("xy").scale(wall_mesh_half_size),
-                    .rotation = root.relative_rotation.convert().y(),
+                    .rectangle = .{
+                        .center = root.relative_position.convert().swizzle("xy"),
+                        .half_size = root.relative_scale.convert().swizzle("xy").scale(wall_mesh_half_size),
+                        .rotation = root.relative_rotation.convert().y(),
+                    },
+                    .properties = captureWallProperties(wall),
                 };
                 len += 1;
             }
             return buffer[0..len];
         }
 
-        fn findStageMidpoint(
-            wall_rectangles: []const sdk.math.Rectangle,
-            start_pointers: []const sdk.memory.Pointer(game.PlayerStart(game_id)),
-            floor_number: u32,
-            players_midpoint: sdk.math.Vec2,
-        ) ?sdk.math.Vec2 {
-            var sum = sdk.math.Vec2.zero;
-            var len: usize = 0;
-            for (start_pointers) |start_pointer| {
-                const start = start_pointer.toConstPointer() orelse continue;
-                if (start.floor_number != floor_number or !start.type.isGameStart()) {
-                    continue;
-                }
-                const root = start.actor.root_component.toConstPointer() orelse continue;
-                const position = root.relative_position.convert().swizzle("xy");
-                const result = rayCastRectangles(.{
-                    .origin = position,
-                    .direction = players_midpoint.subtract(position),
-                }, wall_rectangles);
-                if (result != null and result.?.t <= 1) {
-                    continue;
-                }
-                sum = sum.add(position);
-                len += 1;
+        fn captureWallProperties(wall: *const game.Wall(game_id)) model.WallProperties {
+            const attribute: game.WallAttribute = wall.wall_attribute;
+            const flags = model.WallFlags{
+                .hard = attribute.hard,
+                .damaged = switch (game_id) {
+                    .t7 => !wall.actor.collision_enabled.value,
+                    .t8 => !wall.actor.collision_enabled.value or wall.destruction_level > 0,
+                },
+                .gimmick_used_up = switch (game_id) {
+                    .t7 => !wall.actor.collision_enabled.value,
+                    .t8 => !wall.actor.collision_enabled.value or switch (attribute.hard) {
+                        false => wall.destruction_level > 0,
+                        true => wall.destruction_level > 1,
+                    },
+                },
+                .broken = !wall.actor.collision_enabled.value,
+            };
+            if (attribute.wall_bound) {
+                return .{ .gimmick = .wall_bound, .flags = flags };
+            } else if (attribute.wall_blast) {
+                return .{ .gimmick = .wall_blast, .flags = flags };
+            } else if (attribute.balcony_break) {
+                return .{ .gimmick = .balcony_break, .flags = flags };
+            } else if (attribute.wall_break) {
+                return .{ .gimmick = .wall_break, .flags = flags };
+            } else {
+                return .{ .gimmick = .none, .flags = flags };
             }
-            if (len == 0) {
-                return null;
-            }
-            return sum.scaleDown(@floatFromInt(len));
         }
 
-        fn computeWallsPolygon(rectangles: []const sdk.math.Rectangle, midpoint: sdk.math.Vec2) model.Walls {
-            var hit = rayCastRectangles(.{ .origin = midpoint, .direction = .plus_x }, rectangles) orelse return .{};
+        fn computeWallsPolygon(wall_rectangles: []const WallRectangle, midpoint: sdk.math.Vec2) model.Walls {
+            const normal_to_direction = comptime sdk.math.Mat2.fromZRotation(-0.5 * std.math.pi);
+
+            const Turtle = struct {
+                position: sdk.math.Vec2,
+                direction: sdk.math.Vec2,
+                wall_properties: model.WallProperties,
+                rectangle_index: usize,
+            };
+            var turtle: Turtle = block: {
+                const ray = sdk.math.Ray2{ .origin = midpoint, .direction = .plus_x };
+                var min: ?struct {
+                    hit: sdk.math.RaycastRectangleResult.HitPoint,
+                    wall_properties: model.WallProperties,
+                    rectangle_index: usize,
+                } = null;
+                for (wall_rectangles, 0..) |*wall, index| {
+                    if (wall.properties.gimmick == .wall_break) {
+                        continue;
+                    }
+                    switch (sdk.math.raycastRectangle(ray, wall.rectangle)) {
+                        .hit => |hit| {
+                            if (hit.entrance.t <= 0) {
+                                continue;
+                            }
+                            if (min == null or hit.entrance.t < min.?.hit.t) {
+                                min = .{
+                                    .hit = hit.entrance,
+                                    .wall_properties = wall.properties,
+                                    .rectangle_index = index,
+                                };
+                            }
+                        },
+                        .side_scrape, .miss => {},
+                    }
+                }
+                if (min) |result| {
+                    break :block .{
+                        .position = result.hit.position,
+                        .direction = result.hit.normal.multiply(normal_to_direction),
+                        .wall_properties = result.wall_properties,
+                        .rectangle_index = result.rectangle_index,
+                    };
+                } else {
+                    return .{};
+                }
+            };
+
+            const BreakableWall = struct {
+                edge_1: ?sdk.math.Vec2 = null,
+                edge_2_index: ?u8 = null,
+            };
+            var breakable_walls = [1]BreakableWall{.{}} ** game.Memory(game_id).max_walls;
             var result = model.Walls{};
             var hit_negative_x = false;
             var hit_negative_y = false;
-            while (result.len < result.buffer.len) {
-                const rotation = comptime sdk.math.Mat2.fromZRotation(-0.5 * std.math.pi);
-                const ray = sdk.math.Ray2{
-                    .origin = hit.position,
-                    .direction = hit.normal.multiply(rotation),
+            while (true) {
+                const HitType = enum {
+                    normal_hit,
+                    side_scrape_new_wall_entrance,
+                    side_scrape_current_wall_exit,
+                    breakable_wall_entrance,
+                    breakable_wall_exit,
                 };
-                hit = rayCastRectangles(ray, rectangles) orelse break;
-                const diff = hit.position.subtract(midpoint);
+                const Hit = struct {
+                    type: HitType,
+                    position: sdk.math.Vec2,
+                    normal: sdk.math.Vec2,
+                    t: f32,
+                    wall_properties: model.WallProperties,
+                    rectangle_index: usize,
+                };
+
+                const ray = sdk.math.Ray2{ .origin = turtle.position, .direction = turtle.direction };
+
+                var min_hit: ?Hit = null;
+                for (wall_rectangles, 0..) |*wall, index| {
+                    const hit_point, const hit_type = switch (sdk.math.raycastRectangle(ray, wall.rectangle)) {
+                        .hit => |hit| switch (wall.properties.gimmick) {
+                            .wall_break => block: {
+                                const entrance_distance = hit.entrance.position.distanceSquaredTo(midpoint);
+                                const exit_distance = hit.exit.position.distanceSquaredTo(midpoint);
+                                if (entrance_distance < exit_distance) {
+                                    break :block .{ hit.entrance, HitType.breakable_wall_entrance };
+                                } else {
+                                    break :block .{ hit.exit, HitType.breakable_wall_exit };
+                                }
+                            },
+                            else => .{ hit.entrance, HitType.normal_hit },
+                        },
+                        .side_scrape => |scrape| block: {
+                            if (wall.properties.gimmick == .wall_break) {
+                                continue;
+                            }
+                            if (index == turtle.rectangle_index) {
+                                var exit = scrape.exit;
+                                exit.normal = scrape.scraping_side_normal;
+                                break :block .{ exit, HitType.side_scrape_current_wall_exit };
+                            } else {
+                                break :block .{ scrape.entrance, HitType.side_scrape_new_wall_entrance };
+                            }
+                        },
+                        .miss => continue,
+                    };
+                    if (hit_point.t <= 0) {
+                        continue;
+                    }
+                    if (min_hit == null or hit_point.t < min_hit.?.t) {
+                        min_hit = .{
+                            .type = hit_type,
+                            .position = hit_point.position,
+                            .normal = hit_point.normal,
+                            .t = hit_point.t,
+                            .wall_properties = wall.properties,
+                            .rectangle_index = index,
+                        };
+                    }
+                }
+                const hit = min_hit orelse break;
+
+                const previous_wall_properties = turtle.wall_properties;
+                turtle = switch (hit.type) {
+                    .normal_hit => .{
+                        .position = hit.position,
+                        .direction = hit.normal.multiply(normal_to_direction),
+                        .wall_properties = hit.wall_properties,
+                        .rectangle_index = hit.rectangle_index,
+                    },
+                    .side_scrape_new_wall_entrance => switch (turtle.wall_properties.gimmick) {
+                        .none => .{
+                            .position = hit.position,
+                            .direction = turtle.direction,
+                            .wall_properties = hit.wall_properties,
+                            .rectangle_index = hit.rectangle_index,
+                        },
+                        else => .{
+                            .position = hit.position,
+                            .direction = turtle.direction,
+                            .wall_properties = turtle.wall_properties,
+                            .rectangle_index = turtle.rectangle_index,
+                        },
+                    },
+                    .side_scrape_current_wall_exit => switch (turtle.wall_properties.gimmick) {
+                        .none => .{
+                            .position = hit.position,
+                            .direction = hit.normal.negate(),
+                            .wall_properties = hit.wall_properties,
+                            .rectangle_index = hit.rectangle_index,
+                        },
+                        else => .{
+                            .position = hit.position,
+                            .direction = turtle.direction,
+                            .wall_properties = .{},
+                            .rectangle_index = 0, // Could lead to bug if there is concavity right after this wall.
+                        },
+                    },
+                    .breakable_wall_entrance, .breakable_wall_exit => .{
+                        .position = hit.position,
+                        .direction = turtle.direction,
+                        .wall_properties = turtle.wall_properties,
+                        .rectangle_index = turtle.rectangle_index,
+                    },
+                };
+
+                const diff = turtle.position.subtract(midpoint);
                 if (diff.x() < 0) {
                     hit_negative_x = true;
                 }
@@ -604,32 +764,52 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 if (hit_negative_y and diff.y() > 0) {
                     break;
                 }
-                result.buffer[result.len] = .{ .edge = hit.position };
-                result.len += 1;
-            }
-            return result;
-        }
 
-        fn rayCastRectangles(
-            ray: sdk.math.Ray2,
-            rectangles: []const sdk.math.Rectangle,
-        ) ?sdk.math.RaycastRectangleResult.HitPoint {
-            var min_hit: ?sdk.math.RaycastRectangleResult.HitPoint = null;
-            for (rectangles) |rect| {
-                switch (sdk.math.raycastRectangle(ray, rect)) {
-                    .hit => |hit| {
-                        const t = hit.entrance.t;
-                        if (t < 0) {
-                            continue;
-                        }
-                        if (min_hit == null or t < min_hit.?.t) {
-                            min_hit = hit.entrance;
-                        }
-                    },
-                    .side_scrape, .miss => {},
+                if (hit.type == .breakable_wall_entrance) {
+                    breakable_walls[hit.rectangle_index].edge_1 = turtle.position;
+                } else if (hit.type == .breakable_wall_exit) {
+                    breakable_walls[hit.rectangle_index].edge_2_index = @intCast(result.len);
+                }
+
+                const add_wall = switch (hit.type) {
+                    .normal_hit => true,
+                    .side_scrape_new_wall_entrance => !std.meta.eql(turtle.wall_properties, previous_wall_properties),
+                    .side_scrape_current_wall_exit => true,
+                    .breakable_wall_entrance => false,
+                    .breakable_wall_exit => true,
+                };
+                if (add_wall) {
+                    if (result.len >= result.buffer.len) {
+                        break;
+                    }
+                    result.buffer[result.len] = .{
+                        .edge_1 = turtle.position,
+                        .edge_2_index = @intCast(result.len + 1),
+                        .properties = turtle.wall_properties,
+                    };
+                    result.len += 1;
                 }
             }
-            return min_hit;
+            result.buffer[result.len - 1].edge_2_index = 0;
+
+            for (wall_rectangles, 0..) |*wall, index| {
+                const breakable_wall = breakable_walls[index];
+                if (breakable_wall.edge_1) |edge_1| {
+                    if (breakable_wall.edge_2_index) |edge_2_index| {
+                        if (result.len >= result.buffer.len) {
+                            break;
+                        }
+                        result.buffer[result.len] = .{
+                            .edge_1 = edge_1,
+                            .edge_2_index = edge_2_index,
+                            .properties = wall.properties,
+                        };
+                        result.len += 1;
+                    }
+                }
+            }
+
+            return result;
         }
     };
 }

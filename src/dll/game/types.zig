@@ -500,7 +500,7 @@ pub fn Wall(comptime game_id: build_info.Game) type {
             field(0x000, "actor", Actor(.t8), &.{}), // parent
             field(0x2B0, "state", StageGimmickState, &.init), // T8: State
             field(0x2B4, "set_number", u32, &0), // T8: SetNo
-            field(0x2CC, "is_durable", Bool, &.false), //T8: IsDurable
+            field(0x2CC, "is_hard", Bool, &.false), //T8: IsDurable
             field(0x2D0, "destruction_level", u32, &0), //T8: DestructLevel
             field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
             field(0x5A0, "wall_attribute", WallAttribute, &.{}), // T8: WallAttribute
@@ -509,12 +509,11 @@ pub fn Wall(comptime game_id: build_info.Game) type {
 }
 
 pub const WallAttribute = sdk.memory.Bitfield(u32, &.{
-    .{ .name = "breakable", .backing_value = 1 },
+    .{ .name = "wall_break", .backing_value = 1 },
     .{ .name = "balcony_break", .backing_value = 4 },
-    .{ .name = "explosive", .backing_value = 2048 },
-    .{ .name = "durable", .backing_value = 32768 },
-    .{ .name = "explosive_no_side_switch", .backing_value = 65536 },
-    .{ .name = "explosive_side_switch", .backing_value = 131072 },
+    .{ .name = "hard", .backing_value = 32768 },
+    .{ .name = "wall_blast", .backing_value = 65536 },
+    .{ .name = "wall_bound", .backing_value = 131072 },
 });
 
 // T8: EStageGimmickState
@@ -531,7 +530,7 @@ pub const StageGimmickState = enum(u8) {
     _,
 };
 
-// T7: TekkenWallActor, T8: PolarisStageWallActor
+// T7: ATekkenPlayerStart, T8: PolarisBattlePlayerStart
 pub fn PlayerStart(comptime game_id: build_info.Game) type {
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
@@ -541,6 +540,7 @@ pub fn PlayerStart(comptime game_id: build_info.Game) type {
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
             field(0x000, "actor", Actor(.t8), &.{}), // parent
+            field(0x2CC, "stage_broken_history", u32, &0), // T8: StageBrokenHistory
             field(0x2D4, "floor_number", u32, &0), // T8: FloorId
             field(0x2D0, "type", PlayerStartType(.t8), &.drama_start), // T8: StagePositionTypeId
         }),

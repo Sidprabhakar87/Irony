@@ -1933,3 +1933,481 @@ test "should capture hit lines correctly in T8" {
     try testing.expectEqualSlices(model.HitLine, &.{}, frame_4.getPlayerById(.player_1).hit_lines.asSlice());
     try testing.expectEqualSlices(model.HitLine, &.{}, frame_4.getPlayerById(.player_2).hit_lines.asSlice());
 }
+
+test "should capture walls correctly" {
+    const pi = std.math.pi;
+    const sqrt2 = std.math.sqrt2;
+    const expectEqualWall = struct {
+        fn call(expected: model.Wall, actual: model.Wall) !void {
+            try testing.expectApproxEqAbs(expected.edge_1.x(), actual.edge_1.x(), 0.001);
+            try testing.expectApproxEqAbs(expected.edge_1.y(), actual.edge_1.y(), 0.001);
+            try testing.expectEqual(expected.edge_2_index, actual.edge_2_index);
+            try testing.expectEqual(expected.properties, actual.properties);
+        }
+    }.call;
+
+    const game_memory = game.Memory(.t8).testingInit(.{
+        .player_1 = &.{ .stage_set_number = 0, .floor_number = 1 },
+        .player_2 = &.{ .stage_set_number = 0, .floor_number = 1 },
+        .player_starts = &.{
+            .{
+                .actor = .{ .root_component = .fromPointer(&.{
+                    .relative_position = .fromConverted(.fromArray(.{ 300, 500, 0 })),
+                }) },
+                .stage_broken_history = 0b011,
+                .floor_number = 1,
+                .type = .game_start,
+            },
+            .{
+                .actor = .{ .root_component = .fromPointer(&.{
+                    .relative_position = .fromConverted(.fromArray(.{ 1000, 500, 0 })),
+                }) },
+                .stage_broken_history = 0b001,
+                .floor_number = 1,
+                .type = .game_start,
+            },
+            .{
+                .actor = .{ .root_component = .fromPointer(&.{
+                    .relative_position = .fromConverted(.fromArray(.{ 1700, 500, 0 })),
+                }) },
+                .stage_broken_history = 0b101,
+                .floor_number = 1,
+                .type = .game_start,
+            },
+            .{
+                .actor = .{ .root_component = .fromPointer(&.{
+                    .relative_position = .fromConverted(.fromArray(.{ 900, 1200, 0 })),
+                }) },
+                .stage_broken_history = 0b000,
+                .floor_number = 0,
+                .type = .game_start,
+            },
+            .{
+                .actor = .{ .root_component = .fromPointer(&.{
+                    .relative_position = .fromConverted(.fromArray(.{ 1100, 1200, 0 })),
+                }) },
+                .stage_broken_history = 0b000,
+                .floor_number = 1,
+                .type = .drama_start,
+            },
+        },
+        .walls = &.{
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 2000, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 2, 16, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{
+                    .wall_break = true,
+                    .balcony_break = true,
+                },
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1900, 900, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, -0.25 * pi, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 7 * sqrt2, sqrt2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1700, 1000, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 12, 2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1000, 1000, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 4, 2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{
+                    .wall_blast = true,
+                },
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 300, 1000, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 12, 2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 100, 900, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0.25 * pi, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 7 * sqrt2, sqrt2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 0, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 2, 16, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 0, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0.25 * pi, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 2 * sqrt2, 2 * sqrt2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 100, 100, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, -0.25 * pi, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 7 * sqrt2, sqrt2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{
+                    .wall_bound = true,
+                },
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 300, 0, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 12, 2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1000, 0, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 12, 2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1700, 0, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 12, 2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1900, 100, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0.25 * pi, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 7 * sqrt2, sqrt2, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 600, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 2, 14, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{
+                    .wall_break = true,
+                    .hard = true,
+                },
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1400, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 2, 14, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = false },
+                },
+                .state = .end,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 1,
+                .wall_attribute = .{
+                    .wall_break = true,
+                },
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 700, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1, 16, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = true },
+                    .collision_enabled = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 900, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1, 16, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = false },
+                },
+                .state = .init,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1100, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1, 16, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 1,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 1300, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1, 16, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 0,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+        },
+    });
+
+    var capturer = Capturer(.t8){};
+    const walls = capturer.captureFrame(&game_memory).walls.asSlice();
+
+    try testing.expectEqual(17, walls.len);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 1900, 800 }),
+        .edge_2_index = 1,
+        .properties = .{},
+    }, walls[0]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 1800, 900 }),
+        .edge_2_index = 2,
+        .properties = .{},
+    }, walls[1]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 1300, 900 }),
+        .edge_2_index = 3,
+        .properties = .{},
+    }, walls[2]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 1200, 900 }),
+        .edge_2_index = 4,
+        .properties = .{ .gimmick = .wall_blast },
+    }, walls[3]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 800, 900 }),
+        .edge_2_index = 5,
+        .properties = .{},
+    }, walls[4]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 200, 900 }),
+        .edge_2_index = 6,
+        .properties = .{},
+    }, walls[5]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 100, 800 }),
+        .edge_2_index = 7,
+        .properties = .{},
+    }, walls[6]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 100, 600 }),
+        .edge_2_index = 8,
+        .properties = .{},
+    }, walls[7]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 200, 500 }),
+        .edge_2_index = 9,
+        .properties = .{},
+    }, walls[8]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 100, 400 }),
+        .edge_2_index = 10,
+        .properties = .{},
+    }, walls[9]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 100, 200 }),
+        .edge_2_index = 11,
+        .properties = .{ .gimmick = .wall_bound },
+    }, walls[10]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 200, 100 }),
+        .edge_2_index = 12,
+        .properties = .{},
+    }, walls[11]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 700, 100 }),
+        .edge_2_index = 13,
+        .properties = .{},
+    }, walls[12]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 1800, 100 }),
+        .edge_2_index = 14,
+        .properties = .{},
+    }, walls[13]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 1900, 200 }),
+        .edge_2_index = 0,
+        .properties = .{ .gimmick = .balcony_break },
+    }, walls[14]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 700, 900 }),
+        .edge_2_index = 12,
+        .properties = .{
+            .gimmick = .wall_break,
+            .flags = .{ .hard = true },
+        },
+    }, walls[15]);
+    try expectEqualWall(model.Wall{
+        .edge_1 = .fromArray(.{ 1300, 100 }),
+        .edge_2_index = 2,
+        .properties = .{
+            .gimmick = .wall_break,
+            .flags = .{
+                .damaged = true,
+                .gimmick_used_up = true,
+                .broken = true,
+            },
+        },
+    }, walls[16]);
+}

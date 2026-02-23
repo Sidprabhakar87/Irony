@@ -500,7 +500,6 @@ pub fn Wall(comptime game_id: build_info.Game) type {
             field(0x000, "actor", Actor(.t8), &.{}), // parent
             field(0x2B0, "state", StageGimmickState, &.init), // T8: State
             field(0x2B4, "set_number", u32, &0), // T8: SetNo
-            field(0x2CC, "is_hard", Bool, &.false), //T8: IsDurable
             field(0x2D0, "destruction_level", u32, &0), //T8: DestructLevel
             field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
             field(0x5A0, "wall_attribute", WallAttribute, &.{}), // T8: WallAttribute

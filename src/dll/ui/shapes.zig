@@ -250,6 +250,29 @@ pub const TestingShapes = struct {
         return null;
     }
 
+    pub fn findLineWithScreenPoints(
+        self: *const Self,
+        point_1: sdk.math.Vec2,
+        point_2: sdk.math.Vec2,
+        tolerance: f32,
+    ) ?*const Line {
+        for (self.list.items) |*shape| {
+            switch (shape.*) {
+                .line => |*line| {
+                    const l = &line.screen_line;
+                    const t = tolerance;
+                    const is_equal = (l.point_1.equals(point_1, t) and l.point_2.equals(point_2, t)) or
+                        (l.point_1.equals(point_2, t) and l.point_2.equals(point_1, t));
+                    if (is_equal) {
+                        return line;
+                    }
+                },
+                else => continue,
+            }
+        }
+        return null;
+    }
+
     pub const LinePair = struct {
         thinner: *const Line,
         thicker: *const Line,

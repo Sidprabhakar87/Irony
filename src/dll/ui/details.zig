@@ -309,6 +309,28 @@ pub const Details = struct {
         null,
         drawF32Degrees,
     ) = .{},
+    distance_to_wall: Row(
+        "Distance To Wall [m]",
+        \\Distance between the player's centroid and the intersection point of the line that connects player's and
+        \\opponent's centroid with the closest wall behind the player.
+        \\Broken walls are ignored.
+    ,
+        f32,
+        null,
+        drawF32Div100,
+    ) = .{},
+    angle_to_wall: Row(
+        "Angle To Wall [°]",
+        \\Angle between the line that connects player's and opponent's centroid and the closest wall behind the player
+        \\that intersects with that line.
+        \\Negative value indicates wall being on the right side of the player.
+        \\Positive value indicates wall being on the left side of the player.
+        \\Broken walls are ignored.
+    ,
+        f32,
+        null,
+        drawF32Degrees,
+    ) = .{},
     hit_lines_height: Row(
         "Hit Lines Height [cm]",
         "Distances from the floor to the lowest and highest points of player's hit lines in the current frame.",
@@ -372,6 +394,16 @@ pub const Details = struct {
         self.heat.processFrame(s, c1.heat, c2.heat);
         self.distance_to_opponent.processFrame(s, c1.getDistanceTo(c2), c2.getDistanceTo(c1));
         self.angle_to_opponent.processFrame(s, c1.getAngleTo(c2), c2.getAngleTo(c1));
+        self.distance_to_wall.processFrame(
+            s,
+            c1.getDistanceToWall(c2, frame.walls.asSlice()),
+            c2.getDistanceToWall(c1, frame.walls.asSlice()),
+        );
+        self.angle_to_wall.processFrame(
+            s,
+            c1.getAngleToWall(c2, frame.walls.asSlice()),
+            c2.getAngleToWall(c1, frame.walls.asSlice()),
+        );
         self.hit_lines_height.processFrame(
             s,
             c1.getHitLinesHeight(frame.floor_z),
@@ -2324,6 +2356,103 @@ test "should draw angle to opponent correctly" {
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/-90.00");
             try ctx.expectItemExists("cell_2/0.00");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw distance to wall correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Distance To Wall [m]");
+
+            details.processFrame(&settings, &.{
+                .players = .{ .{}, .{} },
+                .walls = .{},
+            });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/---");
+
+            details.processFrame(
+                &settings,
+                &.{
+                    .players = .{
+                        .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ -100, 0, 0 }), .radius = 0 }) },
+                        .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 100, 0, 0 }), .radius = 0 }) },
+                    },
+                    .walls = .{
+                        .buffer = .{
+                            model.Wall{ .edge_1 = .fromArray(.{ -223, -1 }), .edge_2_index = 1 },
+                            model.Wall{ .edge_1 = .fromArray(.{ 556, -1 }), .edge_2_index = 2 },
+                            model.Wall{ .edge_1 = .fromArray(.{ 556, 1 }), .edge_2_index = 3 },
+                            model.Wall{ .edge_1 = .fromArray(.{ -223, 1 }), .edge_2_index = 0 },
+                        } ++ ([1]model.Wall{undefined} ** (model.Walls.max_len - 4)),
+                        .len = 4,
+                    },
+                },
+            );
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/1.23");
+            try ctx.expectItemExists("cell_2/4.56");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw angle to wall correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Angle To Wall [°]");
+
+            details.processFrame(&settings, &.{
+                .players = .{ .{}, .{} },
+                .walls = .{},
+            });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/---");
+
+            details.processFrame(
+                &settings,
+                &.{
+                    .players = .{
+                        .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ -1, 0, 0 }), .radius = 0 }) },
+                        .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 1, 0, 0 }), .radius = 0 }) },
+                    },
+                    .walls = .{
+                        .buffer = .{
+                            model.Wall{ .edge_1 = .fromArray(.{ -100, -100 }), .edge_2_index = 1 },
+                            model.Wall{ .edge_1 = .fromArray(.{ 300, -100 }), .edge_2_index = 2 },
+                            model.Wall{ .edge_1 = .fromArray(.{ -100, 300 }), .edge_2_index = 0 },
+                        } ++ ([1]model.Wall{undefined} ** (model.Walls.max_len - 3)),
+                        .len = 4,
+                    },
+                },
+            );
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/0.00");
+            try ctx.expectItemExists("cell_2/-45.00");
         }
     };
     const context = try sdk.ui.getTestingContext();

@@ -268,6 +268,33 @@ pub const Player = struct {
         return std.math.wrap(other_rotation - difference_rotation, std.math.pi);
     }
 
+    pub fn getDistanceToWall(self: *const Self, other: *const Self, walls: []const model.Wall) ?f32 {
+        const self_pos = if (self.getPosition()) |pos| pos.swizzle("xy") else return null;
+        const other_pos = if (other.getPosition()) |pos| pos.swizzle("xy") else return null;
+        const difference = self_pos.subtract(other_pos);
+        if (difference.isZero(0.0001)) {
+            return null;
+        }
+        const direction = difference.normalize();
+        const hit = raycastWalls(.{ .origin = self_pos, .direction = direction }, walls) orelse return null;
+        return hit.t;
+    }
+
+    pub fn getAngleToWall(self: *const Self, other: *const Self, walls: []const model.Wall) ?f32 {
+        const self_pos = if (self.getPosition()) |pos| pos.swizzle("xy") else return null;
+        const other_pos = if (other.getPosition()) |pos| pos.swizzle("xy") else return null;
+        const difference = self_pos.subtract(other_pos);
+        if (difference.isZero(0.0001)) {
+            return null;
+        }
+        const direction = difference.normalize();
+        const hit = raycastWalls(.{ .origin = self_pos, .direction = direction }, walls) orelse return null;
+        const wall_direction = hit.normal.negate();
+        const players_angle = std.math.atan2(direction.y(), direction.x());
+        const wall_angle = std.math.atan2(wall_direction.y(), wall_direction.x());
+        return std.math.wrap(players_angle - wall_angle, std.math.pi);
+    }
+
     pub fn getHurtCylindersHeight(self: *const Self, floor_z: ?f32) model.F32MinMax {
         const cylinders: *const model.HurtCylinders = if (self.hurt_cylinders) |*c| c else {
             return .{ .min = null, .max = null };
@@ -310,6 +337,33 @@ pub const Player = struct {
             .min = if (self.min_attack_z) |z| @max(z - floor_height, 0) else null,
             .max = if (self.max_attack_z) |z| @max(z - floor_height, 0) else null,
         };
+    }
+
+    fn raycastWalls(ray: sdk.math.Ray2, walls: []const model.Wall) ?sdk.math.RaycastLineSegmentResult.Hit {
+        var min_hit: ?sdk.math.RaycastLineSegmentResult.Hit = null;
+        for (walls) |*wall| {
+            if (wall.properties.flags.broken) {
+                continue;
+            }
+            if (wall.edge_2_index >= walls.len) {
+                continue;
+            }
+            const line = sdk.math.LineSegment2{
+                .point_1 = wall.edge_1,
+                .point_2 = walls[wall.edge_2_index].edge_1,
+            };
+            const hit = switch (sdk.math.raycastLineSegment(ray, line)) {
+                .hit => |hit| hit,
+                .overlap, .miss => continue,
+            };
+            if (hit.t < 0) {
+                continue;
+            }
+            if (min_hit == null or hit.t < min_hit.?.t) {
+                min_hit = hit;
+            }
+        }
+        return min_hit;
     }
 };
 
@@ -718,6 +772,52 @@ test "Player.getAngleTo should return correct value" {
     try testing.expectEqual(null, player_1.getAngleTo(&player_4));
     try testing.expectEqual(null, player_2.getAngleTo(&player_4));
     try testing.expectEqual(null, player_3.getAngleTo(&player_4));
+}
+
+test "Player.getAngleToWall should return correct value" {
+    const walls = [_]model.Wall{
+        .{ .edge_1 = .fromArray(.{ -1, 1.5 }), .edge_2_index = 1 },
+        .{ .edge_1 = .fromArray(.{ -1, -1.5 }), .edge_2_index = 0 },
+    };
+    const player = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 0, 0, 0 }), .radius = 0 }) };
+    const opponent_1 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, 0, 0 }), .radius = 0 }) };
+    const opponent_2 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, 2, 0 }), .radius = 0 }) };
+    const opponent_3 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, -2, 0 }), .radius = 0 }) };
+    const opponent_4 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, 4, 0 }), .radius = 0 }) };
+    const opponent_5 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, -4, 0 }), .radius = 0 }) };
+
+    try testing.expect(player.getAngleToWall(&opponent_1, &walls) != null);
+    try testing.expect(player.getAngleToWall(&opponent_2, &walls) != null);
+    try testing.expect(player.getAngleToWall(&opponent_3, &walls) != null);
+    try testing.expectApproxEqAbs(0, player.getAngleToWall(&opponent_1, &walls).?, 0.00001);
+    try testing.expectApproxEqAbs(0.25 * std.math.pi, player.getAngleToWall(&opponent_2, &walls).?, 0.00001);
+    try testing.expectApproxEqAbs(-0.25 * std.math.pi, player.getAngleToWall(&opponent_3, &walls).?, 0.00001);
+
+    try testing.expectEqual(null, player.getAngleToWall(&opponent_4, &walls));
+    try testing.expectEqual(null, player.getAngleToWall(&opponent_5, &walls));
+    try testing.expectEqual(null, opponent_1.getAngleToWall(&player, &walls));
+}
+
+test "Player.getDistanceToWall should return correct value" {
+    const walls = [_]model.Wall{
+        .{ .edge_1 = .fromArray(.{ -1, 0.5 }), .edge_2_index = 1 },
+        .{ .edge_1 = .fromArray(.{ -1, -2.5 }), .edge_2_index = 0 },
+    };
+    const player = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 0, 0, 0 }), .radius = 0 }) };
+    const opponent_1 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, 0, 0 }), .radius = 0 }) };
+    const opponent_2 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, 2, 0 }), .radius = 0 }) };
+    const opponent_3 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, 4, 0 }), .radius = 0 }) };
+    const opponent_4 = Player{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 2, 6, 0 }), .radius = 0 }) };
+
+    try testing.expect(player.getDistanceToWall(&opponent_1, &walls) != null);
+    try testing.expect(player.getDistanceToWall(&opponent_2, &walls) != null);
+    try testing.expect(player.getDistanceToWall(&opponent_3, &walls) != null);
+    try testing.expectApproxEqAbs(1.0, player.getDistanceToWall(&opponent_1, &walls).?, 0.00001);
+    try testing.expectApproxEqAbs(std.math.sqrt(2.0), player.getDistanceToWall(&opponent_2, &walls).?, 0.00001);
+    try testing.expectApproxEqAbs(std.math.sqrt(5.0), player.getDistanceToWall(&opponent_3, &walls).?, 0.00001);
+
+    try testing.expectEqual(null, player.getDistanceToWall(&opponent_4, &walls));
+    try testing.expectEqual(null, opponent_1.getDistanceToWall(&player, &walls));
 }
 
 test "Player.getHurtCylindersHeight should return correct value" {

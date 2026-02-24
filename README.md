@@ -12,7 +12,8 @@ The application only works with the PC version of both games.
 - Examine hit lines, hurt cylinders and collision spheres.
 - Measure startup, active and recovery frames as well as the frame advantage.
 - Precisely measure attack range, attack height and attack's recovery range.
-- Precisely measure distance to opponent, angle to opponent, hit lines height and hurt cylinders height.
+- Precisely measure distance and angle to opponent and wall.
+- Precisely measure hit lines and hurt cylinders height.
 - Examine posture, blocking and crushing frame by frame.
 - Record suspicious replays and examine player inputs frame by frame.
 - Measure any distance you are interested in using the measure tool.

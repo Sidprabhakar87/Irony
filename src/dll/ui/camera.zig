@@ -11,7 +11,9 @@ pub const Camera = struct {
     transform: Transform = .{},
     rotation_radius: ?f32 = null,
 
-    pub const padding = 50;
+    pub const player_padding = 50;
+    pub const stage_padding = 200;
+    pub const stage_vertical_offset = 100;
     pub const zoom_speed = 1.2;
 
     const Self = @This();
@@ -22,7 +24,7 @@ pub const Camera = struct {
     pub const FollowTarget = enum {
         ingame_camera,
         players,
-        origin,
+        stage,
     };
     pub const Transform = struct {
         translation: sdk.math.Vec3 = .zero,
@@ -153,8 +155,8 @@ pub const Camera = struct {
         if (imgui.igMenuItem_Bool("Follow Players", null, self.follow_target == .players, true)) {
             self.follow_target = .players;
         }
-        if (imgui.igMenuItem_Bool("Stay At Origin", null, self.follow_target == .origin, true)) {
-            self.follow_target = .origin;
+        if (imgui.igMenuItem_Bool("Follow Stage Bounds", null, self.follow_target == .stage, true)) {
+            self.follow_target = .stage;
         }
         imgui.igSeparator();
         if (imgui.igMenuItem_Bool("Reset View Offset", null, false, !std.meta.eql(self.transform, .{}))) {
@@ -167,7 +169,7 @@ pub const Camera = struct {
         const look_at_matrix = switch (self.follow_target) {
             .ingame_camera => calculateIngameCameraLookAtMatrix(frame, direction) orelse return null,
             .players => calculatePlayersLookAtMatrix(frame, direction) orelse return null,
-            .origin => calculateOriginLookAtMatrix(frame, direction),
+            .stage => calculateStageLookAtMatrix(frame, direction),
         };
         const rotation_matrix = switch (direction) {
             .front, .side => sdk.math.Mat4.fromYRotation(self.transform.rotation),
@@ -178,7 +180,7 @@ pub const Camera = struct {
             frame,
             direction,
             look_at_matrix,
-            self.follow_target == .origin,
+            self.follow_target,
         ) orelse return null;
         const window_matrix = self.calculateWindowMatrix(direction);
         return translation_matrix
@@ -228,13 +230,23 @@ pub const Camera = struct {
         return sdk.math.Mat4.fromLookAt(eye, target, up);
     }
 
-    fn calculateOriginLookAtMatrix(frame: *const model.Frame, direction: ui.ViewDirection) sdk.math.Mat4 {
-        const floor_z = frame.floor_z orelse 0.0;
-        const eye = sdk.math.Vec3.fromArray(.{ 0.0, 0.0, floor_z + 90.0 });
+    fn calculateStageLookAtMatrix(frame: *const model.Frame, direction: ui.ViewDirection) sdk.math.Mat4 {
+        const floor_z = frame.floor_z orelse 0;
+        const walls: []const model.Wall = frame.walls.asSlice();
+        const midpoint = if (walls.len == 0) sdk.math.Vec2.zero else block: {
+            var min = sdk.math.Vec2.fill(std.math.inf(f32));
+            var max = sdk.math.Vec2.fill(-std.math.inf(f32));
+            for (walls) |*wall| {
+                min = sdk.math.Vec2.minElements(min, wall.edge_1);
+                max = sdk.math.Vec2.maxElements(max, wall.edge_1);
+            }
+            break :block min.add(max).scale(0.5);
+        };
+        const eye = midpoint.extend(floor_z + stage_vertical_offset);
         const target = switch (direction) {
-            .front => eye.add(sdk.math.Vec3.plus_y),
-            .side => eye.add(sdk.math.Vec3.minus_x),
-            .top => eye.add(sdk.math.Vec3.minus_z),
+            .front => eye.add(.plus_y),
+            .side => eye.add(.minus_x),
+            .top => eye.add(.minus_z),
         };
         const up = switch (direction) {
             .front, .side => sdk.math.Vec3.plus_z,
@@ -248,42 +260,59 @@ pub const Camera = struct {
         frame: *const model.Frame,
         direction: ui.ViewDirection,
         look_at_matrix: sdk.math.Mat4,
-        use_static_scale: bool,
+        follow_target: FollowTarget,
     ) ?sdk.math.Mat4 {
-        const world_box = if (use_static_scale) sdk.math.Vec3.fill(280) else block: {
-            var min = sdk.math.Vec3.fill(std.math.inf(f32));
-            var max = sdk.math.Vec3.fill(-std.math.inf(f32));
-            for (&frame.players) |*player| {
-                if (player.collision_spheres) |*spheres| {
-                    for (&spheres.values) |*sphere| {
-                        const pos = sphere.center.pointTransform(look_at_matrix);
-                        const half_size = sdk.math.Vec3.fill(sphere.radius);
-                        min = sdk.math.Vec3.minElements(min, pos.subtract(half_size));
-                        max = sdk.math.Vec3.maxElements(max, pos.add(half_size));
+        const world_box = switch (follow_target) {
+            .ingame_camera, .players => block: {
+                var min = sdk.math.Vec3.fill(std.math.inf(f32));
+                var max = sdk.math.Vec3.fill(-std.math.inf(f32));
+                for (&frame.players) |*player| {
+                    if (player.collision_spheres) |*spheres| {
+                        for (&spheres.values) |*sphere| {
+                            const pos = sphere.center.pointTransform(look_at_matrix);
+                            const half_size = sdk.math.Vec3.fill(sphere.radius);
+                            min = sdk.math.Vec3.minElements(min, pos.subtract(half_size));
+                            max = sdk.math.Vec3.maxElements(max, pos.add(half_size));
+                        }
+                    }
+                    if (player.hurt_cylinders) |*cylinders| {
+                        for (&cylinders.values) |*hurt_cylinder| {
+                            const cylinder = &hurt_cylinder.cylinder;
+                            const pos = cylinder.center.pointTransform(look_at_matrix);
+                            const half_size = switch (direction) {
+                                .top => sdk.math.Vec3.fromArray(.{
+                                    cylinder.radius,
+                                    cylinder.radius,
+                                    cylinder.half_height,
+                                }),
+                                .front, .side => sdk.math.Vec3.fromArray(.{
+                                    cylinder.radius,
+                                    cylinder.half_height,
+                                    cylinder.radius,
+                                }),
+                            };
+                            min = sdk.math.Vec3.minElements(min, pos.subtract(half_size));
+                            max = sdk.math.Vec3.maxElements(max, pos.add(half_size));
+                        }
                     }
                 }
-                if (player.hurt_cylinders) |*cylinders| {
-                    for (&cylinders.values) |*hurt_cylinder| {
-                        const cylinder = &hurt_cylinder.cylinder;
-                        const pos = cylinder.center.pointTransform(look_at_matrix);
-                        const half_size = switch (direction) {
-                            .top => sdk.math.Vec3.fromArray(.{
-                                cylinder.radius,
-                                cylinder.radius,
-                                cylinder.half_height,
-                            }),
-                            .front, .side => sdk.math.Vec3.fromArray(.{
-                                cylinder.radius,
-                                cylinder.half_height,
-                                cylinder.radius,
-                            }),
-                        };
-                        min = sdk.math.Vec3.minElements(min, pos.subtract(half_size));
-                        max = sdk.math.Vec3.maxElements(max, pos.add(half_size));
-                    }
+                break :block sdk.math.Vec3.maxElements(min.negate(), max).add(.fill(player_padding)).scale(2);
+            },
+            .stage => block: {
+                const walls: []const model.Wall = frame.walls.asSlice();
+                if (walls.len == 0) {
+                    break :block sdk.math.Vec3.fill(stage_vertical_offset + stage_padding).scale(2);
                 }
-            }
-            break :block sdk.math.Vec3.maxElements(min.negate(), max).add(.fill(padding)).scale(2);
+                const floor_z = frame.floor_z orelse 0;
+                var min = sdk.math.Vec3.fill(std.math.inf(f32));
+                var max = sdk.math.Vec3.fill(-std.math.inf(f32));
+                for (walls) |*wall| {
+                    const pos = wall.edge_1.extend(floor_z).pointTransform(look_at_matrix);
+                    min = sdk.math.Vec3.minElements(min, pos);
+                    max = sdk.math.Vec3.maxElements(max, pos);
+                }
+                break :block sdk.math.Vec3.maxElements(min.negate(), max).add(.fill(stage_padding)).scale(2);
+            },
         };
         const screen_box = switch (direction) {
             .front => sdk.math.Vec3.fromArray(.{
@@ -327,25 +356,40 @@ const testing = std.testing;
 
 fn testPoint(x: f32, y: f32, z: f32) sdk.math.Vec3 {
     return .fromArray(.{
-        100 + (x * Camera.padding),
-        200 + (y * Camera.padding),
-        300 + (z * Camera.padding),
+        100 + (x * Camera.player_padding),
+        200 + (y * Camera.player_padding),
+        300 + (z * Camera.player_padding),
     });
 }
 
 fn testSphere(x: f32, y: f32, z: f32, radius: f32) model.CollisionSphere {
     return .{
         .center = testPoint(x, y, z),
-        .radius = radius * Camera.padding,
+        .radius = radius * Camera.player_padding,
     };
 }
 
 fn testCylinder(x: f32, y: f32, z: f32, radius: f32, half_height: f32) model.HurtCylinder {
     return .{ .cylinder = .{
         .center = testPoint(x, y, z),
-        .radius = radius * Camera.padding,
-        .half_height = half_height * Camera.padding,
+        .radius = radius * Camera.player_padding,
+        .half_height = half_height * Camera.player_padding,
     } };
+}
+
+fn stagePoint(x: f32, y: f32, z: f32) sdk.math.Vec3 {
+    return .fromArray(.{
+        100 + (x * Camera.stage_padding),
+        200 + (y * Camera.stage_padding),
+        300 + (z * Camera.stage_padding),
+    });
+}
+
+fn testWall(x1: f32, y1: f32) model.Wall {
+    return .{
+        .edge_1 = stagePoint(x1, y1, 0).swizzle("xy"),
+        .edge_2_index = 0,
+    };
 }
 
 test "should project correctly when follow target is players" {
@@ -632,8 +676,96 @@ test "should project correctly when follow target is ingame camera" {
     try context.runTest(.{}, Test.guiFunction, Test.testFunction);
 }
 
-// TODO test "should project correctly when follow target is origin"
-// When support for walls gets added, change follow target origin to walls and then test the follow target walls.
+test "should project correctly when follow target is stage" {
+    const Test = struct {
+        const frame = model.Frame{
+            .floor_z = stagePoint(0, 0, 4 - (@as(f32, Camera.stage_vertical_offset) / Camera.stage_padding)).z(),
+            .walls = .{
+                .buffer = .{
+                    testWall(7, 1),
+                    testWall(-5, 3),
+                    testWall(-7, -3),
+                } ++ ([1]model.Wall{undefined} ** (model.Walls.max_len - 3)),
+                .len = 3,
+            },
+        };
+        var camera: Camera = .{ .follow_target = .stage };
+        var matrices: std.EnumArray(ui.ViewDirection, sdk.math.Mat4) = .initFill(.identity);
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            const window_flags = imgui.ImGuiWindowFlags_NoMove |
+                imgui.ImGuiWindowFlags_NoResize |
+                imgui.ImGuiWindowFlags_NoDecoration |
+                imgui.ImGuiWindowFlags_NoSavedSettings;
+            imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_WindowPadding, .{ .x = 0, .y = 0 });
+            imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_FramePadding, .{ .x = 0, .y = 0 });
+            defer imgui.igPopStyleVar(2);
+
+            imgui.igSetNextWindowPos(.{ .x = 100, .y = 100 }, imgui.ImGuiCond_Always, .{});
+            imgui.igSetNextWindowSize(.{ .x = 400, .y = 200 }, imgui.ImGuiCond_Always);
+            if (imgui.igBegin("Front", null, window_flags)) {
+                defer imgui.igEnd();
+                camera.measureWindow(.front);
+                const matrix = camera.calculateMatrix(&frame, .front) orelse return error.MatrixCalculationFailed;
+                matrices.set(.front, matrix);
+            } else imgui.igEnd();
+
+            imgui.igSetNextWindowPos(.{ .x = 100, .y = 400 }, imgui.ImGuiCond_Always, .{});
+            imgui.igSetNextWindowSize(.{ .x = 400, .y = 200 }, imgui.ImGuiCond_Always);
+            if (imgui.igBegin("Top", null, window_flags)) {
+                defer imgui.igEnd();
+                camera.measureWindow(.top);
+                const matrix = camera.calculateMatrix(&frame, .top) orelse return error.MatrixCalculationFailed;
+                matrices.set(.top, matrix);
+            } else imgui.igEnd();
+
+            imgui.igSetNextWindowPos(.{ .x = 600, .y = 100 }, imgui.ImGuiCond_Always, .{});
+            imgui.igSetNextWindowSize(.{ .x = 400, .y = 200 }, imgui.ImGuiCond_Always);
+            if (imgui.igBegin("Side", null, window_flags)) {
+                defer imgui.igEnd();
+                camera.measureWindow(.side);
+                const matrix = camera.calculateMatrix(&frame, .side) orelse return error.MatrixCalculationFailed;
+                matrices.set(.side, matrix);
+            } else imgui.igEnd();
+
+            camera.flushWindowMeasurements();
+        }
+
+        fn testFunction(_: sdk.ui.TestContext) !void {
+            try testing.expectApproxEqAbs(475, stagePoint(-7, -3, 1).pointTransform(matrices.get(.front)).x(), 0.0001);
+            try testing.expectApproxEqAbs(275, stagePoint(-7, -3, 1).pointTransform(matrices.get(.front)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.125, stagePoint(-7, -3, 1).pointTransform(matrices.get(.front)).z(), 0.0001);
+            try testing.expectApproxEqAbs(300, stagePoint(0, 0, 4).pointTransform(matrices.get(.front)).x(), 0.0001);
+            try testing.expectApproxEqAbs(200, stagePoint(0, 0, 4).pointTransform(matrices.get(.front)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.5, stagePoint(0, 0, 4).pointTransform(matrices.get(.front)).z(), 0.0001);
+            try testing.expectApproxEqAbs(125, stagePoint(7, 3, 7).pointTransform(matrices.get(.front)).x(), 0.0001);
+            try testing.expectApproxEqAbs(125, stagePoint(7, 3, 7).pointTransform(matrices.get(.front)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.875, stagePoint(7, 3, 7).pointTransform(matrices.get(.front)).z(), 0.0001);
+
+            try testing.expectApproxEqAbs(475, stagePoint(-7, -3, 1).pointTransform(matrices.get(.top)).x(), 0.0001);
+            try testing.expectApproxEqAbs(575, stagePoint(-7, -3, 1).pointTransform(matrices.get(.top)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.875, stagePoint(-7, -3, 1).pointTransform(matrices.get(.top)).z(), 0.0001);
+            try testing.expectApproxEqAbs(300, stagePoint(0, 0, 4).pointTransform(matrices.get(.top)).x(), 0.0001);
+            try testing.expectApproxEqAbs(500, stagePoint(0, 0, 4).pointTransform(matrices.get(.top)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.5, stagePoint(0, 0, 4).pointTransform(matrices.get(.top)).z(), 0.0001);
+            try testing.expectApproxEqAbs(125, stagePoint(7, 3, 7).pointTransform(matrices.get(.top)).x(), 0.0001);
+            try testing.expectApproxEqAbs(425, stagePoint(7, 3, 7).pointTransform(matrices.get(.top)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.125, stagePoint(7, 3, 7).pointTransform(matrices.get(.top)).z(), 0.0001);
+
+            try testing.expectApproxEqAbs(875, stagePoint(-7, -3, 1).pointTransform(matrices.get(.side)).x(), 0.0001);
+            try testing.expectApproxEqAbs(275, stagePoint(-7, -3, 1).pointTransform(matrices.get(.side)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.9375, stagePoint(-7, -3, 1).pointTransform(matrices.get(.side)).z(), 0.0001);
+            try testing.expectApproxEqAbs(800, stagePoint(0, 0, 4).pointTransform(matrices.get(.side)).x(), 0.0001);
+            try testing.expectApproxEqAbs(200, stagePoint(0, 0, 4).pointTransform(matrices.get(.side)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.5, stagePoint(0, 0, 4).pointTransform(matrices.get(.side)).z(), 0.0001);
+            try testing.expectApproxEqAbs(725, stagePoint(7, 3, 7).pointTransform(matrices.get(.side)).x(), 0.0001);
+            try testing.expectApproxEqAbs(125, stagePoint(7, 3, 7).pointTransform(matrices.get(.side)).y(), 0.0001);
+            try testing.expectApproxEqAbs(0.0625, stagePoint(7, 3, 7).pointTransform(matrices.get(.side)).z(), 0.0001);
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
 
 test "should zoom in/out on the point that the mouse pointer is pointing when mouse wheel is scrolled" {
     const Test = struct {
@@ -1139,8 +1271,8 @@ test "should change follow target when a target is selected by clicking a menu b
             try testing.expectEqual(.ingame_camera, camera.follow_target);
             ctx.menuClick("Camera/Follow Players");
             try testing.expectEqual(.players, camera.follow_target);
-            ctx.menuClick("Camera/Stay At Origin");
-            try testing.expectEqual(.origin, camera.follow_target);
+            ctx.menuClick("Camera/Follow Stage Bounds");
+            try testing.expectEqual(.stage, camera.follow_target);
         }
     };
     const context = try sdk.ui.getTestingContext();

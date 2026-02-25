@@ -8,17 +8,32 @@ pub const StructWithOffsetsMember = struct {
 };
 
 pub fn StructWithOffsets(size: ?usize, comptime members: []const StructWithOffsetsMember) type {
-    var sorted_members: [members.len]StructWithOffsetsMember = undefined;
-    for (members, 0..) |member, index| {
-        var sorted_member = member;
-        if (sorted_member.offset == null) {
-            sorted_member.offset = if (index == 0) 0 else sorted_members[index - 1].offset.? + @sizeOf(sorted_member.type);
-        }
-        sorted_members[index] = sorted_member;
+    const ResolvedMember = struct {
+        name: [:0]const u8,
+        type: type,
+        offset: usize,
+        default_value_ptr: ?*const anyopaque = null,
+    };
+    var resolved_members: [members.len]ResolvedMember = undefined;
+    for (members, 0..) |*member, index| {
+        resolved_members[index] = .{
+            .name = member.name,
+            .type = member.type,
+            .offset = member.offset orelse switch (index) {
+                0 => 0,
+                else => resolved_members[index - 1].offset + @sizeOf(resolved_members[index - 1].type),
+            },
+            .default_value_ptr = member.default_value_ptr,
+        };
     }
-    std.mem.sort(StructWithOffsetsMember, &sorted_members, {}, struct {
-        fn isLessThen(_: void, lhs: StructWithOffsetsMember, rhs: StructWithOffsetsMember) bool {
-            return lhs.offset.? < rhs.offset.?;
+
+    var sorted_members: [resolved_members.len](*const ResolvedMember) = undefined;
+    for (&resolved_members, 0..) |*member, index| {
+        sorted_members[index] = member;
+    }
+    std.sort.pdq(*const ResolvedMember, &sorted_members, {}, struct {
+        fn isLessThen(_: void, lhs: *const ResolvedMember, rhs: *const ResolvedMember) bool {
+            return lhs.offset < rhs.offset;
         }
     }.isLessThen);
 
@@ -27,15 +42,14 @@ pub fn StructWithOffsets(size: ?usize, comptime members: []const StructWithOffse
     var current_offset: usize = 0;
     var padding_index: usize = 0;
     for (sorted_members) |member| {
-        const member_offset = member.offset.?;
-        if (member_offset < current_offset) {
+        if (member.offset < current_offset) {
             @compileError(std.fmt.comptimePrint(
                 "Unable to create struct with offsets. Struct member \"{s}\" overlaps with other members of the struct.",
                 .{member.name},
             ));
         }
-        if (member_offset > current_offset) {
-            const padding_size = member_offset - current_offset;
+        if (member.offset > current_offset) {
+            const padding_size = member.offset - current_offset;
             fields_buffer[fields_size] = .{
                 .name = std.fmt.comptimePrint("_{}", .{padding_index}),
                 .type = [padding_size]u8,
@@ -46,10 +60,10 @@ pub fn StructWithOffsets(size: ?usize, comptime members: []const StructWithOffse
             padding_index += 1;
             fields_size += 1;
         }
-        if (member_offset % @alignOf(member.type) != 0) {
+        if (member.offset % @alignOf(member.type) != 0) {
             @compileError(std.fmt.comptimePrint(
                 "Unable to create struct with offsets. Struct member \"{s}\" is misaligned on offset 0x{X} while type alignment is: {}",
-                .{ member.name, member_offset, @alignOf(member.type) },
+                .{ member.name, member.offset, @alignOf(member.type) },
             ));
         }
         fields_buffer[fields_size] = .{
@@ -60,7 +74,7 @@ pub fn StructWithOffsets(size: ?usize, comptime members: []const StructWithOffse
             .alignment = @alignOf(member.type),
         };
         fields_size += 1;
-        current_offset = member_offset + @sizeOf(member.type);
+        current_offset = member.offset + @sizeOf(member.type);
     }
 
     if (size) |struct_size| {

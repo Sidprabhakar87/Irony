@@ -50,6 +50,7 @@ pub const CameraManager = @import("types.zig").CameraManager;
 pub const Actor = @import("types.zig").Actor;
 pub const SceneComponent = @import("types.zig").SceneComponent;
 pub const Wall = @import("types.zig").Wall;
+pub const Floor = @import("types.zig").Floor;
 pub const WallAttribute = @import("types.zig").WallAttribute;
 pub const StageGimmickState = @import("types.zig").StageGimmickState;
 pub const PlayerStart = @import("types.zig").PlayerStart;

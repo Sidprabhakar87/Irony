@@ -10,6 +10,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         player_2: PlayerProxy,
         camera_manager: CameraManagerPointer = .fromPointer(null),
         walls: [max_walls]WallPointer = [1]WallPointer{.fromPointer(null)} ** max_walls,
+        floors: [max_floors]FloorPointer = [1]FloorPointer{.fromPointer(null)} ** max_floors,
         player_starts: [max_player_starts]PlayerStartPointer = [1]PlayerStartPointer{.fromPointer(null)} ** max_player_starts,
         functions: Functions,
         unreal_classes: UnrealClasses = .{},
@@ -18,6 +19,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         const PlayerProxy = sdk.memory.Proxy(game.Player(game_id));
         const CameraManagerPointer = sdk.memory.Pointer(game.CameraManager(game_id));
         const WallPointer = sdk.memory.Pointer(game.Wall(game_id));
+        const FloorPointer = sdk.memory.Pointer(game.Floor(game_id));
         const PlayerStartPointer = sdk.memory.Pointer(game.PlayerStart(game_id));
         pub const Functions = struct {
             tick: ?*const game.TickFunction(game_id) = null,
@@ -35,11 +37,13 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub const UnrealClasses = struct {
             camera_manager: ?*const game.UnrealClass = null,
             wall: ?*const game.UnrealClass = null,
+            floor: ?*const game.UnrealClass = null,
             player_start: ?*const game.UnrealClass = null,
         };
 
         const pattern_cache_file_name = "pattern_cache_" ++ @tagName(game_id) ++ ".json";
         pub const max_walls = 256;
+        pub const max_floors = 16;
         pub const max_player_starts = 32;
 
         pub fn init(allocator: std.mem.Allocator, base_dir: ?*const sdk.misc.BaseDir) Self {
@@ -62,6 +66,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             player_2: ?*const game.Player(game_id) = null,
             camera_manager: ?*const game.CameraManager(game_id) = null,
             walls: []const game.Wall(game_id) = &.{},
+            floors: []const game.Floor(game_id) = &.{},
             player_starts: []const game.PlayerStart(game_id) = &.{},
             functions: Functions = .{},
             unreal_classes: UnrealClasses = .{},
@@ -78,6 +83,13 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 }
                 walls[index] = .fromPointer(wall);
             }
+            var floors = [1]FloorPointer{.fromPointer(null)} ** max_floors;
+            for (params.floors, 0..) |*floor, index| {
+                if (index >= floors.len) {
+                    break;
+                }
+                floors[index] = .fromPointer(floor);
+            }
             var player_starts = [1]PlayerStartPointer{.fromPointer(null)} ** max_player_starts;
             for (params.player_starts, 0..) |*start, index| {
                 if (index >= player_starts.len) {
@@ -91,6 +103,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 .camera_manager = .fromPointer(params.camera_manager),
                 .player_starts = player_starts,
                 .walls = walls,
+                .floors = floors,
                 .functions = params.functions,
                 .unreal_classes = params.unreal_classes,
             };
@@ -186,6 +199,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             self.updateUnrealClasses();
             self.updateUnrealObjectAddresses((&self.camera_manager)[0..1], self.unreal_classes.camera_manager);
             self.updateUnrealObjectAddresses(&self.walls, self.unreal_classes.wall);
+            self.updateUnrealObjectAddresses(&self.floors, self.unreal_classes.floor);
             self.updateUnrealObjectAddresses(&self.player_starts, self.unreal_classes.player_start);
         }
 
@@ -206,6 +220,12 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 classes.player_start = switch (game_id) {
                     .t7 => findClass(null, w("/Script/TekkenGame.TekkenPlayerStart"), true),
                     .t8 => findClass(null, w("/Script/Polaris.PolarisBattlePlayerStart"), true),
+                };
+            }
+            if (classes.floor == null) {
+                classes.floor = switch (game_id) {
+                    .t7 => findClass(null, w("/Script/TekkenGame.TekkenFloorActor"), true),
+                    .t8 => findClass(null, w("/Script/Polaris.PolarisStageFloorActor"), true),
                 };
             }
         }

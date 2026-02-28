@@ -40,7 +40,10 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             };
             const camera_manager = game_memory.camera_manager.toConstPointer();
             const camera = captureCamera(camera_manager);
-            const walls = captureWalls(player_1, player_2, &game_memory.walls, &game_memory.player_starts);
+            const floor_number = captureFloorNumber(player_1, player_2);
+            const set_number = captureStageSetNumber(player_1, player_2);
+            const walls = captureWalls(floor_number, set_number, &game_memory.walls, &game_memory.player_starts);
+            const floor_gimmicks = captureFloorGimmicks(floor_number, set_number, &game_memory.floors, walls.asSlice());
             return .{
                 .frames_since_round_start = frames_from_round_start,
                 .floor_z = floor_z,
@@ -49,6 +52,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 .main_player_id = main_player_id,
                 .left_player_id = left_player_id,
                 .walls = walls,
+                .floor_gimmicks = floor_gimmicks,
             };
         }
 
@@ -73,6 +77,28 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 }
             } else if (player_2) |p2| {
                 return p2.floor_z.convert();
+            } else {
+                return null;
+            }
+        }
+
+        fn captureFloorNumber(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?u32 {
+            if (player_1) |p1| {
+                return p1.floor_number;
+            } else if (player_2) |p2| {
+                return p2.floor_number;
+            } else {
+                return null;
+            }
+        }
+
+        fn captureStageSetNumber(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?u32 {
+            if (game_id != .t8) {
+                return null;
+            } else if (player_1) |p1| {
+                return p1.stage_set_number;
+            } else if (player_2) |p2| {
+                return p2.stage_set_number;
             } else {
                 return null;
             }
@@ -462,39 +488,16 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         }
 
         fn captureWalls(
-            player_1: ?*const GamePlayer,
-            player_2: ?*const GamePlayer,
+            floor_number: ?u32,
+            stage_set_number: ?u32,
             wall_pointers: []const sdk.memory.Pointer(game.Wall(game_id)),
             start_pointers: []const sdk.memory.Pointer(game.PlayerStart(game_id)),
         ) model.Walls {
-            const floor_number = captureFloorNumber(player_1, player_2) orelse return .{};
-            const set_number = captureStageSetNumber(player_1, player_2);
-            const midpoint = captureFloorMidpoint(start_pointers, floor_number) orelse return .{};
+            const floor_numb = floor_number orelse return .{};
+            const midpoint = captureFloorMidpoint(start_pointers, floor_numb) orelse return .{};
             var rectangles_buffer: [game.Memory(game_id).max_walls]WallRectangle = undefined;
-            const rectangles = captureWallRectangles(&rectangles_buffer, wall_pointers, floor_number, set_number);
+            const rectangles = captureWallRectangles(&rectangles_buffer, wall_pointers, floor_numb, stage_set_number);
             return computeWallsPolygon(rectangles, midpoint);
-        }
-
-        fn captureFloorNumber(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?u32 {
-            if (player_1) |p1| {
-                return p1.floor_number;
-            } else if (player_2) |p2| {
-                return p2.floor_number;
-            } else {
-                return null;
-            }
-        }
-
-        fn captureStageSetNumber(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?u32 {
-            if (game_id != .t8) {
-                return null;
-            } else if (player_1) |p1| {
-                return p1.stage_set_number;
-            } else if (player_2) |p2| {
-                return p2.stage_set_number;
-            } else {
-                return null;
-            }
         }
 
         fn captureFloorMidpoint(
@@ -810,6 +813,103 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             }
 
             return result;
+        }
+
+        fn captureFloorGimmicks(
+            floor_number: ?u32,
+            stage_set_number: ?u32,
+            floor_pointers: []const sdk.memory.Pointer(game.Floor(game_id)),
+            walls: []const model.Wall,
+        ) model.FloorGimmicks {
+            const current_floor_number = floor_number orelse return .{};
+            const set_number = stage_set_number;
+            var result = model.FloorGimmicks{};
+            for (floor_pointers) |floor_pointer| {
+                if (result.len >= result.buffer.len) {
+                    break;
+                }
+                const floor = floor_pointer.toConstPointer() orelse continue;
+                if (floor.floor_number != current_floor_number) {
+                    continue;
+                }
+                const properties = captureFloorGimmickProperties(floor) orelse continue;
+                switch (game_id) {
+                    .t7 => {
+                        var min = sdk.math.Vec2.fill(std.math.inf(f32));
+                        var max = sdk.math.Vec2.fill(-std.math.inf(f32));
+                        for (walls) |*wall| {
+                            min = sdk.math.Vec2.minElements(min, wall.edge_1);
+                            max = sdk.math.Vec2.maxElements(max, wall.edge_1);
+                        }
+                        const center = min.add(max).scale(0.5);
+                        const half_size = max.subtract(min).scale(0.5);
+                        result.buffer[result.len] = .{
+                            .rectangle = .{
+                                .center = center,
+                                .half_size = half_size,
+                                .rotation = 0,
+                            },
+                            .properties = properties,
+                        };
+                        result.len += 1;
+                    },
+                    .t8 => {
+                        if (floor.actor.hidden_polaris.value or floor.state == .init or floor.set_number != set_number) {
+                            continue;
+                        }
+                        const root = floor.actor.root_component.toConstPointer() orelse continue;
+                        const floor_mesh_half_size = 50;
+                        result.buffer[result.len] = .{
+                            .rectangle = .{
+                                .center = root.relative_position.convert().swizzle("xy"),
+                                .half_size = root.relative_scale.convert().swizzle("xy").scale(floor_mesh_half_size),
+                                .rotation = root.relative_rotation.convert().y(),
+                            },
+                            .properties = properties,
+                        };
+                        result.len += 1;
+                    },
+                }
+            }
+            return result;
+        }
+
+        fn captureFloorGimmickProperties(floor: *const game.Floor(game_id)) ?model.FloorGimmickProperties {
+            return switch (game_id) {
+                .t7 => .{
+                    .type = block: {
+                        if (floor.is_breakable.toBool() orelse false) {
+                            break :block .floor_break;
+                        } else {
+                            return null;
+                        }
+                    },
+                    .flags = .{
+                        .hard = false,
+                        .damaged = false,
+                        .used_up = false,
+                    },
+                },
+                .t8 => .{
+                    .type = block: {
+                        if (floor.is_floor_blast.toBool() orelse false) {
+                            break :block .floor_blast;
+                        } else if (floor.is_breakable.toBool() orelse false) {
+                            break :block .floor_break;
+                        } else {
+                            return null;
+                        }
+                    },
+                    .flags = .{
+                        .hard = floor.is_hard.toBool() orelse false,
+                        .damaged = floor.destruction_level > 0,
+                        .used_up = switch (floor.is_hard.toBool() orelse false) {
+                            false => floor.destruction_level > 0,
+                            else => floor.destruction_level > 1,
+                        },
+                    },
+                },
+            };
         }
     };
 }
@@ -2411,4 +2511,332 @@ test "should capture walls correctly" {
             },
         },
     }, walls[16]);
+}
+
+test "should capture floor gimmicks correctly in T8" {
+    const game_memory = game.Memory(.t8).testingInit(.{
+        .player_1 = &.{ .stage_set_number = 0, .floor_number = 1 },
+        .player_2 = &.{ .stage_set_number = 0, .floor_number = 1 },
+        .floors = &.{
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(0)),
+                        .relative_rotation = .fromConverted(.fill(0)),
+                        .relative_scale = .fromConverted(.fill(0)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .is_hard = .false,
+                .destruction_level = 0,
+                .is_breakable = .false,
+                .is_floor_blast = .false,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(1)),
+                        .relative_rotation = .fromConverted(.fill(1)),
+                        .relative_scale = .fromConverted(.fill(1)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .is_hard = .false,
+                .destruction_level = 0,
+                .is_breakable = .true,
+                .is_floor_blast = .false,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(2)),
+                        .relative_rotation = .fromConverted(.fill(2)),
+                        .relative_scale = .fromConverted(.fill(2)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .is_hard = .false,
+                .destruction_level = 0,
+                .is_breakable = .false,
+                .is_floor_blast = .true,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(3)),
+                        .relative_rotation = .fromConverted(.fill(3)),
+                        .relative_scale = .fromConverted(.fill(3)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .is_hard = .false,
+                .destruction_level = 1,
+                .is_breakable = .false,
+                .is_floor_blast = .true,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(4)),
+                        .relative_rotation = .fromConverted(.fill(4)),
+                        .relative_scale = .fromConverted(.fill(4)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .is_hard = .true,
+                .destruction_level = 1,
+                .is_breakable = .false,
+                .is_floor_blast = .true,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(5)),
+                        .relative_rotation = .fromConverted(.fill(5)),
+                        .relative_scale = .fromConverted(.fill(5)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .is_hard = .true,
+                .destruction_level = 2,
+                .is_breakable = .false,
+                .is_floor_blast = .true,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(6)),
+                        .relative_rotation = .fromConverted(.fill(6)),
+                        .relative_scale = .fromConverted(.fill(6)),
+                    }),
+                    .hidden_polaris = .{ .value = true },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .is_hard = .false,
+                .destruction_level = 0,
+                .is_breakable = .true,
+                .is_floor_blast = .false,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(7)),
+                        .relative_rotation = .fromConverted(.fill(7)),
+                        .relative_scale = .fromConverted(.fill(7)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .init,
+                .set_number = 0,
+                .floor_number = 1,
+                .is_hard = .false,
+                .destruction_level = 0,
+                .is_breakable = .true,
+                .is_floor_blast = .false,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(8)),
+                        .relative_rotation = .fromConverted(.fill(8)),
+                        .relative_scale = .fromConverted(.fill(8)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 1,
+                .floor_number = 1,
+                .is_hard = .false,
+                .destruction_level = 0,
+                .is_breakable = .true,
+                .is_floor_blast = .false,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fill(9)),
+                        .relative_rotation = .fromConverted(.fill(9)),
+                        .relative_scale = .fromConverted(.fill(9)),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 0,
+                .is_hard = .false,
+                .destruction_level = 0,
+                .is_breakable = .true,
+                .is_floor_blast = .false,
+            },
+        },
+    });
+
+    var capturer = Capturer(.t8){};
+    const gimmicks = capturer.captureFrame(&game_memory).floor_gimmicks.asSlice();
+
+    try testing.expectEqual(5, gimmicks.len);
+    try testing.expectEqual(model.FloorGimmick{
+        .rectangle = .{
+            .center = .fill(1),
+            .half_size = .fill(50),
+            .rotation = 1,
+        },
+        .properties = .{
+            .type = .floor_break,
+            .flags = .{},
+        },
+    }, gimmicks[0]);
+    try testing.expectEqual(model.FloorGimmick{
+        .rectangle = .{
+            .center = .fill(2),
+            .half_size = .fill(100),
+            .rotation = 2,
+        },
+        .properties = .{
+            .type = .floor_blast,
+            .flags = .{},
+        },
+    }, gimmicks[1]);
+    try testing.expectEqual(model.FloorGimmick{
+        .rectangle = .{
+            .center = .fill(3),
+            .half_size = .fill(150),
+            .rotation = 3,
+        },
+        .properties = .{
+            .type = .floor_blast,
+            .flags = .{
+                .damaged = true,
+                .used_up = true,
+            },
+        },
+    }, gimmicks[2]);
+    try testing.expectEqual(model.FloorGimmick{
+        .rectangle = .{
+            .center = .fill(4),
+            .half_size = .fill(200),
+            .rotation = 4,
+        },
+        .properties = .{
+            .type = .floor_blast,
+            .flags = .{
+                .hard = true,
+                .damaged = true,
+            },
+        },
+    }, gimmicks[3]);
+    try testing.expectEqual(model.FloorGimmick{
+        .rectangle = .{
+            .center = .fill(5),
+            .half_size = .fill(250),
+            .rotation = 5,
+        },
+        .properties = .{
+            .type = .floor_blast,
+            .flags = .{
+                .hard = true,
+                .damaged = true,
+                .used_up = true,
+            },
+        },
+    }, gimmicks[4]);
+}
+
+test "should capture floor gimmicks correctly in T7" {
+    const game_memory = game.Memory(.t7).testingInit(.{
+        .player_1 = &.{ .floor_number = 1 },
+        .player_2 = &.{ .floor_number = 1 },
+        .player_starts = &.{
+            .{
+                .actor = .{ .root_component = .fromPointer(&.{
+                    .relative_position = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                }) },
+                .floor_number = 1,
+                .type = .game_start,
+            },
+        },
+        .walls = &.{
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 228, 0, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1, 1000, 0 })),
+                    }),
+                    .collision_enabled = .{ .value = true },
+                },
+                .floor_number = 1,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ -228, 0, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1, 1000, 0 })),
+                    }),
+                    .collision_enabled = .{ .value = true },
+                },
+                .floor_number = 1,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 0, 228, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1000, 1, 0 })),
+                    }),
+                    .collision_enabled = .{ .value = true },
+                },
+                .floor_number = 1,
+            },
+            .{
+                .actor = .{
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 0, -228, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1000, 1, 0 })),
+                    }),
+                    .collision_enabled = .{ .value = true },
+                },
+                .floor_number = 1,
+            },
+        },
+        .floors = &.{
+            .{ .floor_number = 0, .is_breakable = .true },
+            .{ .floor_number = 1, .is_breakable = .true },
+            .{ .floor_number = 2, .is_breakable = .false },
+        },
+    });
+
+    var capturer = Capturer(.t7){};
+    const gimmicks = capturer.captureFrame(&game_memory).floor_gimmicks.asSlice();
+
+    try testing.expectEqual(gimmicks.len, 1);
+    try testing.expectApproxEqAbs(0, gimmicks[0].rectangle.center.x(), 0.0001);
+    try testing.expectApproxEqAbs(0, gimmicks[0].rectangle.center.y(), 0.0001);
+    try testing.expectApproxEqAbs(100, gimmicks[0].rectangle.half_size.x(), 0.0001);
+    try testing.expectApproxEqAbs(100, gimmicks[0].rectangle.half_size.y(), 0.0001);
+    try testing.expectApproxEqAbs(0, gimmicks[0].rectangle.rotation, 0.0001);
+    try testing.expectEqual(model.FloorGimmickType.floor_break, gimmicks[0].properties.type);
+    try testing.expectEqual(model.FloorGimmickFlags{}, gimmicks[0].properties.flags);
 }

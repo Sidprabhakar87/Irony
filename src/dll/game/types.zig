@@ -524,8 +524,6 @@ pub fn Floor(comptime game_id: build_info.Game) type {
             field(0x2D0, "destruction_level", u32, &0), //T8: DestructLevel
             field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
             field(0x5A0, "is_breakable", Bool, &.false), // T8: IsFloorBreakable
-            field(0x5A1, "is_stage_destruction", Bool, &.false), // T8: IsStageDestruction
-            field(0x5A2, "is_dummy_break", Bool, &.false), // T8: IsDummyBreak
             field(0x5A3, "is_floor_blast", Bool, &.false), // T8: IsFloorBlast
         }),
     };

@@ -8,6 +8,7 @@ pub const Frame = struct {
     players: [2]model.Player = .{ .{}, .{} },
     camera: ?model.Camera = null,
     walls: model.Walls = .{},
+    floor_gimmicks: model.FloorGimmicks = .{},
     left_player_id: model.PlayerId = .player_1,
     main_player_id: model.PlayerId = .player_1,
 

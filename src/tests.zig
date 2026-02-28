@@ -92,6 +92,7 @@ test {
     _ = @import("dll/game/types.zig");
 
     _ = @import("dll/model/collision_sphere.zig");
+    _ = @import("dll/model/floor_gimmicks.zig");
     _ = @import("dll/model/frame.zig");
     _ = @import("dll/model/hit_lines.zig");
     _ = @import("dll/model/hurt_cylinders.zig");

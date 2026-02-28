@@ -1,6 +1,11 @@
 pub const CollisionSphereId = @import("collision_sphere.zig").CollisionSphereId;
 pub const CollisionSphere = @import("collision_sphere.zig").CollisionSphere;
 pub const CollisionSpheres = @import("collision_sphere.zig").CollisionSpheres;
+pub const FloorGimmick = @import("floor_gimmicks.zig").FloorGimmick;
+pub const FloorGimmickProperties = @import("floor_gimmicks.zig").FloorGimmickProperties;
+pub const FloorGimmickType = @import("floor_gimmicks.zig").FloorGimmickType;
+pub const FloorGimmickFlags = @import("floor_gimmicks.zig").FloorGimmickFlags;
+pub const FloorGimmicks = @import("floor_gimmicks.zig").FloorGimmicks;
 pub const Frame = @import("frame.zig").Frame;
 pub const HitLine = @import("hit_lines.zig").HitLine;
 pub const HitLineFlags = @import("hit_lines.zig").HitLineFlags;

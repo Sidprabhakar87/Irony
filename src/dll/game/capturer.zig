@@ -577,12 +577,12 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 },
                 .broken = !wall.actor.collision_enabled.value,
             };
-            if (attribute.wall_bound) {
+            if (attribute.balcony_break) {
+                return .{ .gimmick = .balcony_break, .flags = flags };
+            } else if (attribute.wall_bound) {
                 return .{ .gimmick = .wall_bound, .flags = flags };
             } else if (attribute.wall_blast) {
                 return .{ .gimmick = .wall_blast, .flags = flags };
-            } else if (attribute.balcony_break) {
-                return .{ .gimmick = .balcony_break, .flags = flags };
             } else if (attribute.wall_break) {
                 return .{ .gimmick = .wall_break, .flags = flags };
             } else {
@@ -2009,6 +2009,7 @@ test "should capture walls correctly" {
                 .wall_attribute = .{
                     .wall_break = true,
                     .balcony_break = true,
+                    .wall_blast = true,
                 },
             },
             .{

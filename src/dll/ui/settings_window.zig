@@ -687,6 +687,23 @@ fn drawStageSettings(value: *model.StageSettings, default: *const model.StageSet
             drawThickness("Thickness", &v.thickness, &d.thickness);
         }
     }.call;
+    const drawFloorGimmick = struct {
+        fn call(
+            label: [:0]const u8,
+            v: *model.StageSettings.FloorGimmick,
+            d: *const model.StageSettings.FloorGimmick,
+        ) void {
+            imgui.igText("%s", label.ptr);
+            imgui.igPushID_Str(label);
+            defer imgui.igPopID();
+            imgui.igIndent(0);
+            defer imgui.igUnindent(0);
+            drawColor("Side View Color", &v.side_color, &d.side_color);
+            drawThickness("Side View Thickness", &v.side_thickness, &d.side_thickness);
+            drawColor("Top View Color", &v.top_color, &d.top_color);
+            drawColor("Top View Hard Color", &v.top_hard_color, &d.top_hard_color);
+        }
+    }.call;
     const drawWallGimmicks = struct {
         fn call(
             label: [:0]const u8,
@@ -711,6 +728,27 @@ fn drawStageSettings(value: *model.StageSettings, default: *const model.StageSet
             }
         }
     }.call;
+    const drawFloorGimmicks = struct {
+        fn call(
+            label: [:0]const u8,
+            v: *std.EnumArray(model.FloorGimmickType, model.StageSettings.FloorGimmick),
+            d: *const std.EnumArray(model.FloorGimmickType, model.StageSettings.FloorGimmick),
+        ) void {
+            imgui.igText("%s", label.ptr);
+            imgui.igPushID_Str(label);
+            defer imgui.igPopID();
+            imgui.igIndent(0);
+            defer imgui.igUnindent(0);
+            inline for (@typeInfo(model.FloorGimmickType).@"enum".fields) |*field| {
+                const gimmick: model.FloorGimmickType = @enumFromInt(field.value);
+                const gimmick_label = switch (gimmick) {
+                    .floor_break => "Floor Break",
+                    .floor_blast => "Floor Blast",
+                };
+                drawFloorGimmick(gimmick_label, v.getPtr(gimmick), d.getPtrConst(gimmick));
+            }
+        }
+    }.call;
 
     drawBool("Enabled", &value.enabled, &default.enabled);
     imgui.igBeginDisabled(!value.enabled);
@@ -720,6 +758,7 @@ fn drawStageSettings(value: *model.StageSettings, default: *const model.StageSet
     drawColorAndThickness("Background", &value.background, &default.background);
     drawColorAndThickness("Broken", &value.broken, &default.broken);
     drawWallGimmicks("Wall Gimmicks", &value.wall_gimmicks, &default.wall_gimmicks);
+    drawFloorGimmicks("Floor Gimmicks", &value.floor_gimmicks, &default.floor_gimmicks);
 }
 
 fn drawIngameCameraSettings(value: *model.IngameCameraSettings, default: *const model.IngameCameraSettings) void {
@@ -1551,6 +1590,70 @@ test "stage settings should function correctly" {
             try testing.expectEqual(
                 default.wall_gimmicks.getPtrConst(.balcony_break).thickness,
                 current.wall_gimmicks.getPtrConst(.balcony_break).thickness,
+            );
+
+            ctx.itemInputValueFloat("Floor Gimmicks/Floor Break/Side View Color/##Y", 153);
+            try testing.expectEqual(0.6, current.floor_gimmicks.getPtrConst(.floor_break).side_color.y());
+            ctx.itemClick("Floor Gimmicks/Floor Break/Side View Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.floor_gimmicks.getPtrConst(.floor_break).side_color,
+                current.floor_gimmicks.getPtrConst(.floor_break).side_color,
+            );
+
+            ctx.itemInputValueFloat("Floor Gimmicks/Floor Break/Side View Thickness", 123);
+            try testing.expectEqual(123, current.floor_gimmicks.getPtrConst(.floor_break).side_thickness);
+            ctx.itemClick("Floor Gimmicks/Floor Break/Side View Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.floor_gimmicks.getPtrConst(.floor_break).side_thickness,
+                current.floor_gimmicks.getPtrConst(.floor_break).side_thickness,
+            );
+
+            ctx.itemInputValueFloat("Floor Gimmicks/Floor Break/Top View Color/##Z", 153);
+            try testing.expectEqual(0.6, current.floor_gimmicks.getPtrConst(.floor_break).top_color.z());
+            ctx.itemClick("Floor Gimmicks/Floor Break/Top View Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.floor_gimmicks.getPtrConst(.floor_break).top_color,
+                current.floor_gimmicks.getPtrConst(.floor_break).top_color,
+            );
+
+            ctx.itemInputValueFloat("Floor Gimmicks/Floor Break/Top View Hard Color/##W", 153);
+            try testing.expectEqual(0.6, current.floor_gimmicks.getPtrConst(.floor_break).top_hard_color.w());
+            ctx.itemClick("Floor Gimmicks/Floor Break/Top View Hard Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.floor_gimmicks.getPtrConst(.floor_break).top_hard_color,
+                current.floor_gimmicks.getPtrConst(.floor_break).top_hard_color,
+            );
+
+            ctx.itemInputValueFloat("Floor Gimmicks/Floor Blast/Side View Color/##X", 153);
+            try testing.expectEqual(0.6, current.floor_gimmicks.getPtrConst(.floor_blast).side_color.x());
+            ctx.itemClick("Floor Gimmicks/Floor Blast/Side View Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.floor_gimmicks.getPtrConst(.floor_blast).side_color,
+                current.floor_gimmicks.getPtrConst(.floor_blast).side_color,
+            );
+
+            ctx.itemInputValueFloat("Floor Gimmicks/Floor Blast/Side View Thickness", 123);
+            try testing.expectEqual(123, current.floor_gimmicks.getPtrConst(.floor_blast).side_thickness);
+            ctx.itemClick("Floor Gimmicks/Floor Blast/Side View Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.floor_gimmicks.getPtrConst(.floor_blast).side_thickness,
+                current.floor_gimmicks.getPtrConst(.floor_blast).side_thickness,
+            );
+
+            ctx.itemInputValueFloat("Floor Gimmicks/Floor Blast/Top View Color/##Y", 153);
+            try testing.expectEqual(0.6, current.floor_gimmicks.getPtrConst(.floor_blast).top_color.y());
+            ctx.itemClick("Floor Gimmicks/Floor Blast/Top View Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.floor_gimmicks.getPtrConst(.floor_blast).top_color,
+                current.floor_gimmicks.getPtrConst(.floor_blast).top_color,
+            );
+
+            ctx.itemInputValueFloat("Floor Gimmicks/Floor Blast/Top View Hard Color/##Z", 153);
+            try testing.expectEqual(0.6, current.floor_gimmicks.getPtrConst(.floor_blast).top_hard_color.z());
+            ctx.itemClick("Floor Gimmicks/Floor Blast/Top View Hard Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.floor_gimmicks.getPtrConst(.floor_blast).top_hard_color,
+                current.floor_gimmicks.getPtrConst(.floor_blast).top_hard_color,
             );
         }
     };

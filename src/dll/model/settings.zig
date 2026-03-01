@@ -310,10 +310,31 @@ pub const StageSettings = struct {
             .thickness = 10.0,
         },
     }),
+    floor_gimmicks: std.EnumArray(model.FloorGimmickType, FloorGimmick) = .init(.{
+        .floor_break = .{
+            .side_color = .fromArray(.{ 0.0, 1.0, 1.0, 0.3 }),
+            .side_thickness = 10.0,
+            .top_color = .fromArray(.{ 0.0, 1.0, 1.0, 0.2 }),
+            .top_hard_color = .fromArray(.{ 0.0, 1.0, 1.0, 0.1 }),
+        },
+        .floor_blast = .{
+            .side_color = .fromArray(.{ 1.0, 0.5, 0.0, 0.3 }),
+            .side_thickness = 10.0,
+            .top_color = .fromArray(.{ 1.0, 0.5, 0.0, 0.2 }),
+            .top_hard_color = .fromArray(.{ 1.0, 0.5, 0.0, 0.1 }),
+        },
+    }),
 
     pub const ColorAndThickness = struct {
         color: sdk.math.Vec4,
         thickness: f32,
+    };
+
+    pub const FloorGimmick = struct {
+        side_color: sdk.math.Vec4,
+        side_thickness: f32,
+        top_color: sdk.math.Vec4,
+        top_hard_color: sdk.math.Vec4,
     };
 };
 

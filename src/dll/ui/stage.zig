@@ -43,6 +43,7 @@ fn drawStageFromSide(
     inverse_matrix: sdk.math.Mat4,
 ) void {
     const walls: []const model.Wall = frame.walls.asSlice();
+    const floor_gimmicks: []const model.FloorGimmick = frame.floor_gimmicks.asSlice();
     const floor_z = frame.floor_z orelse return;
 
     var window_pos: sdk.math.Vec2 = undefined;
@@ -144,6 +145,44 @@ fn drawStageFromSide(
         };
         drawWall(settings, &wall.properties, line, matrix);
     }
+    for (floor_gimmicks) |*floor_gimmick| {
+        const flags = floor_gimmick.properties.flags;
+        if (flags.used_up) {
+            continue;
+        }
+        const hit = switch (sdk.math.raycastRectangle(ray, floor_gimmick.rectangle)) {
+            .hit => |hit| hit,
+            .side_scrape, .miss => continue,
+        };
+        const left_edge = if (min_hit) |*min| block: {
+            if (min.t > hit.entrance.t) {
+                break :block min.position;
+            } else {
+                break :block hit.entrance.position;
+            }
+        } else hit.entrance.position;
+        const right_edge = if (max_hit) |*max| block: {
+            if (max.t < hit.exit.t) {
+                break :block max.position;
+            } else {
+                break :block hit.exit.position;
+            }
+        } else hit.exit.position;
+        const line = sdk.math.LineSegment3{
+            .point_1 = right_edge.extend(floor_z),
+            .point_2 = left_edge.extend(floor_z),
+        };
+        const gimmick = settings.floor_gimmicks.getPtrConst(floor_gimmick.properties.type);
+        const foreground = &settings.foreground;
+        const gimmick_offset = switch (flags.hard and !flags.damaged) {
+            false => -0.5 * gimmick.side_thickness,
+            true => (-0.5 * gimmick.side_thickness) + (-4 * foreground.thickness),
+        };
+        ui.drawLine(line, gimmick.side_color, gimmick.side_thickness, gimmick_offset, matrix);
+        if (flags.hard and !flags.damaged) {
+            ui.drawLine(line, foreground.color, foreground.thickness, -4 * foreground.thickness, matrix);
+        }
+    }
     if (min_hit) |min| {
         if (max_hit) |max| {
             const line = sdk.math.LineSegment3{
@@ -212,6 +251,21 @@ fn makeWalls(array: anytype) model.Walls {
     var buffer: [model.Walls.max_len]model.Wall = undefined;
     for (array, 0..) |wall, index| {
         buffer[index] = wall;
+    }
+    return .{ .buffer = buffer, .len = array.len };
+}
+
+fn makeFloorGimmicks(array: anytype) model.FloorGimmicks {
+    if (@typeInfo(@TypeOf(array)) != .array) {
+        const coerced: [array.len]model.FloorGimmick = array;
+        return makeFloorGimmicks(coerced);
+    }
+    if (array.len > model.FloorGimmicks.max_len) {
+        @compileError("Array length exceeds maximum allowed number of walls.");
+    }
+    var buffer: [model.FloorGimmicks.max_len]model.FloorGimmick = undefined;
+    for (array, 0..) |gimmick, index| {
+        buffer[index] = gimmick;
     }
     return .{ .buffer = buffer, .len = array.len };
 }
@@ -441,6 +495,20 @@ test "should draw correct lines when direction is not top" {
                     .thickness = 100,
                 },
             }),
+            .floor_gimmicks = .init(.{
+                .floor_break = .{
+                    .side_color = .fromArray(.{ 1, 0, 0, 0.6 }),
+                    .side_thickness = 200,
+                    .top_color = undefined,
+                    .top_hard_color = undefined,
+                },
+                .floor_blast = .{
+                    .side_color = .fromArray(.{ 0, 1, 0, 0.6 }),
+                    .side_thickness = 200,
+                    .top_color = undefined,
+                    .top_hard_color = undefined,
+                },
+            }),
         };
         const frame = model.Frame{
             .floor_z = 500,
@@ -530,6 +598,41 @@ test "should draw correct lines when direction is not top" {
                     },
                 },
             }),
+            .floor_gimmicks = makeFloorGimmicks(.{
+                model.FloorGimmick{
+                    .rectangle = .{
+                        .center = .fromArray(.{ 300, 500 }),
+                        .half_size = .fromArray(.{ 200, 100 }),
+                        .rotation = 0,
+                    },
+                    .properties = .{
+                        .type = .floor_break,
+                        .flags = .{},
+                    },
+                },
+                model.FloorGimmick{
+                    .rectangle = .{
+                        .center = .fromArray(.{ 1300, 500 }),
+                        .half_size = .fromArray(.{ 200, 100 }),
+                        .rotation = 0,
+                    },
+                    .properties = .{
+                        .type = .floor_blast,
+                        .flags = .{ .hard = true },
+                    },
+                },
+                model.FloorGimmick{
+                    .rectangle = .{
+                        .center = .fromArray(.{ 800, 500 }),
+                        .half_size = .fromArray(.{ 200, 100 }),
+                        .rotation = 0,
+                    },
+                    .properties = .{
+                        .type = .floor_blast,
+                        .flags = .{ .hard = true, .damaged = true, .used_up = true },
+                    },
+                },
+            }),
         };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -556,7 +659,7 @@ test "should draw correct lines when direction is not top" {
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
-            try testing.expectEqual(15, ui.testing_shapes.getAll().len);
+            try testing.expectEqual(18, ui.testing_shapes.getAll().len);
 
             const foreground_floor = ui.testing_shapes.findLineWithScreenPoints(
                 .fromArray(.{ 200, 500 }),
@@ -575,6 +678,33 @@ test "should draw correct lines when direction is not top" {
             try testing.expect(background_floor != null);
             try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 1, 1, 1, 0.5 }), background_floor.?.color);
             try testing.expectEqual(2, background_floor.?.thickness);
+
+            const floor_break = ui.testing_shapes.findLineWithScreenPoints(
+                .fromArray(.{ 200, 600 }),
+                .fromArray(.{ 500, 600 }),
+                0.001,
+            );
+            try testing.expect(floor_break != null);
+            try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 1, 0, 0, 0.6 }), floor_break.?.color);
+            try testing.expectEqual(200, floor_break.?.thickness);
+
+            const floor_blast = ui.testing_shapes.findLineWithScreenPoints(
+                .fromArray(.{ 1100, 604 }),
+                .fromArray(.{ 1500, 604 }),
+                0.001,
+            );
+            try testing.expect(floor_blast != null);
+            try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0, 1, 0, 0.6 }), floor_blast.?.color);
+            try testing.expectEqual(200, floor_blast.?.thickness);
+
+            const floor_blast_hard = ui.testing_shapes.findLineWithScreenPoints(
+                .fromArray(.{ 1100, 504 }),
+                .fromArray(.{ 1500, 504 }),
+                0.001,
+            );
+            try testing.expect(floor_blast_hard != null);
+            try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 1, 1, 1, 1 }), floor_blast_hard.?.color);
+            try testing.expectEqual(1, floor_blast_hard.?.thickness);
 
             const left_foreground_wall = ui.testing_shapes.findLineWithScreenPoints(
                 .fromArray(.{ 200, 0 }),
@@ -719,6 +849,16 @@ test "should draw nothing when disabled in settings" {
                     .edge_2_index = 0,
                 },
             }),
+            .floor_gimmicks = makeFloorGimmicks(.{
+                model.FloorGimmick{
+                    .rectangle = .{ .center = .fromArray(.{ 3, 3 }), .half_size = .fromArray(.{ 4, 4 }), .rotation = 0 },
+                    .properties = .{ .type = .floor_break },
+                },
+                model.FloorGimmick{
+                    .rectangle = .{ .center = .fromArray(.{ 5, 5 }), .half_size = .fromArray(.{ 6, 6 }), .rotation = 0 },
+                    .properties = .{ .type = .floor_blast },
+                },
+            }),
         };
         var direction = ui.ViewDirection.top;
 
@@ -749,7 +889,7 @@ test "should draw nothing when disabled in settings" {
     try context.runTest(.{}, Test.guiFunction, Test.testFunction);
 }
 
-test "should draw nothing when no walls and direction is top" {
+test "should draw nothing when no walls, no floor gimmicks and direction is top" {
     const Test = struct {
         const settings = model.StageSettings{ .enabled = true };
         const frame = model.Frame{
@@ -759,6 +899,7 @@ test "should draw nothing when no walls and direction is top" {
                 .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 0, 0, 0 }), .radius = 0 }) },
             },
             .walls = makeWalls(.{}),
+            .floor_gimmicks = makeFloorGimmicks(.{}),
         };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -790,6 +931,7 @@ test "should draw infinite floor line when no walls and direction is not top" {
         const frame = model.Frame{
             .floor_z = 500,
             .walls = makeWalls(.{}),
+            .floor_gimmicks = makeFloorGimmicks(.{}),
         };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {

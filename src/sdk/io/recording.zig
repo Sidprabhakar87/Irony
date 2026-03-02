@@ -5,7 +5,8 @@ const misc = @import("../misc/root.zig");
 const io = @import("root.zig");
 
 const VersionNumber = u16;
-const FieldIndex = u8;
+const FieldIndexV1 = u8;
+const FieldIndexV2 = u16;
 const FieldPathLength = u8;
 const FieldSize = u16;
 const NumberOfFrames = u64;
@@ -13,7 +14,7 @@ const LocalField = struct {
     path: []const u8,
     access: []const AccessElement,
     Type: type,
-    parent_index: ?FieldIndex,
+    parent_index: ?FieldIndexV2,
     has_children: bool,
 };
 const AccessElement = union(enum) {
@@ -30,7 +31,7 @@ const RemoteField = struct {
 const endian = std.builtin.Endian.little;
 const magic_number = @tagName(build_info.name);
 const version_number = build_info.recording_version;
-const max_number_of_fields = std.math.maxInt(FieldIndex);
+const max_number_of_fields = std.math.maxInt(FieldIndexV2);
 const max_field_path_len = std.math.maxInt(FieldPathLength);
 const path_separator = '.';
 const path_separator_str = [1]u8{path_separator};
@@ -146,12 +147,12 @@ pub fn loadRecording(
 
     const local_fields = getLocalFields(Frame, config);
     var remote_fields_buffer: [max_number_of_fields]RemoteField = undefined;
-    const remote_fields = readFieldList(&byte_reader, &remote_fields_buffer, local_fields) catch |err| {
+    const remote_fields = readFieldList(version, &byte_reader, &remote_fields_buffer, local_fields) catch |err| {
         misc.error_context.append("Failed to read fields list.", .{});
         return err;
     };
 
-    const frames = readFrames(Frame, allocator, &byte_reader, remote_fields, local_fields) catch |err| {
+    const frames = readFrames(Frame, allocator, version, &byte_reader, remote_fields, local_fields) catch |err| {
         misc.error_context.append("Failed to read frames.", .{});
         return err;
     };
@@ -160,7 +161,7 @@ pub fn loadRecording(
 }
 
 fn writeFieldList(writer: *io.ByteWriter, comptime fields: []const LocalField) !void {
-    writer.writeInt(FieldIndex, @intCast(fields.len)) catch |err| {
+    writer.writeInt(FieldIndexV2, @intCast(fields.len)) catch |err| {
         misc.error_context.append("Failed to write number of fields: {}", .{fields.len});
         return err;
     };
@@ -183,11 +184,12 @@ fn writeFieldList(writer: *io.ByteWriter, comptime fields: []const LocalField) !
 }
 
 fn readFieldList(
+    version: VersionNumber,
     reader: *io.ByteReader,
     remote_fields_buffer: []RemoteField,
     comptime local_fields: []const LocalField,
 ) ![]RemoteField {
-    const remote_fields_len = reader.readInt(FieldIndex) catch |err| {
+    const remote_fields_len = readFieldIndex(reader, version) catch |err| {
         misc.error_context.append("Failed to read number of fields.", .{});
         return err;
     };
@@ -249,14 +251,14 @@ fn writeFrames(
             0 => getInitialChanges(fields),
             else => findFieldChanges(Frame, frame, &frames[frame_index - 1], fields),
         };
-        writer.writeInt(FieldIndex, changes.number_of_changes) catch |err| {
+        writer.writeInt(FieldIndexV2, changes.number_of_changes) catch |err| {
             misc.error_context.append("Failed to write number of changes: {}", .{changes.number_of_changes});
             return err;
         };
         inline for (fields, 0..) |*field, field_index| {
             if (changes.field_changed[field_index]) {
                 errdefer misc.error_context.append("Failed to write change for field: {s}", .{field.path});
-                writer.writeInt(FieldIndex, @intCast(field_index)) catch |err| {
+                writer.writeInt(FieldIndexV2, @intCast(field_index)) catch |err| {
                     misc.error_context.append("Failed to write field index: {}", .{field_index});
                     return err;
                 };
@@ -272,14 +274,14 @@ fn writeFrames(
 
 fn Changes(comptime len: usize) type {
     return struct {
-        number_of_changes: FieldIndex,
+        number_of_changes: FieldIndexV2,
         field_changed: [len]bool,
     };
 }
 
 inline fn getInitialChanges(comptime fields: []const LocalField) Changes(fields.len) {
     comptime {
-        var number_of_changes: FieldIndex = 0;
+        var number_of_changes: FieldIndexV2 = 0;
         var field_changed: [fields.len]bool = undefined;
         for (fields, 0..) |*field, field_index| {
             // Ancestors already store the initial value for descendants.
@@ -304,13 +306,13 @@ fn findFieldChanges(
     comptime fields: []const LocalField,
 ) Changes(fields.len) {
     const parent_indices = comptime block: {
-        var array: [fields.len]?FieldIndex = undefined;
+        var array: [fields.len]?FieldIndexV2 = undefined;
         for (&array, fields) |*element, *field| {
             element.* = field.parent_index;
         }
         break :block array;
     };
-    var number_of_changes: FieldIndex = 0;
+    var number_of_changes: FieldIndexV2 = 0;
     var field_changed: [fields.len]bool = [1]bool{false} ** fields.len;
     inline for (fields, 0..) |*field, field_index| {
         var ancestor_changed = false;
@@ -389,6 +391,7 @@ fn areValuesEqual(value_1: anytype, value_2: @TypeOf(value_1)) bool {
 fn readFrames(
     comptime Frame: type,
     allocator: std.mem.Allocator,
+    version: VersionNumber,
     reader: *io.ByteReader,
     remote_fields: []const RemoteField,
     comptime local_fields: []const LocalField,
@@ -407,13 +410,13 @@ fn readFrames(
     var current_frame = Frame{};
     for (0..number_of_frames) |frame_index| {
         errdefer misc.error_context.append("Failed read frame: {}", .{frame_index});
-        const number_of_changes = reader.readInt(FieldIndex) catch |err| {
+        const number_of_changes = readFieldIndex(reader, version) catch |err| {
             misc.error_context.append("Failed to read number changes.", .{});
             return err;
         };
         for (0..number_of_changes) |change_index| {
             errdefer misc.error_context.append("Failed read change: {}", .{change_index});
-            const remote_index = reader.readInt(FieldIndex) catch |err| {
+            const remote_index = readFieldIndex(reader, version) catch |err| {
                 misc.error_context.append("Failed to read field index.", .{});
                 return err;
             };
@@ -467,11 +470,11 @@ fn readFrames(
 fn setFieldToDefaultValue(
     comptime Frame: type,
     frame: *Frame,
-    field_index: FieldIndex,
+    field_index: FieldIndexV2,
     comptime fields: []const LocalField,
 ) void {
     const default_frame = Frame{};
-    var next_index: ?FieldIndex = field_index;
+    var next_index: ?FieldIndexV2 = field_index;
     while (next_index) |current_index| {
         inline for (fields, 0..) |*field, index| {
             if (index == current_index) {
@@ -485,6 +488,13 @@ fn setFieldToDefaultValue(
                 break;
             }
         } else unreachable;
+    }
+}
+
+fn readFieldIndex(reader: *io.ByteReader, version: VersionNumber) !FieldIndexV2 {
+    switch (version) {
+        0, 1 => return @intCast(try reader.readInt(FieldIndexV1)),
+        else => return reader.readInt(FieldIndexV2),
     }
 }
 

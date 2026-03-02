@@ -84,7 +84,7 @@ pub const Controller = struct {
             sdk.math.Vec3,
             model.HitLine,
             model.Wall,
-            model.FloorGimmicks, // TODO Temporary added while exploring possibilities. Double check before release.
+            model.FloorGimmick,
         },
     };
 

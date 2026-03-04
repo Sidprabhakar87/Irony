@@ -49,11 +49,6 @@ pub const StateFlags = sdk.memory.Bitfield(u32, &.{
     .{ .name = "crouched_but_not_fully", .backing_value = 262144 },
 });
 
-pub const PhaseFlags = sdk.memory.Bitfield(u32, &.{
-    .{ .name = "is_active", .backing_value = 256 },
-    .{ .name = "is_recovery", .backing_value = 1024 },
-});
-
 pub const AttackType = enum(u32) {
     not_attack = 0xC000001D,
     high = 0xA000050F,
@@ -334,7 +329,6 @@ pub fn Player(comptime game_id: build_info.Game) type {
             field(0x095C, "frames_since_round_start", u32, &0),
             field(0x0AE0, "floor_number", u32, &0),
             field(0x0C00, "in_rage", Bool, &.false),
-            field(0x0C40, "phase_flags", PhaseFlags, &.{}),
             field(0x0DE4, "input_side", PlayerSide, &.left),
             field(0x0E0C, "input", Input(.t7), &.{}),
             field(0x0E50, "hit_lines", HitLines(.t7), &getDefaultHitLines(.t7)),
@@ -363,7 +357,6 @@ pub fn Player(comptime game_id: build_info.Game) type {
             field(0x0F88, "used_rage", Bool, &.false),
             field(0x1590, "frames_since_round_start", u32, &0),
             field(0x1970, "floor_number", u32, &0),
-            field(0x1BC4, "phase_flags", PhaseFlags, &.{}),
             field(0x2440, "heat_gauge", HeatGauge, &.fromRaw(0)),
             field(0x2450, "used_heat", Bool, &.false),
             field(0x2471, "in_heat", Bool, &.false),
@@ -382,12 +375,16 @@ pub fn Player(comptime game_id: build_info.Game) type {
 pub fn Animation(comptime game_id: build_info.Game) type {
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x6C, "airborne_start", u32, &0),
-            field(0x70, "airborne_end", u32, &0),
+            field(0x6C, "airborne_start", u32, &0), // MovesetExtractor: airborne_start
+            field(0x70, "airborne_end", u32, &0), // MovesetExtractor: airborne_end
+            field(0xA0, "active_start", u32, &0), // MovesetExtractor: startup
+            field(0xA4, "active_end", u32, &0), // MovesetExtractor: recovery
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x124, "airborne_start", u32, &0),
-            field(0x128, "airborne_end", u32, &0),
+            field(0x124, "airborne_start", u32, &0), // MovesetExtractor: airborne_start
+            field(0x128, "airborne_end", u32, &0), // MovesetExtractor: airborne_end
+            field(0x158, "active_start", u32, &0), // MovesetExtractor: startup
+            field(0x15C, "active_end", u32, &0), // MovesetExtractor: recovery
         }),
     };
 }

@@ -421,6 +421,12 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         }
 
         fn captureHitLines(state: *const PlayerState, player: *const GamePlayer) model.HitLines {
+            const animation = player.animation.toConstPointer() orelse return .{};
+            const is_active_frame = player.animation_frame >= animation.active_start and
+                player.animation_frame <= animation.active_end;
+            if (!is_active_frame) {
+                return .{};
+            }
             return switch (game_id) {
                 .t7 => captureT7HitLines(state, player),
                 .t8 => captureT8HitLines(state, player),
@@ -428,10 +434,6 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         }
 
         fn captureT7HitLines(state: *const PlayerState, player: *const GamePlayer) model.HitLines {
-            const flags: game.PhaseFlags = player.phase_flags;
-            if (!flags.is_active) {
-                return .{};
-            }
             const previous_lines: *const game.HitLines(.t7) = if (state.previous_hit_lines) |*l| l else return .{};
             const current_lines: *const game.HitLines(.t7) = &player.hit_lines;
             var changed_points_buffer: [current_lines.len]game.HitLinePoint = undefined;
@@ -466,9 +468,6 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             for (previous_lines, current_lines) |*raw_previous_line, *raw_current_line| {
                 const previous_line = raw_previous_line.convert();
                 const current_line = raw_current_line.convert();
-                if (current_line.ignore != .false) {
-                    continue;
-                }
                 if (std.meta.eql(previous_line.points, current_line.points)) {
                     continue;
                 }
@@ -1831,6 +1830,11 @@ test "should capture hit lines correctly in T7" {
 
     const frame_1 = capturer.captureFrame(&gm(.{
         .player_1 = &.{
+            .animation_frame = 1,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
             .hit_lines = .{
                 point(.{ 0, 0, 0 }),
                 point(.{ 0, 0, 0 }),
@@ -1839,9 +1843,13 @@ test "should capture hit lines correctly in T7" {
                 point(.{ 0, 0, 0 }),
                 point(.{ 0, 0, 0 }),
             },
-            .phase_flags = .{ .is_active = false },
         },
         .player_2 = &.{
+            .animation_frame = 4,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
             .hit_lines = .{
                 point(.{ 0, 0, 0 }),
                 point(.{ 0, 0, 0 }),
@@ -1850,7 +1858,6 @@ test "should capture hit lines correctly in T7" {
                 point(.{ 0, 0, 0 }),
                 point(.{ 0, 0, 0 }),
             },
-            .phase_flags = .{ .is_active = false },
         },
     }));
     try testing.expectEqualSlices(model.HitLine, &.{}, frame_1.getPlayerById(.player_1).hit_lines.asSlice());
@@ -1858,6 +1865,11 @@ test "should capture hit lines correctly in T7" {
 
     const frame_2 = capturer.captureFrame(&gm(.{
         .player_1 = &.{
+            .animation_frame = 2,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
             .hit_lines = .{
                 point(.{ 1, 2, 3 }),
                 point(.{ 4, 5, 6 }),
@@ -1866,9 +1878,13 @@ test "should capture hit lines correctly in T7" {
                 point(.{ 0, 0, 0 }),
                 point(.{ 0, 0, 0 }),
             },
-            .phase_flags = .{ .is_active = true },
         },
         .player_2 = &.{
+            .animation_frame = 3,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
             .hit_lines = .{
                 point(.{ 10, 11, 12 }),
                 point(.{ 13, 14, 15 }),
@@ -1877,7 +1893,6 @@ test "should capture hit lines correctly in T7" {
                 point(.{ 0, 0, 0 }),
                 point(.{ 0, 0, 0 }),
             },
-            .phase_flags = .{ .is_active = true },
         },
     }));
     try testing.expectEqualSlices(model.HitLine, &.{
@@ -1890,6 +1905,11 @@ test "should capture hit lines correctly in T7" {
 
     const frame_3 = capturer.captureFrame(&gm(.{
         .player_1 = &.{
+            .animation_frame = 1,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
             .hit_lines = .{
                 point(.{ 36, 35, 34 }),
                 point(.{ 33, 32, 31 }),
@@ -1898,9 +1918,13 @@ test "should capture hit lines correctly in T7" {
                 point(.{ 24, 23, 22 }),
                 point(.{ 21, 20, 19 }),
             },
-            .phase_flags = .{ .is_active = false },
         },
         .player_2 = &.{
+            .animation_frame = 2,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
             .hit_lines = .{
                 point(.{ 18, 17, 16 }),
                 point(.{ 15, 14, 13 }),
@@ -1909,7 +1933,6 @@ test "should capture hit lines correctly in T7" {
                 point(.{ 6, 5, 4 }),
                 point(.{ 3, 2, 1 }),
             },
-            .phase_flags = .{ .is_active = true },
         },
     }));
     try testing.expectEqualSlices(model.HitLine, &.{}, frame_3.getPlayerById(.player_1).hit_lines.asSlice());
@@ -1929,16 +1952,16 @@ test "should capture hit lines correctly in T7" {
 
 test "should capture hit lines correctly in T8" {
     const hitLine = struct {
-        fn call(points: [3][3]f32, ignore: bool) @typeInfo(game.HitLines(.t8)).array.child {
+        fn call(points: [3][3]f32) @typeInfo(game.HitLines(.t8)).array.child {
             return .fromConverted(.{
                 .points = .{
                     .{ .position = .fromArray(points[0]), ._padding = 0 },
                     .{ .position = .fromArray(points[1]), ._padding = 0 },
                     .{ .position = .fromArray(points[2]), ._padding = 0 },
                 },
-                ._padding_1 = [1]u8{0} ** 8,
-                .ignore = .fromBool(ignore),
-                ._padding_2 = [1]u8{0} ** 7,
+                ._padding_1 = undefined,
+                .ignore = undefined,
+                ._padding_2 = undefined,
             });
         }
     }.call;
@@ -1957,73 +1980,115 @@ test "should capture hit lines correctly in T8" {
     var capturer = Capturer(.t8){};
 
     const frame_1 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .hit_lines = .{
-            hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }, true),
-            hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }, true),
-            hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }, true),
-            hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }, true),
-        } },
-        .player_2 = &.{ .hit_lines = .{
-            hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }, true),
-            hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }, true),
-            hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }, true),
-            hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }, true),
-        } },
+        .player_1 = &.{
+            .animation_frame = 1,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
+            .hit_lines = .{
+                hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }),
+                hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }),
+                hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }),
+                hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }),
+            },
+        },
+        .player_2 = &.{
+            .animation_frame = 1,
+            .animation = .fromPointer(&.{
+                .active_start = 0,
+                .active_end = 0,
+            }),
+            .hit_lines = .{
+                hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }),
+                hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }),
+                hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }),
+                hitLine(.{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }),
+            },
+        },
     }));
     try testing.expectEqualSlices(model.HitLine, &.{}, frame_1.getPlayerById(.player_1).hit_lines.asSlice());
     try testing.expectEqualSlices(model.HitLine, &.{}, frame_1.getPlayerById(.player_2).hit_lines.asSlice());
 
     const frame_2 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .hit_lines = .{
-            hitLine(.{ .{ 1, 2, 3 }, .{ 4, 5, 6 }, .{ 7, 8, 9 } }, true),
-            hitLine(.{ .{ 10, 11, 12 }, .{ 13, 14, 15 }, .{ 16, 17, 18 } }, false),
-            hitLine(.{ .{ 19, 20, 21 }, .{ 22, 23, 24 }, .{ 25, 26, 27 } }, true),
-            hitLine(.{ .{ 28, 29, 30 }, .{ 31, 32, 33 }, .{ 34, 35, 36 } }, false),
-        } },
-        .player_2 = &.{ .hit_lines = .{
-            hitLine(.{ .{ 37, 38, 39 }, .{ 40, 41, 42 }, .{ 43, 44, 45 } }, false),
-            hitLine(.{ .{ 46, 47, 48 }, .{ 49, 50, 51 }, .{ 52, 53, 54 } }, true),
-            hitLine(.{ .{ 55, 56, 57 }, .{ 58, 59, 60 }, .{ 61, 62, 63 } }, false),
-            hitLine(.{ .{ 64, 65, 66 }, .{ 67, 68, 69 }, .{ 70, 71, 72 } }, true),
-        } },
+        .player_1 = &.{
+            .animation_frame = 2,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
+            .hit_lines = .{
+                hitLine(.{ .{ 1, 2, 3 }, .{ 4, 5, 6 }, .{ 7, 8, 9 } }),
+                hitLine(.{ .{ 10, 11, 12 }, .{ 13, 14, 15 }, .{ 16, 17, 18 } }),
+                hitLine(.{ .{ 19, 20, 21 }, .{ 22, 23, 24 }, .{ 25, 26, 27 } }),
+                hitLine(.{ .{ 28, 29, 30 }, .{ 31, 32, 33 }, .{ 34, 35, 36 } }),
+            },
+        },
+        .player_2 = &.{
+            .animation_frame = 1,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
+            .hit_lines = .{
+                hitLine(.{ .{ 37, 38, 39 }, .{ 40, 41, 42 }, .{ 43, 44, 45 } }),
+                hitLine(.{ .{ 46, 47, 48 }, .{ 49, 50, 51 }, .{ 52, 53, 54 } }),
+                hitLine(.{ .{ 55, 56, 57 }, .{ 58, 59, 60 }, .{ 61, 62, 63 } }),
+                hitLine(.{ .{ 64, 65, 66 }, .{ 67, 68, 69 }, .{ 70, 71, 72 } }),
+            },
+        },
     }));
     try testing.expectEqualSlices(model.HitLine, &.{
+        line(.{ 1, 2, 3 }, .{ 4, 5, 6 }),
+        line(.{ 4, 5, 6 }, .{ 7, 8, 9 }),
         line(.{ 10, 11, 12 }, .{ 13, 14, 15 }),
         line(.{ 13, 14, 15 }, .{ 16, 17, 18 }),
+        line(.{ 19, 20, 21 }, .{ 22, 23, 24 }),
+        line(.{ 22, 23, 24 }, .{ 25, 26, 27 }),
         line(.{ 28, 29, 30 }, .{ 31, 32, 33 }),
         line(.{ 31, 32, 33 }, .{ 34, 35, 36 }),
     }, frame_2.getPlayerById(.player_1).hit_lines.asSlice());
-    try testing.expectEqualSlices(model.HitLine, &.{
-        line(.{ 37, 38, 39 }, .{ 40, 41, 42 }),
-        line(.{ 40, 41, 42 }, .{ 43, 44, 45 }),
-        line(.{ 55, 56, 57 }, .{ 58, 59, 60 }),
-        line(.{ 58, 59, 60 }, .{ 61, 62, 63 }),
-    }, frame_2.getPlayerById(.player_2).hit_lines.asSlice());
+    try testing.expectEqualSlices(model.HitLine, &.{}, frame_2.getPlayerById(.player_2).hit_lines.asSlice());
 
     const frame_3 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .hit_lines = .{
-            hitLine(.{ .{ 1, 2, 3 }, .{ 4, 5, 6 }, .{ 7, 8, 9 } }, false),
-            hitLine(.{ .{ 1000, 11, 12 }, .{ 13, 14, 15 }, .{ 16, 17, 18 } }, true),
-            hitLine(.{ .{ 19, 20, 21 }, .{ 22, 1000, 24 }, .{ 25, 26, 27 } }, true),
-            hitLine(.{ .{ 28, 29, 30 }, .{ 31, 32, 33 }, .{ 34, 35, 1000 } }, true),
-        } },
-        .player_2 = &.{ .hit_lines = .{
-            hitLine(.{ .{ 1000, 38, 39 }, .{ 40, 41, 42 }, .{ 43, 44, 45 } }, false),
-            hitLine(.{ .{ 46, 1000, 48 }, .{ 49, 50, 51 }, .{ 52, 53, 54 } }, false),
-            hitLine(.{ .{ 55, 56, 57 }, .{ 1000, 59, 60 }, .{ 61, 62, 63 } }, false),
-            hitLine(.{ .{ 64, 65, 66 }, .{ 67, 68, 69 }, .{ 70, 71, 1000 } }, false),
-        } },
+        .player_1 = &.{
+            .animation_frame = 3,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
+            .hit_lines = .{
+                hitLine(.{ .{ 1000, 2, 3 }, .{ 4, 5, 6 }, .{ 7, 8, 9 } }),
+                hitLine(.{ .{ 10, 11, 12 }, .{ 13, 14, 15 }, .{ 16, 17, 18 } }),
+                hitLine(.{ .{ 19, 20, 21 }, .{ 22000, 23, 24 }, .{ 25, 26, 27 } }),
+                hitLine(.{ .{ 28, 29, 30 }, .{ 31, 32, 33 }, .{ 34, 35, 36 } }),
+            },
+        },
+        .player_2 = &.{
+            .animation_frame = 2,
+            .animation = .fromPointer(&.{
+                .active_start = 2,
+                .active_end = 3,
+            }),
+            .hit_lines = .{
+                hitLine(.{ .{ 37, 38, 39 }, .{ 40, 41, 42 }, .{ 43, 44, 45 } }),
+                hitLine(.{ .{ 46, 47, 48 }, .{ 49, 50, 51 }, .{ 52000, 53, 54 } }),
+                hitLine(.{ .{ 55, 56, 57 }, .{ 58, 59, 60 }, .{ 61, 62, 63 } }),
+                hitLine(.{ .{ 64000, 65, 66 }, .{ 67, 68, 69 }, .{ 70, 71, 72 } }),
+            },
+        },
     }));
-    try testing.expectEqualSlices(model.HitLine, &.{}, frame_3.getPlayerById(.player_1).hit_lines.asSlice());
     try testing.expectEqualSlices(model.HitLine, &.{
-        line(.{ 1000, 38, 39 }, .{ 40, 41, 42 }),
-        line(.{ 40, 41, 42 }, .{ 43, 44, 45 }),
-        line(.{ 46, 1000, 48 }, .{ 49, 50, 51 }),
-        line(.{ 49, 50, 51 }, .{ 52, 53, 54 }),
-        line(.{ 55, 56, 57 }, .{ 1000, 59, 60 }),
-        line(.{ 1000, 59, 60 }, .{ 61, 62, 63 }),
-        line(.{ 64, 65, 66 }, .{ 67, 68, 69 }),
-        line(.{ 67, 68, 69 }, .{ 70, 71, 1000 }),
+        line(.{ 1000, 2, 3 }, .{ 4, 5, 6 }),
+        line(.{ 4, 5, 6 }, .{ 7, 8, 9 }),
+        line(.{ 19, 20, 21 }, .{ 22000, 23, 24 }),
+        line(.{ 22000, 23, 24 }, .{ 25, 26, 27 }),
+    }, frame_3.getPlayerById(.player_1).hit_lines.asSlice());
+    try testing.expectEqualSlices(model.HitLine, &.{
+        line(.{ 46, 47, 48 }, .{ 49, 50, 51 }),
+        line(.{ 49, 50, 51 }, .{ 52000, 53, 54 }),
+        line(.{ 64000, 65, 66 }, .{ 67, 68, 69 }),
+        line(.{ 67, 68, 69 }, .{ 70, 71, 72 }),
     }, frame_3.getPlayerById(.player_2).hit_lines.asSlice());
 
     const frame_4 = capturer.captureFrame(&gm(.{

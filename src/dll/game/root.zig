@@ -31,7 +31,6 @@ pub const Hooks = @import("hooks.zig").Hooks;
 pub const Memory = @import("memory.zig").Memory;
 pub const PlayerSide = @import("types.zig").PlayerSide;
 pub const StateFlags = @import("types.zig").StateFlags;
-pub const PhaseFlags = @import("types.zig").PhaseFlags;
 pub const AttackType = @import("types.zig").AttackType;
 pub const HitOutcome = @import("types.zig").HitOutcome;
 pub const SimpleState = @import("types.zig").SimpleState;

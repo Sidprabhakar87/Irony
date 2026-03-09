@@ -63,17 +63,17 @@ pub fn Hooks(comptime game_id: build_info.Game, comptime onTick: *const fn () vo
             }
         }
 
-        fn onT7Tick(game_mode_address: usize, delta_time: f32) callconv(.c) void {
+        fn onT7Tick(param_1: u8, param_2: u32) callconv(.c) void {
             _ = active_hook_calls.fetchAdd(1, .seq_cst);
             defer _ = active_hook_calls.fetchSub(1, .seq_cst);
-            tick_hook.?.original(game_mode_address, delta_time);
+            tick_hook.?.original(param_1, param_2);
             onTick();
         }
 
-        fn onT8Tick(delta_time: f64) callconv(.c) void {
+        fn onT8Tick(param_1: u64, param_2: u8, param_3: u8, param_4: u8) callconv(.c) void {
             _ = active_hook_calls.fetchAdd(1, .seq_cst);
             defer _ = active_hook_calls.fetchSub(1, .seq_cst);
-            tick_hook.?.original(delta_time);
+            tick_hook.?.original(param_1, param_2, param_3, param_4);
             onTick();
         }
     };
@@ -84,12 +84,12 @@ const testing = std.testing;
 test "should call onTick and original when tick function is called in T7" {
     const Tick = struct {
         var times_called: usize = 0;
-        var last_game_mode_address: ?usize = null;
-        var last_delta_time: ?f64 = null;
-        fn call(game_mode_address: usize, delta_time: f32) callconv(.c) void {
+        var last_param_1: ?u8 = null;
+        var last_param_2: ?u32 = null;
+        fn call(param_1: u8, param_2: u32) callconv(.c) void {
             times_called += 1;
-            last_game_mode_address = game_mode_address;
-            last_delta_time = delta_time;
+            last_param_1 = param_1;
+            last_param_2 = param_2;
         }
     };
     const OnTick = struct {
@@ -109,18 +109,24 @@ test "should call onTick and original when tick function is called in T7" {
     try testing.expectEqual(0, OnTick.times_called);
     Tick.call(123, 456);
     try testing.expectEqual(1, Tick.times_called);
-    try testing.expectEqual(123, Tick.last_game_mode_address);
-    try testing.expectEqual(456, Tick.last_delta_time);
+    try testing.expectEqual(123, Tick.last_param_1);
+    try testing.expectEqual(456, Tick.last_param_2);
     try testing.expectEqual(1, OnTick.times_called);
 }
 
 test "should call onTick and original when tick function is called in T8" {
     const Tick = struct {
         var times_called: usize = 0;
-        var last_delta_time: ?f64 = null;
-        fn call(delta_time: f64) callconv(.c) void {
+        var last_param_1: ?u64 = null;
+        var last_param_2: ?u8 = null;
+        var last_param_3: ?u8 = null;
+        var last_param_4: ?u8 = null;
+        fn call(param_1: u64, param_2: u8, param_3: u8, param_4: u8) callconv(.c) void {
             times_called += 1;
-            last_delta_time = delta_time;
+            last_param_1 = param_1;
+            last_param_2 = param_2;
+            last_param_3 = param_3;
+            last_param_4 = param_4;
         }
     };
     const OnTick = struct {
@@ -138,8 +144,11 @@ test "should call onTick and original when tick function is called in T8" {
 
     try testing.expectEqual(0, Tick.times_called);
     try testing.expectEqual(0, OnTick.times_called);
-    Tick.call(123.456);
+    Tick.call(2, 3, 4, 5);
     try testing.expectEqual(1, Tick.times_called);
-    try testing.expectEqual(123.456, Tick.last_delta_time);
+    try testing.expectEqual(2, Tick.last_param_1);
+    try testing.expectEqual(3, Tick.last_param_2);
+    try testing.expectEqual(4, Tick.last_param_3);
+    try testing.expectEqual(5, Tick.last_param_4);
     try testing.expectEqual(1, OnTick.times_called);
 }

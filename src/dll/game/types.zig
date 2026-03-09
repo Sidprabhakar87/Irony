@@ -743,10 +743,8 @@ pub const UnrealObject = opaque {};
 
 pub fn TickFunction(comptime game_id: build_info.Game) type {
     return switch (game_id) {
-        // UE: AGameMode::Tick
-        .t7 => fn (game_mode_address: usize, delta_time: f32) callconv(.c) void,
-        // T8
-        .t8 => fn (delta_time: f64) callconv(.c) void,
+        .t7 => fn (param_1: u8, param_2: u32) callconv(.c) void,
+        .t8 => fn (param_1: u64, param_2: u8, param_3: u8, param_4: u8) callconv(.c) void,
     };
 }
 

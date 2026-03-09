@@ -123,7 +123,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     .tick = functionPointer(
                         "tick",
                         game.TickFunction(.t7),
-                        pattern(cache, "4C 8B DC 55 41 57 49 8D 6B A1 48 81 EC E8"),
+                        pattern(cache, "48 83 EC 58 84 C9"),
                     ),
                     .unrealFree = functionPointer(
                         "unrealFree",
@@ -164,7 +164,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     .tick = functionPointer(
                         "tick",
                         game.TickFunction(.t8),
-                        pattern(cache, "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 0A 48 8B 01 0F 28 C8"),
+                        pattern(cache, "48 8B C4 48 89 58 08 48 89 68 10 48 89 70 18 57 48 81 EC ?? 01 00 00 48 8B 1D"),
                     ),
                     .unrealFree = functionPointer(
                         "unrealFree",

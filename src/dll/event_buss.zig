@@ -180,7 +180,7 @@ pub const EventBuss = struct {
     }
 
     pub fn tick(self: *Self, game_memory: *game.Memory(build_info.game)) void {
-        game_memory.updateUnrealActorAddresses();
+        game_memory.updateAddresses();
         self.core.tick(game_memory, self, processFrame);
     }
 

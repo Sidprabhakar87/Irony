@@ -8,6 +8,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
     return struct {
         player_1: PlayerProxy,
         player_2: PlayerProxy,
+        match: MatchPointer,
         camera_manager: CameraManagerPointer = .fromPointer(null),
         walls: [max_walls]WallPointer = [1]WallPointer{.fromPointer(null)} ** max_walls,
         floors: [max_floors]FloorPointer = [1]FloorPointer{.fromPointer(null)} ** max_floors,
@@ -17,21 +18,26 @@ pub fn Memory(comptime game_id: build_info.Game) type {
 
         const Self = @This();
         const PlayerProxy = sdk.memory.Proxy(game.Player(game_id));
+        const MatchPointer = sdk.memory.Pointer(game.Match(game_id));
         const CameraManagerPointer = sdk.memory.Pointer(game.CameraManager(game_id));
         const WallPointer = sdk.memory.Pointer(game.Wall(game_id));
         const FloorPointer = sdk.memory.Pointer(game.Floor(game_id));
         const PlayerStartPointer = sdk.memory.Pointer(game.PlayerStart(game_id));
-        pub const Functions = struct {
-            tick: ?*const game.TickFunction(game_id) = null,
-            unrealFree: ?*const game.UnrealFreeFunction = null,
-            findUnrealClass: ?*const game.FindUnrealClassFunction = null,
-            findUnrealObjectsOfClass: ?*const game.FindUnrealObjectsOfClassFunction = null,
-            decryptHealth: (switch (game_id) {
-                .t7 => void,
-                .t8 => ?*const game.DecryptT8HealthFunction,
-            }) = switch (game_id) {
-                .t7 => {},
-                .t8 => null,
+        pub const Functions = switch (game_id) {
+            .t7 => struct {
+                tick: ?*const game.TickFunction(.t7) = null,
+                unrealFree: ?*const game.UnrealFreeFunction = null,
+                findUnrealClass: ?*const game.FindUnrealClassFunction = null,
+                findUnrealObjectsOfClass: ?*const game.FindUnrealObjectsOfClassFunction = null,
+            },
+            .t8 => struct {
+                tick: ?*const game.TickFunction(.t8) = null,
+                unrealFree: ?*const game.UnrealFreeFunction = null,
+                findUnrealClass: ?*const game.FindUnrealClassFunction = null,
+                findUnrealObjectsOfClass: ?*const game.FindUnrealObjectsOfClassFunction = null,
+                decryptHealth: ?*const game.DecryptT8HealthFunction = null,
+                getGlobalsMap: ?*const game.GetGlobalsMapFunction = null,
+                findGlobalAddress: ?*const game.FindGlobalAddressFunction = null,
             },
         };
         pub const UnrealClasses = struct {
@@ -64,6 +70,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub fn testingInit(params: struct {
             player_1: ?*const game.Player(game_id) = null,
             player_2: ?*const game.Player(game_id) = null,
+            match: ?*const game.Match(game_id) = null,
             camera_manager: ?*const game.CameraManager(game_id) = null,
             walls: []const game.Wall(game_id) = &.{},
             floors: []const game.Floor(game_id) = &.{},
@@ -74,8 +81,6 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             if (!builtin.is_test) {
                 @compileError("This function is only supposed to be called from inside tests.");
             }
-            const player_1_address = if (params.player_1) |p| @intFromPtr(p) else 0;
-            const player_2_address = if (params.player_2) |p| @intFromPtr(p) else 0;
             var walls = [1]WallPointer{.fromPointer(null)} ** max_walls;
             for (params.walls, 0..) |*wall, index| {
                 if (index >= walls.len) {
@@ -98,12 +103,13 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 player_starts[index] = .fromPointer(start);
             }
             return .{
-                .player_1 = .fromArray(.{player_1_address}),
-                .player_2 = .fromArray(.{player_2_address}),
+                .player_1 = .fromPointer(params.player_1),
+                .player_2 = .fromPointer(params.player_2),
+                .match = .fromPointer(params.match),
                 .camera_manager = .fromPointer(params.camera_manager),
-                .player_starts = player_starts,
                 .walls = walls,
                 .floors = floors,
+                .player_starts = player_starts,
                 .functions = params.functions,
                 .unreal_classes = params.unreal_classes,
             };
@@ -112,13 +118,21 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         fn t7Init(cache: *?sdk.memory.PatternCache) Self {
             return .{
                 .player_1 = proxy("player_1", game.Player(.t7), .{
-                    relativeOffset(u32, add(0x3, pattern(cache, "48 8B 15 ?? ?? ?? ?? 44 8B C3"))),
+                    relativeOffset(i32, add(0x3, pattern(cache, "48 8B 15 ?? ?? ?? ?? 44 8B C3"))),
                     0x0,
                 }),
                 .player_2 = proxy("player_2", game.Player(.t7), .{
-                    relativeOffset(u32, add(0xD, pattern(cache, "48 8B 15 ?? ?? ?? ?? 44 8B C3"))),
+                    relativeOffset(i32, add(0xD, pattern(cache, "48 8B 15 ?? ?? ?? ?? 44 8B C3"))),
                     0x0,
                 }),
+                .match = pointer(
+                    "match",
+                    game.Match(.t7),
+                    relativeOffset(i32, add(0x3, pattern(
+                        cache,
+                        "48 89 1D ?? ?? ?? ?? 48 89 5C 24 20 E8 ?? ?? ?? ?? 48 8B 74 24 48",
+                    ))),
+                ),
                 .functions = .{
                     .tick = functionPointer(
                         "tick",
@@ -143,7 +157,6 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                             "48 89 5C 24 18 48 89 74 24 20 55 57 41 54 41 56 41 57 48 8D 6C 24 D1 48 81 EC A0 00 00 00",
                         ),
                     ),
-                    .decryptHealth = {},
                 },
             };
         }
@@ -151,15 +164,16 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         fn t8Init(cache: *?sdk.memory.PatternCache) Self {
             const self = Self{
                 .player_1 = proxy("player_1", game.Player(.t8), .{
-                    relativeOffset(u32, add(3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
+                    relativeOffset(i32, add(3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
                     0x30,
                     0x0,
                 }),
                 .player_2 = proxy("player_2", game.Player(.t8), .{
-                    relativeOffset(u32, add(3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
+                    relativeOffset(i32, add(3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
                     0x38,
                     0x0,
                 }),
+                .match = .fromPointer(null), // Continiously updated address.
                 .functions = .{
                     .tick = functionPointer(
                         "tick",
@@ -189,18 +203,46 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                             "48 89 5C 24 08 57 48 83 EC ?? 48 8D 79 08 48 8B D9 48 8B CF E8 ?? ?? ?? ?? 85 C0",
                         ),
                     ),
+                    .getGlobalsMap = functionPointer(
+                        "getGlobalsMap",
+                        game.GetGlobalsMapFunction,
+                        relativeOffset(i32, add(0x1, pattern(
+                            cache,
+                            "E8 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 48 0F BE CB 48 83 C0 40",
+                        ))),
+                    ),
+                    .findGlobalAddress = functionPointer(
+                        "findGlobalAddress",
+                        game.FindGlobalAddressFunction,
+                        relativeOffset(i32, add(0x10, pattern(
+                            cache,
+                            "E8 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 48 0F BE CB 48 83 C0 40",
+                        ))),
+                    ),
                 },
             };
             game.conversion_globals.decryptT8Health = self.functions.decryptHealth;
             return self;
         }
 
-        pub fn updateUnrealActorAddresses(self: *Self) void {
+        pub fn updateAddresses(self: *Self) void {
+            self.updateGlobalAddresses();
             self.updateUnrealClasses();
             self.updateUnrealObjectAddresses((&self.camera_manager)[0..1], self.unreal_classes.camera_manager);
             self.updateUnrealObjectAddresses(&self.walls, self.unreal_classes.wall);
             self.updateUnrealObjectAddresses(&self.floors, self.unreal_classes.floor);
             self.updateUnrealObjectAddresses(&self.player_starts, self.unreal_classes.player_start);
+        }
+
+        fn updateGlobalAddresses(self: *Self) void {
+            switch (game_id) {
+                .t7 => return,
+                .t8 => {},
+            }
+            const getGlobalsMap = self.functions.getGlobalsMap orelse return;
+            const findGlobalAddress = self.functions.findGlobalAddress orelse return;
+            const map = getGlobalsMap();
+            self.match.address = findGlobalAddress(map, &0x472D4C0B);
         }
 
         fn updateUnrealClasses(self: *Self) void {
@@ -360,6 +402,17 @@ fn proxy(name: []const u8, comptime Type: type, offsets: anytype) sdk.memory.Pro
     return .fromArray(mapped_offsets);
 }
 
+fn pointer(name: []const u8, comptime Type: type, address: anyerror!usize) sdk.memory.Pointer(Type) {
+    const addr = address catch |err| {
+        if (!builtin.is_test) {
+            sdk.misc.error_context.append("Failed to resolve pointer: {s}", .{name});
+            sdk.misc.error_context.logError(err);
+        }
+        return .{ .address = 0 };
+    };
+    return .{ .address = addr };
+}
+
 fn functionPointer(name: []const u8, comptime Function: type, address: anyerror!usize) ?*const Function {
     const addr = address catch |err| {
         if (!builtin.is_test) {
@@ -437,6 +490,16 @@ test "proxy should map errors to null values" {
     sdk.misc.error_context.new("Test error.", .{});
     const byte_proxy = proxy("byte_proxy", u8, .{ 1, error.Test, 2, error.Test });
     try testing.expectEqualSlices(?usize, &.{ 1, null, 2, null }, byte_proxy.trail.getOffsets());
+}
+
+test "pointer should return a pointer with the provided address when a address is provided" {
+    const ptr = pointer("test", u32, 123);
+    try testing.expectEqual(123, ptr.address);
+}
+
+test "pointer should return a pointer with zero address when error is provided" {
+    const ptr = pointer("test", u32, error.Testt);
+    try testing.expectEqual(0, ptr.address);
 }
 
 test "functionPointer should return a function pointer when address is valid" {

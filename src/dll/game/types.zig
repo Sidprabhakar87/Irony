@@ -389,6 +389,21 @@ pub fn Animation(comptime game_id: build_info.Game) type {
     };
 }
 
+pub fn Match(comptime game_id: build_info.Game) type {
+    return switch (game_id) {
+        .t7 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x048, "frames_left_in_round", u32, &0),
+            field(0x060, "player_1_rounds_won", u32, &0),
+            field(0x150, "player_2_rounds_won", u32, &0),
+        }),
+        .t8 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x01C, "frames_left_in_round", u32, &0),
+            field(0x040, "player_1_rounds_won", u32, &0),
+            field(0x1A0, "player_2_rounds_won", u32, &0),
+        }),
+    };
+}
+
 // UE: APlayerCameraManager
 pub fn CameraManager(comptime game_id: build_info.Game) type {
     const Float = switch (game_id) {
@@ -741,6 +756,9 @@ pub const UnrealClass = opaque {};
 // UE: UObject
 pub const UnrealObject = opaque {};
 
+// UE: TMap
+pub const GlobalsMap = opaque {};
+
 pub fn TickFunction(comptime game_id: build_info.Game) type {
     return switch (game_id) {
         .t7 => fn (param_1: u8, param_2: u32) callconv(.c) void,
@@ -769,3 +787,9 @@ pub const FindUnrealObjectsOfClassFunction = fn (
 
 // T8
 pub const DecryptT8HealthFunction = fn (encrypted_health: *const Health(.t8)) callconv(.c) i64;
+
+// T8
+pub const GetGlobalsMapFunction = fn () callconv(.c) *GlobalsMap;
+
+// UE: TMap::Find
+pub const FindGlobalAddressFunction = fn (map: *const GlobalsMap, key: *const u32) callconv(.c) usize;

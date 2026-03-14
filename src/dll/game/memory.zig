@@ -9,6 +9,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         player_1: PlayerProxy,
         player_2: PlayerProxy,
         match: MatchPointer,
+        ruleset: RulesetPointer,
         camera_manager: CameraManagerPointer = .fromPointer(null),
         walls: [max_walls]WallPointer = [1]WallPointer{.fromPointer(null)} ** max_walls,
         floors: [max_floors]FloorPointer = [1]FloorPointer{.fromPointer(null)} ** max_floors,
@@ -19,6 +20,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         const Self = @This();
         const PlayerProxy = sdk.memory.Proxy(game.Player(game_id));
         const MatchPointer = sdk.memory.Pointer(game.Match(game_id));
+        const RulesetPointer = sdk.memory.Pointer(game.Ruleset(game_id));
         const CameraManagerPointer = sdk.memory.Pointer(game.CameraManager(game_id));
         const WallPointer = sdk.memory.Pointer(game.Wall(game_id));
         const FloorPointer = sdk.memory.Pointer(game.Floor(game_id));
@@ -71,6 +73,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             player_1: ?*const game.Player(game_id) = null,
             player_2: ?*const game.Player(game_id) = null,
             match: ?*const game.Match(game_id) = null,
+            ruleset: ?*const game.Ruleset(game_id) = null,
             camera_manager: ?*const game.CameraManager(game_id) = null,
             walls: []const game.Wall(game_id) = &.{},
             floors: []const game.Floor(game_id) = &.{},
@@ -106,6 +109,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 .player_1 = .fromPointer(params.player_1),
                 .player_2 = .fromPointer(params.player_2),
                 .match = .fromPointer(params.match),
+                .ruleset = .fromPointer(params.ruleset),
                 .camera_manager = .fromPointer(params.camera_manager),
                 .walls = walls,
                 .floors = floors,
@@ -132,6 +136,11 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                         cache,
                         "48 89 1D ?? ?? ?? ?? 48 89 5C 24 20 E8 ?? ?? ?? ?? 48 8B 74 24 48",
                     ))),
+                ),
+                .ruleset = pointer(
+                    "ruleset",
+                    game.Ruleset(.t7),
+                    relativeOffset(i32, add(0x2, pattern(cache, "8B 05 ?? ?? ?? ?? 83 C0 9C"))),
                 ),
                 .functions = .{
                     .tick = functionPointer(
@@ -174,6 +183,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x0,
                 }),
                 .match = .fromPointer(null), // Continiously updated address.
+                .ruleset = .fromPointer(null), // Continiously updated address.
                 .functions = .{
                     .tick = functionPointer(
                         "tick",
@@ -242,7 +252,8 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             const getGlobalsMap = self.functions.getGlobalsMap orelse return;
             const findGlobalAddress = self.functions.findGlobalAddress orelse return;
             const map = getGlobalsMap();
-            self.match.address = findGlobalAddress(map, &0x472D4C0B);
+            self.match.address = findGlobalAddress(map, &.match);
+            self.ruleset.address = findGlobalAddress(map, &.ruleset);
         }
 
         fn updateUnrealClasses(self: *Self) void {

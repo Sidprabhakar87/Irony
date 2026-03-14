@@ -389,6 +389,11 @@ pub fn Animation(comptime game_id: build_info.Game) type {
     };
 }
 
+pub const GlobalKey = enum(u32) {
+    match = 0x472D4C0B,
+    ruleset = 0xEDFEC9B0,
+};
+
 pub fn Match(comptime game_id: build_info.Game) type {
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
@@ -400,6 +405,17 @@ pub fn Match(comptime game_id: build_info.Game) type {
             field(0x01C, "frames_left_in_round", u32, &0),
             field(0x040, "player_1_rounds_won", u32, &0),
             field(0x1A0, "player_2_rounds_won", u32, &0),
+        }),
+    };
+}
+
+pub fn Ruleset(comptime game_id: build_info.Game) type {
+    return switch (game_id) {
+        .t7 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x60, "rounds_needed_to_win", u32, &0),
+        }),
+        .t8 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x60, "rounds_needed_to_win", u32, &0),
         }),
     };
 }
@@ -792,4 +808,4 @@ pub const DecryptT8HealthFunction = fn (encrypted_health: *const Health(.t8)) ca
 pub const GetGlobalsMapFunction = fn () callconv(.c) *GlobalsMap;
 
 // UE: TMap::Find
-pub const FindGlobalAddressFunction = fn (map: *const GlobalsMap, key: *const u32) callconv(.c) usize;
+pub const FindGlobalAddressFunction = fn (map: *const GlobalsMap, key: *const GlobalKey) callconv(.c) usize;

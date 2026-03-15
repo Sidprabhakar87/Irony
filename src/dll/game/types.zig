@@ -397,14 +397,27 @@ pub const GlobalKey = enum(u32) {
 pub fn Match(comptime game_id: build_info.Game) type {
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x048, "frames_left_in_round", u32, &0),
-            field(0x060, "player_1_rounds_won", u32, &0),
-            field(0x150, "player_2_rounds_won", u32, &0),
+            field(0x48, "frames_left_in_round", u32, &0),
+            field(0x60, "players", [2]MatchPlayer(.t7), &.{ .{}, .{} }),
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x01C, "frames_left_in_round", u32, &0),
-            field(0x040, "player_1_rounds_won", u32, &0),
-            field(0x1A0, "player_2_rounds_won", u32, &0),
+            field(0x1C, "frames_left_in_round", u32, &0),
+            field(0x40, "players", [2]MatchPlayer(.t8), &.{ .{}, .{} }),
+        }),
+    };
+}
+
+pub fn MatchPlayer(comptime game_id: build_info.Game) type {
+    return switch (game_id) {
+        .t7 => sdk.memory.StructWithOffsets(0x0F0, &.{
+            field(0x00, "rounds_won", u32, &0),
+            field(0x6C, "combo_hits", u32, &0),
+            field(0x74, "combo_damage", u32, &0),
+        }),
+        .t8 => sdk.memory.StructWithOffsets(0x160, &.{
+            field(0x00, "rounds_won", u32, &0),
+            field(0x90, "combo_hits", u32, &0),
+            field(0x98, "combo_damage", u32, &0),
         }),
     };
 }

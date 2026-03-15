@@ -47,6 +47,7 @@ pub const Player = @import("types.zig").Player;
 pub const Animation = @import("types.zig").Animation;
 pub const GlobalKey = @import("types.zig").GlobalKey;
 pub const Match = @import("types.zig").Match;
+pub const MatchPlayer = @import("types.zig").MatchPlayer;
 pub const Ruleset = @import("types.zig").Ruleset;
 pub const CameraManager = @import("types.zig").CameraManager;
 pub const Actor = @import("types.zig").Actor;

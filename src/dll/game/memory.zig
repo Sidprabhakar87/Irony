@@ -37,7 +37,6 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 unrealFree: ?*const game.UnrealFreeFunction = null,
                 findUnrealClass: ?*const game.FindUnrealClassFunction = null,
                 findUnrealObjectsOfClass: ?*const game.FindUnrealObjectsOfClassFunction = null,
-                decryptHealth: ?*const game.DecryptT8HealthFunction = null,
                 getGlobalsMap: ?*const game.GetGlobalsMapFunction = null,
                 findGlobalAddress: ?*const game.FindGlobalAddressFunction = null,
             },
@@ -171,7 +170,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         }
 
         fn t8Init(cache: *?sdk.memory.PatternCache) Self {
-            const self = Self{
+            return .{
                 .player_1 = proxy("player_1", game.Player(.t8), .{
                     relativeOffset(i32, add(3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
                     0x30,
@@ -205,14 +204,6 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                         game.FindUnrealObjectsOfClassFunction,
                         relativeOffset(i32, add(0x1, pattern(cache, "E8 ?? ?? ?? ?? 90 48 89 6C 24 30"))),
                     ),
-                    .decryptHealth = functionPointer(
-                        "decryptHealth",
-                        game.DecryptT8HealthFunction,
-                        pattern(
-                            cache,
-                            "48 89 5C 24 08 57 48 83 EC ?? 48 8D 79 08 48 8B D9 48 8B CF E8 ?? ?? ?? ?? 85 C0",
-                        ),
-                    ),
                     .getGlobalsMap = functionPointer(
                         "getGlobalsMap",
                         game.GetGlobalsMapFunction,
@@ -231,8 +222,6 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     ),
                 },
             };
-            game.conversion_globals.decryptT8Health = self.functions.decryptHealth;
-            return self;
         }
 
         pub fn updateAddresses(self: *Self) void {

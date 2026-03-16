@@ -163,10 +163,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 .crushing = captureCrushing(player),
                 .can_move = player.can_move.toBool(),
                 .input = captureInput(player),
-                .health = switch (game_id) {
-                    .t7 => @intCast(player.health.convert().value),
-                    .t8 => player.health.convert(),
-                },
+                .health = player.health.convert().value,
                 .rage = captureRage(state, player),
                 .heat = captureHeat(player),
                 .rotation = player.rotation.convert(),
@@ -1531,9 +1528,9 @@ test "should capture forward/back correctly depending on the input side" {
     try testing.expectEqual(true, frame_4.getPlayerById(.player_2).input.?.back);
 }
 
-test "should capture health correctly in T7" {
-    const gm = game.Memory(.t7).testingInit;
-    var capturer = Capturer(.t7){};
+test "should capture health correctly" {
+    const gm = game.Memory(.t8).testingInit;
+    var capturer = Capturer(.t8){};
     const frame_2 = capturer.captureFrame(&gm(.{
         .player_1 = &.{
             .health = .fromConverted(.{
@@ -1545,40 +1542,6 @@ test "should capture health correctly in T7" {
     }));
     try testing.expectEqual(123, frame_2.getPlayerById(.player_1).health);
     try testing.expectEqual(null, frame_2.getPlayerById(.player_2).health);
-}
-
-test "should capture health correctly in T8" {
-    const DecryptHealth = struct {
-        var argument: ?game.Health(.t8) = null;
-        fn call(encrypted_health: *const game.Health(.t8)) callconv(.c) i64 {
-            argument = encrypted_health.*;
-            return 123 << 16;
-        }
-    };
-    const oldDecryptT8Health = game.conversion_globals.decryptT8Health;
-    defer game.conversion_globals.decryptT8Health = oldDecryptT8Health;
-
-    const gm = game.Memory(.t8).testingInit;
-    var capturer = Capturer(.t8){};
-    const encrypted = game.Health(.t8){ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
-
-    game.conversion_globals.decryptT8Health = null;
-    const frame_1 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .health = .{ .raw = encrypted } },
-        .player_2 = null,
-    }));
-    try testing.expectEqual(null, frame_1.getPlayerById(.player_1).health);
-    try testing.expectEqual(null, frame_1.getPlayerById(.player_2).health);
-    try testing.expectEqual(null, DecryptHealth.argument);
-
-    game.conversion_globals.decryptT8Health = DecryptHealth.call;
-    const frame_2 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .health = .{ .raw = encrypted } },
-        .player_2 = null,
-    }));
-    try testing.expectEqual(123, frame_2.getPlayerById(.player_1).health);
-    try testing.expectEqual(null, frame_2.getPlayerById(.player_2).health);
-    try testing.expectEqual(encrypted, DecryptHealth.argument);
 }
 
 test "should capture rage correctly in T7" {

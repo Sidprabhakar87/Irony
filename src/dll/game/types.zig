@@ -290,23 +290,18 @@ pub const CollisionSpheres = extern struct {
     }
 };
 
-pub fn Health(comptime game_id: build_info.Game) type {
-    return switch (game_id) {
-        .t7 => extern struct {
-            value: u32 = 0,
-            encryption_key: u64 = 0,
-        },
-        .t8 => [16]u64,
-    };
-}
+pub const Health = extern struct {
+    value: i32 = 0,
+    _padding: u32 = 0,
+    encryption_key: u64 = 0,
+};
 
 pub fn Player(comptime game_id: build_info.Game) type {
     const Transform = Converted(sdk.math.Mat4, sdk.math.Mat4, game.matrixToUnrealSpace, game.matrixFromUnrealSpace);
     const FloorZ = Converted(f32, f32, game.scaleToUnrealSpace, game.scaleFromUnrealSpace);
     const Rotation = Converted(u16, f32, game.u16ToRadians, game.u16FromRadians);
     const HeatGauge = Converted(u32, f32, game.decryptHeatGauge, game.encryptHeatGauge);
-    const T7Health = Converted(Health(.t7), Health(.t7), game.decryptT7Health, game.encryptT7Health);
-    const T8Health = Converted(Health(.t8), ?i32, game.decryptT8Health, null);
+    const HealthConverted = Converted(Health, Health, game.decryptHealth, game.encryptHealth);
     @setEvalBranchQuota(40000);
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
@@ -334,7 +329,7 @@ pub fn Player(comptime game_id: build_info.Game) type {
             field(0x0E50, "hit_lines", HitLines(.t7), &getDefaultHitLines(.t7)),
             field(0x0F10, "hurt_cylinders", HurtCylinders(.t7), &.{}),
             field(0x10D0, "collision_spheres", CollisionSpheres, &.{}),
-            field(0x14E8, "health", T7Health, &.fromRaw(.{})),
+            field(0x14E8, "health", HealthConverted, &.fromRaw(.{})),
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
             field(0x0009, "is_picked_by_main_player", Bool, &.false),
@@ -366,7 +361,7 @@ pub fn Player(comptime game_id: build_info.Game) type {
             field(0x2850, "hit_lines", HitLines(.t8), &getDefaultHitLines(.t8)),
             field(0x2C50, "hurt_cylinders", HurtCylinders(.t8), &.{}),
             field(0x3090, "collision_spheres", CollisionSpheres, &.{}),
-            field(0x3810, "health", T8Health, &.fromRaw([1]u64{0} ** 16)),
+            field(0x3818, "health", HealthConverted, &.fromRaw(.{})),
         }),
     };
 }

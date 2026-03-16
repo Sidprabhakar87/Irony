@@ -7,10 +7,6 @@ const cc = std.zig.c_translation.cast;
 const to_unreal_scale = 0.1;
 const from_unreal_scale = 1.0 / to_unreal_scale;
 
-pub const conversion_globals = struct {
-    pub var decryptT8Health: ?*const game.DecryptT8HealthFunction = null;
-};
-
 pub fn floatCast(comptime From: type, comptime To: type) *const fn (value: From) To {
     return struct {
         fn floatCast(value: From) To {
@@ -194,21 +190,46 @@ pub fn encryptHeatGauge(value: f32) u32 {
     return std.math.rotr(u32, int_value, @as(usize, 8));
 }
 
-pub fn decryptT7Health(value: game.Health(.t7)) game.Health(.t7) {
+pub fn decryptHealth(value: game.Health) game.Health {
     var converted = value;
-    converted.value = cc(u32, sub_14504f430_decrypt(cc(i32, converted.value), cc(i64, converted.encryption_key)));
+    converted.value = cc(i32, decryptHealthInner(converted.value, cc(i64, converted.encryption_key)));
     converted.value = converted.value >> 16;
     return converted;
 }
 
-pub fn encryptT7Health(value: game.Health(.t7)) game.Health(.t7) {
+pub fn encryptHealth(value: game.Health) game.Health {
     var converted = value;
     converted.value = converted.value << 16;
-    converted.value = cc(u32, sub_1451dd670_encrypt(cc(i32, converted.value), cc(i64, converted.encryption_key)));
+    converted.value = cc(i32, encryptHealthInner(converted.value, cc(i64, converted.encryption_key)));
     return converted;
 }
 
-fn sub_14504ef00(a1: i32, a2: i64) i64 {
+fn decryptHealthInner(encrypted_value: i32, encryption_key: i64) i64 {
+    var v2: i64 = undefined; // rbx
+    var v3: i32 = undefined; // edi
+    var v4: i32 = undefined; // edi
+    var v5: i64 = undefined; // rcx
+
+    v2 = encryption_key;
+    v3 = encrypted_value;
+    if (cc(u32, decryptHealthInnerInner(encrypted_value, encryption_key)) != cc(u32, encrypted_value)) {
+        return 0;
+    }
+    v4 = v3 ^ 0x1D;
+    if (v4 & 0x1F != 0) {
+        v5 = cc(i64, (v4 & 0x1F));
+        while (true) {
+            v2 = (if (v2 < 0) cc(i64, 1) else cc(i64, 0)) +% (v2 *% 2);
+            v5 -%= 1;
+            if (v5 == 0) {
+                break;
+            }
+        }
+    }
+    return cc(i64, cc(u32, @divFloor(cc(i32, 16 *% (cc(i64, v4) ^ v2 & 0xFFFFFFE0)), 16)));
+}
+
+fn decryptHealthInnerInner(a1: i32, a2: i64) i64 {
     var v2: i32 = undefined; // er8
     var v3: i64 = undefined; // r11
     var v4: i32 = undefined; // er10
@@ -246,32 +267,7 @@ fn sub_14504ef00(a1: i32, a2: i64) i64 {
     return cc(i64, (a1 & 0xFFFFFFF) + (v8 << 28));
 }
 
-fn sub_14504f430_decrypt(encrypted_value: i32, encryption_key: i64) i64 {
-    var v2: i64 = undefined; // rbx
-    var v3: i32 = undefined; // edi
-    var v4: i32 = undefined; // edi
-    var v5: i64 = undefined; // rcx
-
-    v2 = encryption_key;
-    v3 = encrypted_value;
-    if (cc(u32, sub_14504ef00(encrypted_value, encryption_key)) != cc(u32, encrypted_value)) {
-        return 0;
-    }
-    v4 = v3 ^ 0x1D;
-    if (v4 & 0x1F != 0) {
-        v5 = cc(i64, (v4 & 0x1F));
-        while (true) {
-            v2 = (if (v2 < 0) cc(i64, 1) else cc(i64, 0)) +% (v2 *% 2);
-            v5 -%= 1;
-            if (v5 == 0) {
-                break;
-            }
-        }
-    }
-    return cc(i64, cc(u32, @divFloor(cc(i32, 16 *% (cc(i64, v4) ^ v2 & 0xFFFFFFE0)), 16)));
-}
-
-fn sub_1451dd670_encrypt(decrypted_value: i32, encryption_key: i64) i64 {
+fn encryptHealthInner(decrypted_value: i32, encryption_key: i64) i64 {
     var v2: i64 = undefined; // rbx
     var v3: i64 = undefined; // r10
     var v4: i64 = undefined; // r8
@@ -321,15 +317,6 @@ fn sub_1451dd670_encrypt(decrypted_value: i32, encryption_key: i64) i64 {
     }
 
     return cc(i64, v6 +% (v11 << 28));
-}
-
-pub fn decryptT8Health(value: game.Health(.t8)) ?i32 {
-    if (value[0] != 0 and value[0] != 1) {
-        return null; // Decrypting invalid encrypted health value can cause a crash. This prevents it.
-    }
-    const decrypt = conversion_globals.decryptT8Health orelse return null;
-    const shifted = decrypt(&value);
-    return @intCast(shifted >> 16);
 }
 
 pub fn composeConversions(comptime steps: anytype) *const ComposedFunction(@TypeOf(steps)) {
@@ -580,17 +567,17 @@ test "decryptHeatGauge and encryptHeatGauge should cancel out" {
     try testing.expectEqual(12345, encryptHeatGauge(decryptHeatGauge(12345)));
 }
 
-test "encryptT7Health and decryptT7Health should return correct value" {
-    const clear_text = game.Health(.t7){
+test "encryptHealth and decryptHealth should return correct value" {
+    const clear_text = game.Health{
         .value = 175,
         .encryption_key = 0xBD20A1539B61342F,
     };
-    const encrypted = game.Health(.t7){
-        .value = 0xABCE343D,
+    const encrypted = game.Health{
+        .value = @bitCast(@as(u32, 0xABCE343D)),
         .encryption_key = 0xBD20A1539B61342F,
     };
-    try testing.expectEqual(encrypted, encryptT7Health(clear_text));
-    try testing.expectEqual(clear_text, decryptT7Health(encrypted));
+    try testing.expectEqual(encrypted, encryptHealth(clear_text));
+    try testing.expectEqual(clear_text, decryptHealth(encrypted));
 }
 
 test "composeConversions should create a conversion function that is the composition of provided conversion functions" {

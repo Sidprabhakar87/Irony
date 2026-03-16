@@ -301,7 +301,8 @@ pub fn Player(comptime game_id: build_info.Game) type {
     const FloorZ = Converted(f32, f32, game.scaleToUnrealSpace, game.scaleFromUnrealSpace);
     const Rotation = Converted(u16, f32, game.u16ToRadians, game.u16FromRadians);
     const HeatGauge = Converted(u32, f32, game.decryptHeatGauge, game.encryptHeatGauge);
-    const HealthConverted = Converted(Health, Health, game.decryptHealth, game.encryptHealth);
+    const HealthValue = Converted(Health, Health, game.decryptHealth, game.encryptHealth);
+    const T7MaxHealth = Converted(i32, i32, game.bitShiftRight(i32, 16), game.bitShiftLeft(i32, 16));
     @setEvalBranchQuota(40000);
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
@@ -329,7 +330,8 @@ pub fn Player(comptime game_id: build_info.Game) type {
             field(0x0E50, "hit_lines", HitLines(.t7), &getDefaultHitLines(.t7)),
             field(0x0F10, "hurt_cylinders", HurtCylinders(.t7), &.{}),
             field(0x10D0, "collision_spheres", CollisionSpheres, &.{}),
-            field(0x14E8, "health", HealthConverted, &.fromRaw(.{})),
+            field(0x14E8, "health", HealthValue, &.fromRaw(.{})),
+            field(0x14F8, "max_health", T7MaxHealth, &.fromRaw(0)),
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
             field(0x0009, "is_picked_by_main_player", Bool, &.false),
@@ -361,7 +363,9 @@ pub fn Player(comptime game_id: build_info.Game) type {
             field(0x2850, "hit_lines", HitLines(.t8), &getDefaultHitLines(.t8)),
             field(0x2C50, "hurt_cylinders", HurtCylinders(.t8), &.{}),
             field(0x3090, "collision_spheres", CollisionSpheres, &.{}),
-            field(0x3818, "health", HealthConverted, &.fromRaw(.{})),
+            field(0x3818, "health", HealthValue, &.fromRaw(.{})),
+            field(0x3828, "health_recover_limit", HealthValue, &.fromRaw(.{})),
+            field(0x3838, "max_health", HealthValue, &.fromRaw(.{})),
         }),
     };
 }

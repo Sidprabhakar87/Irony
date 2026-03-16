@@ -18,6 +18,22 @@ pub fn floatCast(comptime From: type, comptime To: type) *const fn (value: From)
     }.floatCast;
 }
 
+pub fn bitShiftLeft(comptime Type: type, comptime left_shift_bits: comptime_int) *const fn (value: Type) Type {
+    return struct {
+        fn bitShift(value: Type) Type {
+            return value << left_shift_bits;
+        }
+    }.bitShift;
+}
+
+pub fn bitShiftRight(comptime Type: type, comptime left_shift_bits: comptime_int) *const fn (value: Type) Type {
+    return struct {
+        fn bitShift(value: Type) Type {
+            return value >> left_shift_bits;
+        }
+    }.bitShift;
+}
+
 pub fn degreesToRadians(comptime Type: type) *const fn (value: Type) Type {
     return struct {
         fn floatCast(value: Type) Type {
@@ -460,6 +476,11 @@ test "floatCast should return the same value as a different float type" {
     try testing.expectEqual(@as(f64, 123), floatCast(f32, f64)(@as(f32, 123)));
     try testing.expectEqual(@as(f32, 456), floatCast(f64, f32)(@as(f64, 456)));
     try testing.expectEqual(@as(f32, 789), floatCast(f32, f32)(@as(f64, 789)));
+}
+
+test "bitShiftLeft and bitShiftRight should cancel out" {
+    try testing.expectEqual(0xFF, bitShiftRight(i32, 16)(bitShiftLeft(i32, 16)(0xFF)));
+    try testing.expectEqual(0xFF0000, bitShiftLeft(i32, 16)(bitShiftRight(i32, 16)(0xFF0000)));
 }
 
 test "degreesToRadians and radiansToDegrees should cancel out" {

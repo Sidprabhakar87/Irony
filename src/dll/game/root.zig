@@ -1,5 +1,7 @@
 pub const Capturer = @import("capturer.zig").Capturer;
 pub const floatCast = @import("conversions.zig").floatCast;
+pub const bitShiftLeft = @import("conversions.zig").bitShiftLeft;
+pub const bitShiftRight = @import("conversions.zig").bitShiftRight;
 pub const degreesToRadians = @import("conversions.zig").degreesToRadians;
 pub const radiansToDegrees = @import("conversions.zig").radiansToDegrees;
 pub const scaleToUnrealSpace = @import("conversions.zig").scaleToUnrealSpace;

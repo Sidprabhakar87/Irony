@@ -14,12 +14,9 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             rage_state: RageState = .{},
             previous_hit_lines: ?game.HitLines(game_id) = null,
         };
-        const RageState = switch (game_id) {
-            .t7 => struct {
-                previous_frames_since_round_start: u32 = 0,
-                was_in_rage_this_round: bool = false,
-            },
-            .t8 => struct {},
+        const RageState = struct {
+            previous_frames_since_round_start: u32 = 0,
+            was_in_rage_this_round: bool = false,
         };
         const GamePlayer = game.Player(game_id);
         const WallRectangle = struct {
@@ -176,9 +173,6 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         }
 
         fn updateRageState(state: *PlayerState, player: *const GamePlayer) void {
-            if (game_id != .t7) {
-                return;
-            }
             const frames_since_round_start: u32 = player.frames_since_round_start;
             const previous_frames_since_round_start: *u32 = &state.rage_state.previous_frames_since_round_start;
             defer previous_frames_since_round_start.* = frames_since_round_start;
@@ -332,22 +326,13 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
 
         fn captureRage(state: *PlayerState, player: *const GamePlayer) ?model.Rage {
             const in_rage = player.in_rage.toBool() orelse return null;
-            switch (in_rage) {
-                true => return .activated,
-                false => switch (game_id) {
-                    .t7 => switch (state.rage_state.was_in_rage_this_round) {
-                        true => return .used_up,
-                        false => return .available,
-                    },
-                    .t8 => {
-                        const used_rage = player.used_rage.toBool() orelse return null;
-                        return switch (used_rage) {
-                            true => return .used_up,
-                            false => return .available,
-                        };
-                    },
+            return switch (in_rage) {
+                true => .activated,
+                false => switch (state.rage_state.was_in_rage_this_round) {
+                    true => .used_up,
+                    false => .available,
                 },
-            }
+            };
         }
 
         fn captureHeat(player: *const GamePlayer) ?model.Heat {
@@ -1544,9 +1529,9 @@ test "should capture health correctly" {
     try testing.expectEqual(null, frame_2.getPlayerById(.player_2).health);
 }
 
-test "should capture rage correctly in T7" {
-    const gm = game.Memory(.t7).testingInit;
-    var capturer = Capturer(.t7){};
+test "should capture rage correctly" {
+    const gm = game.Memory(.t8).testingInit;
+    var capturer = Capturer(.t8){};
 
     const frame_1 = capturer.captureFrame(&gm(.{
         .player_1 = &.{ .in_rage = .false, .frames_since_round_start = 100 },
@@ -1575,23 +1560,6 @@ test "should capture rage correctly in T7" {
     }));
     try testing.expectEqual(null, frame_4.getPlayerById(.player_1).rage);
     try testing.expectEqual(null, frame_4.getPlayerById(.player_2).rage);
-}
-
-test "should capture rage correctly in T8" {
-    const gm = game.Memory(.t8).testingInit;
-    var capturer = Capturer(.t8){};
-    const frame_1 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .in_rage = .false, .used_rage = .false },
-        .player_2 = &.{ .in_rage = .true, .used_rage = .false },
-    }));
-    const frame_2 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .in_rage = .false, .used_rage = .true },
-        .player_2 = null,
-    }));
-    try testing.expectEqual(.available, frame_1.getPlayerById(.player_1).rage);
-    try testing.expectEqual(.activated, frame_1.getPlayerById(.player_2).rage);
-    try testing.expectEqual(.used_up, frame_2.getPlayerById(.player_1).rage);
-    try testing.expectEqual(null, frame_2.getPlayerById(.player_2).rage);
 }
 
 test "should capture heat correctly in T7" {

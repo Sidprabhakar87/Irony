@@ -39,7 +39,13 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             const camera = captureCamera(camera_manager);
             const floor_number = captureFloorNumber(player_1, player_2);
             const set_number = captureStageSetNumber(player_1, player_2);
-            const walls = captureWalls(floor_number, set_number, &game_memory.walls, &game_memory.player_starts);
+            const walls = captureWalls(
+                floor_number,
+                set_number,
+                &game_memory.walls,
+                &game_memory.player_starts,
+                game_memory.unreal_classes.photo_mode_wall,
+            );
             const floor_gimmicks = captureFloorGimmicks(floor_number, set_number, &game_memory.floors, walls.asSlice());
             return .{
                 .frames_since_round_start = frames_from_round_start,
@@ -473,11 +479,18 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             stage_set_number: ?u32,
             wall_pointers: []const sdk.memory.Pointer(game.Wall(game_id)),
             start_pointers: []const sdk.memory.Pointer(game.PlayerStart(game_id)),
+            photo_mode_wall_class: ?*const game.UnrealClass,
         ) model.Walls {
             const floor_numb = floor_number orelse return .{};
             const midpoint = captureFloorMidpoint(start_pointers, floor_numb) orelse return .{};
             var rectangles_buffer: [game.Memory(game_id).max_walls]WallRectangle = undefined;
-            const rectangles = captureWallRectangles(&rectangles_buffer, wall_pointers, floor_numb, stage_set_number);
+            const rectangles = captureWallRectangles(
+                &rectangles_buffer,
+                wall_pointers,
+                floor_numb,
+                stage_set_number,
+                photo_mode_wall_class,
+            );
             return computeWallsPolygon(rectangles, midpoint);
         }
 
@@ -511,6 +524,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             wall_pointers: []const sdk.memory.Pointer(game.Wall(game_id)),
             floor_number: u32,
             set_number: ?u32,
+            photo_mode_wall_class: ?*const game.UnrealClass,
         ) []WallRectangle {
             const wall_mesh_half_size = switch (game_id) {
                 .t7 => 128,
@@ -526,7 +540,11 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                     continue;
                 }
                 if (game_id == .t8) {
-                    if (wall.actor.hidden_polaris.value or wall.state == .init or wall.set_number != set_number) {
+                    if (wall.actor.hidden_polaris.value or
+                        wall.state == .init or
+                        wall.set_number != set_number or
+                        wall.actor.class == photo_mode_wall_class)
+                    {
                         continue;
                     }
                 }
@@ -2043,6 +2061,9 @@ test "should capture walls correctly" {
     }.call;
 
     const game_memory = game.Memory(.t8).testingInit(.{
+        .unreal_classes = .{
+            .photo_mode_wall = @ptrFromInt(0x456),
+        },
         .player_1 = &.{ .stage_set_number = 0, .floor_number = 1 },
         .player_2 = &.{ .stage_set_number = 0, .floor_number = 1 },
         .player_starts = &.{
@@ -2090,6 +2111,7 @@ test "should capture walls correctly" {
         .walls = &.{
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 2000, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2110,6 +2132,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1900, 900, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, -0.25 * pi, 0 })),
@@ -2126,6 +2149,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1700, 1000, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2142,6 +2166,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1000, 1000, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2160,6 +2185,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 300, 1000, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2176,6 +2202,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 100, 900, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0.25 * pi, 0 })),
@@ -2192,6 +2219,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 0, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2208,6 +2236,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 0, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0.25 * pi, 0 })),
@@ -2224,6 +2253,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 100, 100, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, -0.25 * pi, 0 })),
@@ -2242,6 +2272,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 300, 0, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2258,6 +2289,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1000, 0, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2274,6 +2306,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1700, 0, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2290,6 +2323,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1900, 100, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0.25 * pi, 0 })),
@@ -2306,6 +2340,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 600, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2325,6 +2360,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1400, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2343,6 +2379,24 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x456),
+                    .root_component = .fromPointer(&.{
+                        .relative_position = .fromConverted(.fromArray(.{ 500, 500, 0 })),
+                        .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
+                        .relative_scale = .fromConverted(.fromArray(.{ 1, 16, 0 })),
+                    }),
+                    .hidden_polaris = .{ .value = false },
+                    .collision_enabled = .{ .value = false },
+                },
+                .state = .main,
+                .set_number = 0,
+                .floor_number = 1,
+                .destruction_level = 0,
+                .wall_attribute = .{},
+            },
+            .{
+                .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 700, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2359,6 +2413,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 900, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2375,6 +2430,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1100, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),
@@ -2391,6 +2447,7 @@ test "should capture walls correctly" {
             },
             .{
                 .actor = .{
+                    .class = @ptrFromInt(0x123),
                     .root_component = .fromPointer(&.{
                         .relative_position = .fromConverted(.fromArray(.{ 1300, 500, 0 })),
                         .relative_rotation = .fromConverted(.fromArray(.{ 0, 0, 0 })),

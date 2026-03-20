@@ -17,7 +17,7 @@ fn field(
         .offset = offset,
         .name = name,
         .type = Type,
-        .default_value_ptr = default_value_ptr,
+        .default_value_ptr = @ptrCast(default_value_ptr),
     };
 }
 
@@ -479,12 +479,14 @@ pub fn Actor(comptime game_id: build_info.Game) type {
     const RootComponent = sdk.memory.Pointer(SceneComponent(game_id));
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x010, "class", ?*const UnrealClass, &null), // UE: UObject::Class
             field(0x07E, "collision_enabled", CollisionEnabled, &.{}), // UE : bActorEnableCollision
             field(0x160, "root_component", RootComponent, &.fromPointer(null)), // UE: RootComponent
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x059, "hidden_polaris", HiddenPolaris, &.{}), // UE/T8 : bHidden_Polaris
-            field(0x05D, "collision_enabled", CollisionEnabled, &.{}), // UE : bActorEnableCollision
+            field(0x010, "class", ?*const UnrealClass, &null), // UE: UObject::Class
+            field(0x059, "hidden_polaris", HiddenPolaris, &.{}), // UE/T8: bHidden_Polaris
+            field(0x05D, "collision_enabled", CollisionEnabled, &.{}), // UE: bActorEnableCollision
             field(0x1A0, "root_component", RootComponent, &.fromPointer(null)), // UE: RootComponent
         }),
     };

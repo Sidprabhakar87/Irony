@@ -44,6 +44,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub const UnrealClasses = struct {
             camera_manager: ?*const game.UnrealClass = null,
             wall: ?*const game.UnrealClass = null,
+            photo_mode_wall: ?*const game.UnrealClass = null,
             floor: ?*const game.UnrealClass = null,
             player_start: ?*const game.UnrealClass = null,
         };
@@ -256,6 +257,12 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 classes.wall = switch (game_id) {
                     .t7 => findClass(null, w("/Script/TekkenGame.TekkenWallActor"), true),
                     .t8 => findClass(null, w("/Script/Polaris.PolarisStageWallActor"), true),
+                };
+            }
+            if (classes.photo_mode_wall == null) {
+                classes.photo_mode_wall = switch (game_id) {
+                    .t7 => null,
+                    .t8 => findClass(null, w("/Script/Polaris.PolarisPhotoModeWallActor"), true),
                 };
             }
             if (classes.player_start == null) {

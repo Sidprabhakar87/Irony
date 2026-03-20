@@ -55,9 +55,8 @@ var window_procedure: ?sdk.os.WindowProcedure = null;
 pub fn DllMain(
     module_handle: w32.HINSTANCE,
     forward_reason: u32,
-    reserved: *anyopaque,
+    reserved: ?*anyopaque,
 ) callconv(.winapi) w32.BOOL {
-    _ = reserved;
     switch (forward_reason) {
         w32.DLL_PROCESS_ATTACH => {
             std.log.info("DLL attached event detected.", .{});
@@ -87,6 +86,12 @@ pub fn DllMain(
         },
         w32.DLL_PROCESS_DETACH => {
             std.log.info("DLL detach event detected.", .{});
+
+            if (reserved != null) {
+                std.log.info("Skipping cleanup since the host process is terminating.", .{});
+                std.log.info("Detaching from the process now...", .{});
+                return 1;
+            }
 
             std.log.debug("Shutting down main thread...", .{});
             if (main_thread) |*thread| {

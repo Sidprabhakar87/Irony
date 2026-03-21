@@ -8,6 +8,8 @@ pub fn Memory(comptime game_id: build_info.Game) type {
     return struct {
         player_1: PlayerProxy,
         player_2: PlayerProxy,
+        main_player_name: sdk.memory.Proxy(PlayerName),
+        secondary_player_name: sdk.memory.Proxy(PlayerName),
         match: MatchPointer,
         ruleset: RulesetPointer,
         camera_manager: CameraManagerPointer = .fromPointer(null),
@@ -18,6 +20,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         unreal_classes: UnrealClasses = .{},
 
         const Self = @This();
+        const PlayerName = [player_name_max_bytes]u8;
         const PlayerProxy = sdk.memory.Proxy(game.Player(game_id));
         const MatchPointer = sdk.memory.Pointer(game.Match(game_id));
         const RulesetPointer = sdk.memory.Pointer(game.Ruleset(game_id));
@@ -50,6 +53,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         };
 
         const pattern_cache_file_name = "pattern_cache_" ++ @tagName(game_id) ++ ".json";
+        pub const player_name_max_bytes = 32;
         pub const max_walls = 256;
         pub const max_floors = 16;
         pub const max_player_starts = 32;
@@ -72,6 +76,8 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub fn testingInit(params: struct {
             player_1: ?*const game.Player(game_id) = null,
             player_2: ?*const game.Player(game_id) = null,
+            main_player_name: ?*const PlayerName = null,
+            secondary_player_name: ?*const PlayerName = null,
             match: ?*const game.Match(game_id) = null,
             ruleset: ?*const game.Ruleset(game_id) = null,
             camera_manager: ?*const game.CameraManager(game_id) = null,
@@ -84,36 +90,33 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             if (!builtin.is_test) {
                 @compileError("This function is only supposed to be called from inside tests.");
             }
-            var walls = [1]WallPointer{.fromPointer(null)} ** max_walls;
-            for (params.walls, 0..) |*wall, index| {
-                if (index >= walls.len) {
-                    break;
+            const makePointerArray = struct {
+                fn call(
+                    comptime Element: type,
+                    comptime array_len: usize,
+                    slice: []const Element,
+                ) [array_len]sdk.memory.Pointer(Element) {
+                    var array = [1]sdk.memory.Pointer(Element){.fromPointer(null)} ** array_len;
+                    if (slice.len > array.len) {
+                        @panic("Slice does not fit into the array.");
+                    }
+                    for (slice, 0..) |*element, index| {
+                        array[index] = .fromPointer(element);
+                    }
+                    return array;
                 }
-                walls[index] = .fromPointer(wall);
-            }
-            var floors = [1]FloorPointer{.fromPointer(null)} ** max_floors;
-            for (params.floors, 0..) |*floor, index| {
-                if (index >= floors.len) {
-                    break;
-                }
-                floors[index] = .fromPointer(floor);
-            }
-            var player_starts = [1]PlayerStartPointer{.fromPointer(null)} ** max_player_starts;
-            for (params.player_starts, 0..) |*start, index| {
-                if (index >= player_starts.len) {
-                    break;
-                }
-                player_starts[index] = .fromPointer(start);
-            }
+            }.call;
             return .{
                 .player_1 = .fromPointer(params.player_1),
                 .player_2 = .fromPointer(params.player_2),
+                .main_player_name = .fromPointer(params.main_player_name),
+                .secondary_player_name = .fromPointer(params.secondary_player_name),
                 .match = .fromPointer(params.match),
                 .ruleset = .fromPointer(params.ruleset),
                 .camera_manager = .fromPointer(params.camera_manager),
-                .walls = walls,
-                .floors = floors,
-                .player_starts = player_starts,
+                .walls = makePointerArray(game.Wall(game_id), max_walls, params.walls),
+                .floors = makePointerArray(game.Floor(game_id), max_floors, params.floors),
+                .player_starts = makePointerArray(game.PlayerStart(game_id), max_player_starts, params.player_starts),
                 .functions = params.functions,
                 .unreal_classes = params.unreal_classes,
             };
@@ -128,6 +131,24 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 .player_2 = proxy("player_2", game.Player(.t7), .{
                     relativeOffset(i32, add(0xD, pattern(cache, "48 8B 15 ?? ?? ?? ?? 44 8B C3"))),
                     0x0,
+                }),
+                .main_player_name = proxy("main_player_name", PlayerName, .{
+                    relativeOffset(i32, add(0x9, pattern(
+                        cache,
+                        "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? 48 83 3D ?? ?? ?? ?? 00",
+                    ))),
+                    0x0,
+                    0x0,
+                    0x11C,
+                }),
+                .secondary_player_name = proxy("secondary_player_name", PlayerName, .{
+                    relativeOffset(i32, add(0x9, pattern(
+                        cache,
+                        "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? 48 83 3D ?? ?? ?? ?? 00",
+                    ))),
+                    0x0,
+                    0x8,
+                    0x11C,
                 }),
                 .match = pointer(
                     "match",
@@ -173,14 +194,34 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         fn t8Init(cache: *?sdk.memory.PatternCache) Self {
             return .{
                 .player_1 = proxy("player_1", game.Player(.t8), .{
-                    relativeOffset(i32, add(3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
+                    relativeOffset(i32, add(0x3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
                     0x30,
                     0x0,
                 }),
                 .player_2 = proxy("player_2", game.Player(.t8), .{
-                    relativeOffset(i32, add(3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
+                    relativeOffset(i32, add(0x3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
                     0x38,
                     0x0,
+                }),
+                .main_player_name = proxy("main_player_name", PlayerName, .{
+                    relativeOffset(i32, add(0x9, pattern(
+                        cache,
+                        "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? BA 01 00 00 00",
+                    ))),
+                    0x0,
+                    0x0,
+                    0x20,
+                    0xB0,
+                }),
+                .secondary_player_name = proxy("secondary_player_name", PlayerName, .{
+                    relativeOffset(i32, add(0x9, pattern(
+                        cache,
+                        "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? BA 01 00 00 00",
+                    ))),
+                    0x0,
+                    0x8,
+                    0x20,
+                    0xB0,
                 }),
                 .match = .fromPointer(null), // Continiously updated address.
                 .ruleset = .fromPointer(null), // Continiously updated address.

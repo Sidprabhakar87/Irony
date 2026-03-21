@@ -1,4 +1,5 @@
 pub const BaseDir = @import("base_dir.zig").BaseDir;
+pub const BoundedArray = @import("bounded_array.zig").BoundedArray;
 pub const CircularBuffer = @import("circular_buffer.zig").CircularBuffer;
 pub const ErrorContextConfig = @import("error_context.zig").ErrorContextConfig;
 pub const ErrorContextItem = @import("error_context.zig").ErrorContextItem;

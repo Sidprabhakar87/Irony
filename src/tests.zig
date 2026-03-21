@@ -46,6 +46,7 @@ test {
     _ = @import("sdk/memory/struct_with_offsets.zig");
 
     _ = @import("sdk/misc/base_dir.zig");
+    _ = @import("sdk/misc/bounded_array.zig");
     _ = @import("sdk/misc/circular_buffer.zig");
     _ = @import("sdk/misc/error_context.zig");
     _ = @import("sdk/misc/meta.zig");

@@ -2333,7 +2333,7 @@ test "should draw distance to wall correctly" {
 
             details.processFrame(&settings, &.{
                 .players = .{ .{}, .{} },
-                .walls = .{},
+                .walls = .empty,
             });
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/---");
@@ -2382,7 +2382,7 @@ test "should draw angle to wall correctly" {
 
             details.processFrame(&settings, &.{
                 .players = .{ .{}, .{} },
-                .walls = .{},
+                .walls = .empty,
             });
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/---");

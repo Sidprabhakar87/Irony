@@ -22,32 +22,20 @@ pub fn drawStage(
 }
 
 fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Frame, matrix: sdk.math.Mat4) void {
-    const Polygon = struct {
-        buffer: [max_len]sdk.math.Vec2 = undefined,
-        len: usize = 0,
-
-        const Self = @This();
-
-        pub const max_len = model.Walls.max_len + 4;
-
-        pub fn asSlice(self: *Self) []sdk.math.Vec2 {
-            return self.buffer[0..self.len];
-        }
-    };
+    const Polygon = sdk.misc.BoundedArray(model.Walls.max_len + 4, sdk.math.Vec2, .zero);
 
     const floor_z = frame.floor_z orelse 0;
     const walls: []const model.Wall = frame.walls.asSlice();
     const floor_gimmicks: []const model.FloorGimmick = frame.floor_gimmicks.asSlice();
 
     const walls_polygon = block: {
-        var polygon: Polygon = .{};
+        var polygon = Polygon.empty;
         var index: usize = 0;
-        while (polygon.len < polygon.buffer.len) {
+        while (true) {
             if (index >= walls.len) {
                 break;
             }
-            polygon.buffer[polygon.len] = walls[index].edge_1;
-            polygon.len += 1;
+            polygon.append(walls[index].edge_1) catch break;
             index = walls[index].edge_2_index;
             if (index == 0) {
                 break;
@@ -78,13 +66,13 @@ fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Fr
         };
 
         var polygon_1 = walls_polygon;
-        var polygon_2 = Polygon{};
+        var polygon_2 = Polygon.empty;
         for (lines, 0..) |line, line_index| {
             const line_diff = line.point_2.subtract(line.point_1);
             const ray = sdk.math.Ray2{ .origin = line.point_1, .direction = line_diff };
             const input = if (line_index % 2 == 0) polygon_1.asSlice() else polygon_2.asSlice();
             const output = if (line_index % 2 == 0) &polygon_2 else &polygon_1;
-            output.* = .{};
+            output.* = .empty;
             for (input, 0..) |current_point, current_index| {
                 const next_index = if (current_index + 1 < input.len) current_index + 1 else 0;
                 const next_point = input[next_index];
@@ -92,36 +80,20 @@ fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Fr
                 const current_inside = line_diff.cross(current_point.subtract(line.point_1)) >= 0;
                 const next_inside = line_diff.cross(next_point.subtract(line.point_1)) >= 0;
                 if (current_inside and next_inside) {
-                    if (output.len >= output.buffer.len) {
-                        break;
-                    }
-                    output.buffer[output.len] = next_point;
-                    output.len += 1;
+                    output.append(next_point) catch break;
                 } else if (current_inside and !next_inside) {
                     const intersection = switch (sdk.math.raycastLineSegment(ray, current_next_line)) {
                         .hit => |*hit| hit.position,
                         .miss, .overlap => continue,
                     };
-                    if (output.len >= output.buffer.len) {
-                        break;
-                    }
-                    output.buffer[output.len] = intersection;
-                    output.len += 1;
+                    output.append(intersection) catch break;
                 } else if (!current_inside and next_inside) {
                     const intersection = switch (sdk.math.raycastLineSegment(ray, current_next_line)) {
                         .hit => |*hit| hit.position,
                         .miss, .overlap => continue,
                     };
-                    if (output.len >= output.buffer.len) {
-                        break;
-                    }
-                    output.buffer[output.len] = intersection;
-                    output.len += 1;
-                    if (output.len >= output.buffer.len) {
-                        break;
-                    }
-                    output.buffer[output.len] = next_point;
-                    output.len += 1;
+                    output.append(intersection) catch break;
+                    output.append(next_point) catch break;
                 }
             }
         }
@@ -355,36 +327,6 @@ fn drawWall(
 
 const testing = std.testing;
 
-fn makeWalls(array: anytype) model.Walls {
-    if (@typeInfo(@TypeOf(array)) != .array) {
-        const coerced: [array.len]model.Wall = array;
-        return makeWalls(coerced);
-    }
-    if (array.len > model.Walls.max_len) {
-        @compileError("Array length exceeds maximum allowed number of walls.");
-    }
-    var buffer: [model.Walls.max_len]model.Wall = undefined;
-    for (array, 0..) |wall, index| {
-        buffer[index] = wall;
-    }
-    return .{ .buffer = buffer, .len = array.len };
-}
-
-fn makeFloorGimmicks(array: anytype) model.FloorGimmicks {
-    if (@typeInfo(@TypeOf(array)) != .array) {
-        const coerced: [array.len]model.FloorGimmick = array;
-        return makeFloorGimmicks(coerced);
-    }
-    if (array.len > model.FloorGimmicks.max_len) {
-        @compileError("Array length exceeds maximum allowed number of walls.");
-    }
-    var buffer: [model.FloorGimmicks.max_len]model.FloorGimmick = undefined;
-    for (array, 0..) |gimmick, index| {
-        buffer[index] = gimmick;
-    }
-    return .{ .buffer = buffer, .len = array.len };
-}
-
 test "should draw correct lines when direction is top" {
     const Test = struct {
         const settings = model.StageSettings{
@@ -421,7 +363,7 @@ test "should draw correct lines when direction is top" {
             }),
         };
         const frame = model.Frame{
-            .walls = makeWalls(.{
+            .walls = .fromArray(.{
                 model.Wall{
                     .edge_1 = .fromArray(.{ 900, 500 }),
                     .edge_2_index = 1,
@@ -631,7 +573,7 @@ test "should draw correct lines when direction is not top" {
                 .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 900, 500, 0 }), .radius = 0 }) },
                 .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 1100, 500, 0 }), .radius = 0 }) },
             },
-            .walls = makeWalls(.{
+            .walls = .fromArray(.{
                 model.Wall{
                     .edge_1 = .fromArray(.{ 1900, 700 }),
                     .edge_2_index = 1,
@@ -713,7 +655,7 @@ test "should draw correct lines when direction is not top" {
                     },
                 },
             }),
-            .floor_gimmicks = makeFloorGimmicks(.{
+            .floor_gimmicks = .fromArray(.{
                 model.FloorGimmick{
                     .rectangle = .{
                         .center = .fromArray(.{ 300, 500 }),
@@ -954,7 +896,7 @@ test "should draw nothing when disabled in settings" {
                 .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 0, 0, 0 }), .radius = 0 }) },
                 .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 0, 0, 0 }), .radius = 0 }) },
             },
-            .walls = makeWalls(.{
+            .walls = .fromArray(.{
                 model.Wall{
                     .edge_1 = .fromArray(.{ 0, 0 }),
                     .edge_2_index = 1,
@@ -964,7 +906,7 @@ test "should draw nothing when disabled in settings" {
                     .edge_2_index = 0,
                 },
             }),
-            .floor_gimmicks = makeFloorGimmicks(.{
+            .floor_gimmicks = .fromArray(.{
                 model.FloorGimmick{
                     .rectangle = .{ .center = .fromArray(.{ 3, 3 }), .half_size = .fromArray(.{ 4, 4 }), .rotation = 0 },
                     .properties = .{ .type = .floor_break },
@@ -1013,8 +955,8 @@ test "should draw nothing when no walls, no floor gimmicks and direction is top"
                 .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 0, 0, 0 }), .radius = 0 }) },
                 .{ .collision_spheres = .initFill(.{ .center = .fromArray(.{ 0, 0, 0 }), .radius = 0 }) },
             },
-            .walls = makeWalls(.{}),
-            .floor_gimmicks = makeFloorGimmicks(.{}),
+            .walls = .empty,
+            .floor_gimmicks = .empty,
         };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1045,8 +987,8 @@ test "should draw infinite floor line when no walls and direction is not top" {
         };
         const frame = model.Frame{
             .floor_z = 500,
-            .walls = makeWalls(.{}),
-            .floor_gimmicks = makeFloorGimmicks(.{}),
+            .walls = .empty,
+            .floor_gimmicks = .empty,
         };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {

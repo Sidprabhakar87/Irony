@@ -27,27 +27,7 @@ pub const WallFlags = packed struct(u4) {
     broken: bool = false,
 };
 
-pub const Walls = struct {
-    buffer: [max_len]Wall = std.mem.zeroes([max_len]Wall),
-    len: usize = 0,
-
-    const Self = @This();
-
-    pub const max_len = 24;
-
-    pub fn asSlice(self: anytype) sdk.misc.SelfBasedSlice(@TypeOf(self), Self, Wall) {
-        return self.buffer[0..self.len];
-    }
-};
-
-const testing = std.testing;
-
-test "Walls.asSlice should return correct value" {
-    const wall_1 = Wall{ .edge_1 = .fromArray(.{ 1, 2 }), .edge_2_index = 1 };
-    const wall_2 = Wall{ .edge_1 = .fromArray(.{ 3, 4 }), .edge_2_index = 0 };
-    var walls = Walls{};
-    walls.buffer[0] = wall_1;
-    walls.buffer[1] = wall_2;
-    walls.len = 2;
-    try testing.expectEqualSlices(Wall, &.{ wall_1, wall_2 }, walls.asSlice());
-}
+pub const Walls = sdk.misc.BoundedArray(24, Wall, .{
+    .edge_1 = .zero,
+    .edge_2_index = 0,
+});

@@ -408,11 +408,11 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         }
 
         fn captureHitLines(state: *const PlayerState, player: *const GamePlayer) model.HitLines {
-            const animation = player.animation.toConstPointer() orelse return .{};
+            const animation = player.animation.toConstPointer() orelse return .empty;
             const is_active_frame = player.animation_frame >= animation.active_start and
                 player.animation_frame <= animation.active_end;
             if (!is_active_frame) {
-                return .{};
+                return .empty;
             }
             return switch (game_id) {
                 .t7 => captureT7HitLines(state, player),
@@ -421,7 +421,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         }
 
         fn captureT7HitLines(state: *const PlayerState, player: *const GamePlayer) model.HitLines {
-            const previous_lines: *const game.HitLines(.t7) = if (state.previous_hit_lines) |*l| l else return .{};
+            const previous_lines: *const game.HitLines(.t7) = if (state.previous_hit_lines) |*l| l else return .empty;
             const current_lines: *const game.HitLines(.t7) = &player.hit_lines;
             var changed_points_buffer: [current_lines.len]game.HitLinePoint = undefined;
             var changed_points_len: usize = 0;
@@ -434,41 +434,36 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 changed_points_buffer[changed_points_len] = current_point;
                 changed_points_len += 1;
             }
-            var result: model.HitLines = .{};
+            var result = model.HitLines.empty;
             var index: usize = changed_points_len -% 2;
             while (index < changed_points_len) {
-                const line = sdk.math.LineSegment3{
+                result.append(.{ .line = .{
                     .point_1 = changed_points_buffer[index].position,
                     .point_2 = changed_points_buffer[index + 1].position,
-                };
-                result.buffer[result.len] = .{ .line = line };
-                result.len += 1;
+                } }) catch break;
                 index -%= 2;
             }
             return result;
         }
 
         fn captureT8HitLines(state: *const PlayerState, player: *const GamePlayer) model.HitLines {
-            const previous_lines: *const game.HitLines(.t8) = if (state.previous_hit_lines) |*l| l else return .{};
+            const previous_lines: *const game.HitLines(.t8) = if (state.previous_hit_lines) |*l| l else return .empty;
             const current_lines: *const game.HitLines(.t8) = &player.hit_lines;
-            var result: model.HitLines = .{};
+            var result = model.HitLines.empty;
             for (previous_lines, current_lines) |*raw_previous_line, *raw_current_line| {
                 const previous_line = raw_previous_line.convert();
                 const current_line = raw_current_line.convert();
                 if (std.meta.eql(previous_line.points, current_line.points)) {
                     continue;
                 }
-                const line_1 = sdk.math.LineSegment3{
+                result.append(.{ .line = .{
                     .point_1 = current_line.points[0].position,
                     .point_2 = current_line.points[1].position,
-                };
-                const line_2 = sdk.math.LineSegment3{
+                } }) catch break;
+                result.append(.{ .line = .{
                     .point_1 = current_line.points[1].position,
                     .point_2 = current_line.points[2].position,
-                };
-                result.buffer[result.len] = .{ .line = line_1 };
-                result.buffer[result.len + 1] = .{ .line = line_2 };
-                result.len += 2;
+                } }) catch break;
             }
             return result;
         }
@@ -480,8 +475,8 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             start_pointers: []const sdk.memory.Pointer(game.PlayerStart(game_id)),
             photo_mode_wall_class: ?*const game.UnrealClass,
         ) model.Walls {
-            const floor_numb = floor_number orelse return .{};
-            const midpoint = captureFloorMidpoint(start_pointers, floor_numb) orelse return .{};
+            const floor_numb = floor_number orelse return .empty;
+            const midpoint = captureFloorMidpoint(start_pointers, floor_numb) orelse return .empty;
             var rectangles_buffer: [game.Memory(game_id).max_walls]WallRectangle = undefined;
             const rectangles = captureWallRectangles(
                 &rectangles_buffer,
@@ -531,9 +526,6 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             };
             var len: usize = 0;
             for (wall_pointers) |wall_pointer| {
-                if (len >= buffer.len) {
-                    break;
-                }
                 const wall = wall_pointer.toConstPointer() orelse continue;
                 if (wall.floor_number != floor_number) {
                     continue;
@@ -548,6 +540,9 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                     }
                 }
                 const root = wall.actor.root_component.toConstPointer() orelse continue;
+                if (len >= buffer.len) {
+                    break;
+                }
                 buffer[len] = .{
                     .rectangle = .{
                         .center = root.relative_position.convert().swizzle("xy"),
@@ -635,7 +630,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                         .rectangle_index = result.rectangle_index,
                     };
                 } else {
-                    return .{};
+                    return .empty;
                 }
             };
 
@@ -644,7 +639,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 edge_2_index: ?u8 = null,
             };
             var breakable_walls = [1]BreakableWall{.{}} ** game.Memory(game_id).max_walls;
-            var result = model.Walls{};
+            var result = model.Walls.empty;
             var hit_negative_x = false;
             var hit_negative_y = false;
             while (true) {
@@ -780,15 +775,11 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                     .breakable_wall_exit => true,
                 };
                 if (add_wall) {
-                    if (result.len >= result.buffer.len) {
-                        break;
-                    }
-                    result.buffer[result.len] = .{
+                    result.append(.{
                         .edge_1 = turtle.position,
                         .edge_2_index = @intCast(result.len + 1),
                         .properties = turtle.wall_properties,
-                    };
-                    result.len += 1;
+                    }) catch break;
                 }
             }
             result.buffer[result.len - 1].edge_2_index = 0;
@@ -797,15 +788,11 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 const breakable_wall = breakable_walls[index];
                 if (breakable_wall.edge_1) |edge_1| {
                     if (breakable_wall.edge_2_index) |edge_2_index| {
-                        if (result.len >= result.buffer.len) {
-                            break;
-                        }
-                        result.buffer[result.len] = .{
+                        result.append(.{
                             .edge_1 = edge_1,
                             .edge_2_index = edge_2_index,
                             .properties = wall.properties,
-                        };
-                        result.len += 1;
+                        }) catch break;
                     }
                 }
             }
@@ -819,13 +806,10 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             floor_pointers: []const sdk.memory.Pointer(game.Floor(game_id)),
             walls: []const model.Wall,
         ) model.FloorGimmicks {
-            const current_floor_number = floor_number orelse return .{};
+            const current_floor_number = floor_number orelse return .empty;
             const set_number = stage_set_number;
-            var result = model.FloorGimmicks{};
+            var result = model.FloorGimmicks.empty;
             for (floor_pointers) |floor_pointer| {
-                if (result.len >= result.buffer.len) {
-                    break;
-                }
                 const floor = floor_pointer.toConstPointer() orelse continue;
                 if (floor.floor_number != current_floor_number) {
                     continue;
@@ -841,15 +825,14 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                         }
                         const center = min.add(max).scale(0.5);
                         const half_size = max.subtract(min).scale(0.5);
-                        result.buffer[result.len] = .{
+                        result.append(.{
                             .rectangle = .{
                                 .center = center,
                                 .half_size = half_size,
                                 .rotation = 0,
                             },
                             .properties = properties,
-                        };
-                        result.len += 1;
+                        }) catch break;
                     },
                     .t8 => {
                         if (floor.actor.hidden_polaris.value or floor.state == .init or floor.set_number != set_number) {
@@ -857,15 +840,14 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                         }
                         const root = floor.actor.root_component.toConstPointer() orelse continue;
                         const floor_mesh_half_size = 50;
-                        result.buffer[result.len] = .{
+                        result.append(.{
                             .rectangle = .{
                                 .center = root.relative_position.convert().swizzle("xy"),
                                 .half_size = root.relative_scale.convert().swizzle("xy").scale(floor_mesh_half_size),
                                 .rotation = root.relative_rotation.convert().y(),
                             },
                             .properties = properties,
-                        };
-                        result.len += 1;
+                        }) catch break;
                     },
                 }
             }

@@ -62,7 +62,6 @@ pub const Player = struct {
     max_attack_z: ?f32 = null,
     attack_range: ?f32 = null,
     recovery_range: ?f32 = null,
-    attack_damage: ?i32 = null,
     hit_outcome: ?model.HitOutcome = null,
     posture: ?model.Posture = null,
     blocking: ?model.Blocking = null,

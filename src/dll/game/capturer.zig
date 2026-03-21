@@ -159,7 +159,6 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 .animation_frame = player.animation_frame,
                 .animation_total_frames = player.animation_total_frames,
                 .attack_type = captureAttackType(player),
-                .attack_damage = player.attack_damage,
                 .hit_outcome = captureHitOutcome(player),
                 .posture = capturePosture(player),
                 .blocking = captureBlocking(player),

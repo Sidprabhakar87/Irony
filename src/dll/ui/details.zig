@@ -177,15 +177,6 @@ pub const Details = struct {
         null,
         drawF32Div100,
     ) = .{},
-    attack_damage: Row(
-        "Attack Damage",
-        \\Damage that the current attack inflicts to the opponent on normal hit.
-        \\Same value irregardless if the actual attack whiffs, gets blocked, normal-hits or counter-hits the opponent.
-    ,
-        i32,
-        0,
-        drawI32,
-    ) = .{},
     hit_outcome: Row(
         "Hit Outcome",
         "Outcome of the hit line hurt cylinder interaction.",
@@ -382,7 +373,6 @@ pub const Details = struct {
         self.attack_range.processFrame(s, c1.attack_range, c2.attack_range);
         self.attack_height.processFrame(s, c1.getAttackHeight(frame.floor_z), c2.getAttackHeight(frame.floor_z));
         self.recovery_range.processFrame(s, c1.recovery_range, c2.recovery_range);
-        self.attack_damage.processFrame(s, c1.attack_damage, c2.attack_damage);
         self.hit_outcome.processFrame(s, c1.hit_outcome, c2.hit_outcome);
         self.posture.processFrame(s, c1.posture, c2.posture);
         self.blocking.processFrame(s, c1.blocking, c2.blocking);
@@ -1765,41 +1755,6 @@ test "should draw recovery range correctly" {
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/1.23");
             try ctx.expectItemExists("cell_2/-4.57");
-        }
-    };
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
-}
-
-test "should draw attack damage correctly" {
-    const Test = struct {
-        var settings = model.DetailsSettings{};
-        var details = Details{};
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            _ = imgui.igBegin("Window", null, 0);
-            defer imgui.igEnd();
-            details.draw(&settings);
-        }
-
-        fn testFunction(ctx: sdk.ui.TestContext) !void {
-            ctx.setRef("Window/table/Attack Damage");
-
-            details.processFrame(&settings, &.{ .players = .{
-                .{ .attack_damage = null },
-                .{ .attack_damage = 0 },
-            } });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/0");
-            try ctx.expectItemExists("cell_2/0");
-
-            details.processFrame(&settings, &.{ .players = .{
-                .{ .attack_damage = 123 },
-                .{ .attack_damage = 456 },
-            } });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/123");
-            try ctx.expectItemExists("cell_2/456");
         }
     };
     const context = try sdk.ui.getTestingContext();

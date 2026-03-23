@@ -14,6 +14,89 @@ pub const Details = struct {
         null,
         drawU32,
     ) = .{},
+    frames_left_in_round: Row(
+        "Frames Left In Round",
+        \\Number of frames left before the round clock hits zero.
+        \\Can freeze during rage arts.
+    ,
+        u32,
+        null,
+        drawU32,
+    ) = .{},
+    player_name: Row(
+        "Player Name",
+        \\Name of the player.
+    ,
+        model.PlayerName,
+        .empty,
+        drawPlayerName,
+    ) = .{},
+    rounds_won: Row(
+        "Rounds Won",
+        \\Number of rounds that the player won in the current match.
+    ,
+        u32,
+        null,
+        drawU32,
+    ) = .{},
+    rounds_needed_to_win: Row(
+        "Rounds Needed To Win",
+        \\Number of rounds that the player needs to win to win the current match.
+    ,
+        u32,
+        null,
+        drawU32,
+    ) = .{},
+    health: Row(
+        "Health",
+        "Health points that keep the player in the fight.",
+        i32,
+        null,
+        drawI32,
+    ) = .{},
+    recoverable_health: Row(
+        "Recoverable Health",
+        "Health points that the player can recover.",
+        i32,
+        null,
+        drawI32,
+    ) = .{},
+    health_recover_limit: Row(
+        "Health Recover Limit",
+        "Limit to health points that the player can reach by recovering all recoverable health.",
+        i32,
+        null,
+        drawI32,
+    ) = .{},
+    max_health: Row(
+        "Max Health",
+        "Health points that the player has when the health bar is full.",
+        i32,
+        null,
+        drawI32,
+    ) = .{},
+    rage: Row(
+        "Rage",
+        \\One of the following:
+        \\Available - Rage not active but can get activated once player's health drops low enough.
+        \\Activated - Player's health dropped low enough to activate rage, but player did not use rage art yet.
+        \\Used Up - Player previously used rage art and therefor can no longer enter rage in this round.
+    ,
+        model.Rage,
+        null,
+        drawRage,
+    ) = .{},
+    heat: Row(
+        "Heat",
+        \\One of the following:
+        \\Available - Heat not yet activated but can get activated with a heat burst or heat engager.
+        \\Activated - Player is currently in heat. The amount of heat bar remaining is displayed as a percentage.
+        \\Used Up - Heat already used up and player can no longer enter heat in this round.
+    ,
+        model.Heat,
+        null,
+        drawHeat,
+    ) = .{},
     character_id: Row(
         "Character ID",
         "ID of the character that the player is currently playing.",
@@ -184,6 +267,22 @@ pub const Details = struct {
         .none,
         drawHitOutcome,
     ) = .{},
+    combo_hits: Row(
+        "Combo Hits",
+        \\Number of hits landed during the current combo.
+    ,
+        u32,
+        0,
+        drawU32,
+    ) = .{},
+    combo_damage: Row(
+        "Combo Damage",
+        \\Damage inflicted on the opponent during the current combo.
+    ,
+        u32,
+        0,
+        drawU32,
+    ) = .{},
     posture: Row(
         "Posture",
         \\One of the following:
@@ -249,35 +348,6 @@ pub const Details = struct {
         model.Input,
         null,
         drawInput,
-    ) = .{},
-    health: Row(
-        "Health",
-        "Remaining health points that the player has.",
-        i32,
-        null,
-        drawI32,
-    ) = .{},
-    rage: Row(
-        "Rage",
-        \\One of the following:
-        \\Available - Rage not active but can get activated once player's health drops low enough.
-        \\Activated - Player's health dropped low enough to activate rage, but player did not use rage art yet.
-        \\Used Up - Player previously used rage art and therefor can no longer enter rage in this round.
-    ,
-        model.Rage,
-        null,
-        drawRage,
-    ) = .{},
-    heat: Row(
-        "Heat",
-        \\One of the following:
-        \\Available - Heat not yet activated but can get activated with a heat burst or heat engager.
-        \\Activated - Player is currently in heat. The amount of heat bar remaining is displayed as a percentage.
-        \\Used Up - Heat already used up and player can no longer enter heat in this round.
-    ,
-        model.Heat,
-        null,
-        drawHeat,
     ) = .{},
     distance_to_opponent: Row(
         "Distance To Opponent [m]",
@@ -358,6 +428,16 @@ pub const Details = struct {
         };
         const s = settings;
         self.frames_since_round_start.processFrame(s, frame.frames_since_round_start, frame.frames_since_round_start);
+        self.frames_left_in_round.processFrame(s, frame.frames_left_in_round, frame.frames_left_in_round);
+        self.player_name.processFrame(s, c1.name, c2.name);
+        self.rounds_won.processFrame(s, c1.rounds_won, c2.rounds_won);
+        self.rounds_needed_to_win.processFrame(s, frame.rounds_needed_to_win, frame.rounds_needed_to_win);
+        self.health.processFrame(s, c1.health, c2.health);
+        self.recoverable_health.processFrame(s, c1.getRecoverableHealth(), c2.getRecoverableHealth());
+        self.health_recover_limit.processFrame(s, c1.health_recover_limit, c2.health_recover_limit);
+        self.max_health.processFrame(s, c1.max_health, c2.max_health);
+        self.rage.processFrame(s, c1.rage, c2.rage);
+        self.heat.processFrame(s, c1.heat, c2.heat);
         self.character_id.processFrame(s, c1.character_id, c2.character_id);
         self.animation_id.processFrame(s, c1.animation_id, c2.animation_id);
         self.animation_frame.processFrame(s, c1.animation_frame, c2.animation_frame);
@@ -374,14 +454,13 @@ pub const Details = struct {
         self.attack_height.processFrame(s, c1.getAttackHeight(frame.floor_z), c2.getAttackHeight(frame.floor_z));
         self.recovery_range.processFrame(s, c1.recovery_range, c2.recovery_range);
         self.hit_outcome.processFrame(s, c1.hit_outcome, c2.hit_outcome);
+        self.combo_hits.processFrame(s, c1.combo_hits, c2.combo_hits);
+        self.combo_damage.processFrame(s, c1.combo_damage, c2.combo_damage);
         self.posture.processFrame(s, c1.posture, c2.posture);
         self.blocking.processFrame(s, c1.blocking, c2.blocking);
         self.crushing.processFrame(s, c1.crushing, c2.crushing);
         self.can_move.processFrame(s, c1.can_move, c2.can_move);
         self.input.processFrame(s, c1.input, c2.input);
-        self.health.processFrame(s, c1.health, c2.health);
-        self.rage.processFrame(s, c1.rage, c2.rage);
-        self.heat.processFrame(s, c1.heat, c2.heat);
         self.distance_to_opponent.processFrame(s, c1.getDistanceTo(c2), c2.getDistanceTo(c1));
         self.angle_to_opponent.processFrame(s, c1.getAngleTo(c2), c2.getAngleTo(c1));
         self.distance_to_wall.processFrame(
@@ -587,6 +666,16 @@ fn drawF32Div100(value: f32, alpha: f32) void {
 
 fn drawF32Degrees(value: f32, alpha: f32) void {
     drawF32(std.math.radiansToDegrees(value), alpha);
+}
+
+fn drawPlayerName(value: model.PlayerName, alpha: f32) void {
+    if (value.len == 0) {
+        drawText(empty_value_string, alpha);
+        return;
+    }
+    var buffer: [string_buffer_size]u8 = undefined;
+    const text = std.fmt.bufPrintZ(&buffer, "{s}", .{value.asSlice()}) catch error_string;
+    drawText(text, alpha);
 }
 
 fn drawU32ActualMax(value: model.U32ActualMax, alpha: f32) void {
@@ -1234,6 +1323,346 @@ test "should draw frames since round start correctly" {
     try context.runTest(.{}, Test.guiFunction, Test.testFunction);
 }
 
+test "should draw frames left in round correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Frames Left In Round");
+
+            details.processFrame(&settings, &.{ .frames_left_in_round = null });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/---");
+
+            details.processFrame(&settings, &.{ .frames_left_in_round = 0 });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/0");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .frames_left_in_round = 123 });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/123");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw player name correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Player Name");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .name = .empty },
+                .{ .name = .fromArray("Player Name".*) },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/Player Name");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw rounds won correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Rounds Won");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .rounds_won = null },
+                .{ .rounds_won = 0 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .rounds_won = 123 },
+                .{ .rounds_won = 456 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/456");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw rounds needed to win correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Rounds Needed To Win");
+
+            details.processFrame(&settings, &.{ .rounds_needed_to_win = null });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/---");
+
+            details.processFrame(&settings, &.{ .rounds_needed_to_win = 0 });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/0");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .rounds_needed_to_win = 123 });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/123");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw health correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Health");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .health = null },
+                .{ .health = 0 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .health = 123 },
+                .{ .health = 456 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/456");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw recoverable health correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Recoverable Health");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .health = null, .health_recover_limit = null },
+                .{ .health = 100, .health_recover_limit = 100 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .health = 100, .health_recover_limit = 223 },
+                .{ .health = 100, .health_recover_limit = 556 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/456");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw health recover limit correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Health Recover Limit");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .health_recover_limit = null },
+                .{ .health_recover_limit = 0 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .health_recover_limit = 123 },
+                .{ .health_recover_limit = 456 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/456");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw max health correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Max Health");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .max_health = null },
+                .{ .max_health = 0 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .max_health = 123 },
+                .{ .max_health = 456 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/456");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw rage correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Rage");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .rage = null },
+                .{ .rage = .available },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/Available");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .rage = .activated },
+                .{ .rage = .used_up },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Activated");
+            try ctx.expectItemExists("cell_2/Used Up");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw heat correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Heat");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .heat = null },
+                .{ .heat = .available },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/Available");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .heat = .{ .activated = .{ .gauge = 0.1234567 } } },
+                .{ .heat = .used_up },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Activated: 12.3%");
+            try ctx.expectItemExists("cell_2/Used Up");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
 test "should draw character ID correctly" {
     const Test = struct {
         var settings = model.DetailsSettings{};
@@ -1368,6 +1797,49 @@ test "should draw animation total frames correctly" {
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/123");
             try ctx.expectItemExists("cell_2/456");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw move phase correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Move Phase");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .move_phase = null },
+                .{ .move_phase = .neutral },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/Neutral");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .move_phase = .start_up },
+                .{ .move_phase = .active },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Start Up");
+            try ctx.expectItemExists("cell_2/Active");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .move_phase = .active_recovery },
+                .{ .move_phase = .recovery },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Active Recovery");
+            try ctx.expectItemExists("cell_2/Recovery");
         }
     };
     const context = try sdk.ui.getTestingContext();
@@ -1532,6 +2004,53 @@ test "should draw recovery frames correctly" {
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/3 (--- - 4)");
             try ctx.expectItemExists("cell_2/3 (2 - 4)");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw total frames correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Total Frames");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{
+                    .animation_total_frames = null,
+                    .animation_to_move_delta = 123,
+                },
+                .{
+                    .animation_total_frames = 123,
+                    .animation_to_move_delta = null,
+                },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/---");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{
+                    .animation_total_frames = 123,
+                    .animation_to_move_delta = 0,
+                },
+                .{
+                    .animation_total_frames = 123,
+                    .animation_to_move_delta = 23,
+                },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/100");
         }
     };
     const context = try sdk.ui.getTestingContext();
@@ -1852,6 +2371,76 @@ test "should draw hit outcome correctly" {
     try context.runTest(.{}, Test.guiFunction, Test.testFunction);
 }
 
+test "should draw combo hits correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Combo Hits");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .combo_hits = null },
+                .{ .combo_hits = 0 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/0");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .combo_hits = 123 },
+                .{ .combo_hits = 456 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/456");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw combo damage" {
+    const Test = struct {
+        var settings = model.DetailsSettings{};
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Combo Damage");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .combo_damage = null },
+                .{ .combo_damage = 0 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/0");
+            try ctx.expectItemExists("cell_2/0");
+
+            details.processFrame(&settings, &.{ .players = .{
+                .{ .combo_damage = 123 },
+                .{ .combo_damage = 456 },
+            } });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/123");
+            try ctx.expectItemExists("cell_2/456");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
 test "should draw posture correctly" {
     const Test = struct {
         var settings = model.DetailsSettings{};
@@ -2110,111 +2699,6 @@ test "should draw input correctly" {
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/bR");
             try ctx.expectItemExists("cell_2/db1+2+3+4+SS+R+H");
-        }
-    };
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
-}
-
-test "should draw health correctly" {
-    const Test = struct {
-        var settings = model.DetailsSettings{};
-        var details = Details{};
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            _ = imgui.igBegin("Window", null, 0);
-            defer imgui.igEnd();
-            details.draw(&settings);
-        }
-
-        fn testFunction(ctx: sdk.ui.TestContext) !void {
-            ctx.setRef("Window/table/Health");
-
-            details.processFrame(&settings, &.{ .players = .{
-                .{ .health = null },
-                .{ .health = 0 },
-            } });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/---");
-            try ctx.expectItemExists("cell_2/0");
-
-            details.processFrame(&settings, &.{ .players = .{
-                .{ .health = 123 },
-                .{ .health = 456 },
-            } });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/123");
-            try ctx.expectItemExists("cell_2/456");
-        }
-    };
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
-}
-
-test "should draw rage correctly" {
-    const Test = struct {
-        var settings = model.DetailsSettings{};
-        var details = Details{};
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            _ = imgui.igBegin("Window", null, 0);
-            defer imgui.igEnd();
-            details.draw(&settings);
-        }
-
-        fn testFunction(ctx: sdk.ui.TestContext) !void {
-            ctx.setRef("Window/table/Rage");
-
-            details.processFrame(&settings, &.{ .players = .{
-                .{ .rage = null },
-                .{ .rage = .available },
-            } });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/---");
-            try ctx.expectItemExists("cell_2/Available");
-
-            details.processFrame(&settings, &.{ .players = .{
-                .{ .rage = .activated },
-                .{ .rage = .used_up },
-            } });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/Activated");
-            try ctx.expectItemExists("cell_2/Used Up");
-        }
-    };
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
-}
-
-test "should draw heat correctly" {
-    const Test = struct {
-        var settings = model.DetailsSettings{};
-        var details = Details{};
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            _ = imgui.igBegin("Window", null, 0);
-            defer imgui.igEnd();
-            details.draw(&settings);
-        }
-
-        fn testFunction(ctx: sdk.ui.TestContext) !void {
-            ctx.setRef("Window/table/Heat");
-
-            details.processFrame(&settings, &.{ .players = .{
-                .{ .heat = null },
-                .{ .heat = .available },
-            } });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/---");
-            try ctx.expectItemExists("cell_2/Available");
-
-            details.processFrame(&settings, &.{ .players = .{
-                .{ .heat = .{ .activated = .{ .gauge = 0.1234567 } } },
-                .{ .heat = .used_up },
-            } });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/Activated: 12.3%");
-            try ctx.expectItemExists("cell_2/Used Up");
         }
     };
     const context = try sdk.ui.getTestingContext();

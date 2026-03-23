@@ -6,28 +6,25 @@ const game = @import("root.zig");
 
 pub fn Memory(comptime game_id: build_info.Game) type {
     return struct {
-        player_1: PlayerProxy,
-        player_2: PlayerProxy,
-        main_player_name: sdk.memory.Proxy(PlayerName),
-        secondary_player_name: sdk.memory.Proxy(PlayerName),
-        match: MatchPointer,
-        ruleset: RulesetPointer,
-        camera_manager: CameraManagerPointer = .fromPointer(null),
-        walls: [max_walls]WallPointer = [1]WallPointer{.fromPointer(null)} ** max_walls,
-        floors: [max_floors]FloorPointer = [1]FloorPointer{.fromPointer(null)} ** max_floors,
-        player_starts: [max_player_starts]PlayerStartPointer = [1]PlayerStartPointer{.fromPointer(null)} ** max_player_starts,
+        player_1: Proxy(game.Player(game_id)),
+        player_2: Proxy(game.Player(game_id)),
+        main_player_name: Proxy(game.PlayerName),
+        secondary_player_name: Proxy(game.PlayerName),
+        match: Pointer(game.Match(game_id)),
+        ruleset: Pointer(game.Ruleset(game_id)),
+        camera_manager: Pointer(game.CameraManager(game_id)) = .fromPointer(null),
+        walls: [max_walls]Pointer(game.Wall(game_id)) =
+            [1]Pointer(game.Wall(game_id)){.fromPointer(null)} ** max_walls,
+        floors: [max_floors]Pointer(game.Floor(game_id)) =
+            [1]Pointer(game.Floor(game_id)){.fromPointer(null)} ** max_floors,
+        player_starts: [max_player_starts]Pointer(game.PlayerStart(game_id)) =
+            [1]Pointer(game.PlayerStart(game_id)){.fromPointer(null)} ** max_player_starts,
         functions: Functions,
         unreal_classes: UnrealClasses = .{},
 
         const Self = @This();
-        const PlayerName = [player_name_max_bytes]u8;
-        const PlayerProxy = sdk.memory.Proxy(game.Player(game_id));
-        const MatchPointer = sdk.memory.Pointer(game.Match(game_id));
-        const RulesetPointer = sdk.memory.Pointer(game.Ruleset(game_id));
-        const CameraManagerPointer = sdk.memory.Pointer(game.CameraManager(game_id));
-        const WallPointer = sdk.memory.Pointer(game.Wall(game_id));
-        const FloorPointer = sdk.memory.Pointer(game.Floor(game_id));
-        const PlayerStartPointer = sdk.memory.Pointer(game.PlayerStart(game_id));
+        const Proxy = sdk.memory.Proxy;
+        const Pointer = sdk.memory.Pointer;
         pub const Functions = switch (game_id) {
             .t7 => struct {
                 tick: ?*const game.TickFunction(.t7) = null,
@@ -53,7 +50,6 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         };
 
         const pattern_cache_file_name = "pattern_cache_" ++ @tagName(game_id) ++ ".json";
-        pub const player_name_max_bytes = 32;
         pub const max_walls = 256;
         pub const max_floors = 16;
         pub const max_player_starts = 32;
@@ -76,8 +72,8 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub fn testingInit(params: struct {
             player_1: ?*const game.Player(game_id) = null,
             player_2: ?*const game.Player(game_id) = null,
-            main_player_name: ?*const PlayerName = null,
-            secondary_player_name: ?*const PlayerName = null,
+            main_player_name: ?*const game.PlayerName = null,
+            secondary_player_name: ?*const game.PlayerName = null,
             match: ?*const game.Match(game_id) = null,
             ruleset: ?*const game.Ruleset(game_id) = null,
             camera_manager: ?*const game.CameraManager(game_id) = null,
@@ -95,8 +91,8 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     comptime Element: type,
                     comptime array_len: usize,
                     slice: []const Element,
-                ) [array_len]sdk.memory.Pointer(Element) {
-                    var array = [1]sdk.memory.Pointer(Element){.fromPointer(null)} ** array_len;
+                ) [array_len]Pointer(Element) {
+                    var array = [1]Pointer(Element){.fromPointer(null)} ** array_len;
                     if (slice.len > array.len) {
                         @panic("Slice does not fit into the array.");
                     }
@@ -132,7 +128,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     relativeOffset(i32, add(0xD, pattern(cache, "48 8B 15 ?? ?? ?? ?? 44 8B C3"))),
                     0x0,
                 }),
-                .main_player_name = proxy("main_player_name", PlayerName, .{
+                .main_player_name = proxy("main_player_name", game.PlayerName, .{
                     relativeOffset(i32, add(0x9, pattern(
                         cache,
                         "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? 48 83 3D ?? ?? ?? ?? 00",
@@ -141,7 +137,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x0,
                     0x11C,
                 }),
-                .secondary_player_name = proxy("secondary_player_name", PlayerName, .{
+                .secondary_player_name = proxy("secondary_player_name", game.PlayerName, .{
                     relativeOffset(i32, add(0x9, pattern(
                         cache,
                         "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? 48 83 3D ?? ?? ?? ?? 00",
@@ -203,7 +199,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x38,
                     0x0,
                 }),
-                .main_player_name = proxy("main_player_name", PlayerName, .{
+                .main_player_name = proxy("main_player_name", game.PlayerName, .{
                     relativeOffset(i32, add(0x9, pattern(
                         cache,
                         "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? BA 01 00 00 00",
@@ -213,7 +209,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x20,
                     0xB0,
                 }),
-                .secondary_player_name = proxy("secondary_player_name", PlayerName, .{
+                .secondary_player_name = proxy("secondary_player_name", game.PlayerName, .{
                     relativeOffset(i32, add(0x9, pattern(
                         cache,
                         "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? BA 01 00 00 00",

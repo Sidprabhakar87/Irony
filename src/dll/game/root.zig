@@ -44,6 +44,7 @@ pub const CollisionSphere = @import("types.zig").CollisionSphere;
 pub const CollisionSpheres = @import("types.zig").CollisionSpheres;
 pub const Health = @import("types.zig").Health;
 pub const Player = @import("types.zig").Player;
+pub const PlayerName = @import("types.zig").PlayerName;
 pub const Animation = @import("types.zig").Animation;
 pub const GlobalKey = @import("types.zig").GlobalKey;
 pub const Match = @import("types.zig").Match;

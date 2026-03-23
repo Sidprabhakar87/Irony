@@ -47,7 +47,11 @@ pub const PlayerRole = enum(u1) {
     }
 };
 
+pub const PlayerName = sdk.misc.BoundedArray(32, u8, 0);
+
 pub const Player = struct {
+    name: model.PlayerName = .empty,
+    rounds_won: ?u32 = null,
     character_id: ?u32 = null,
     animation_id: ?u32 = null,
     animation_frame: ?u32 = null,
@@ -63,12 +67,16 @@ pub const Player = struct {
     attack_range: ?f32 = null,
     recovery_range: ?f32 = null,
     hit_outcome: ?model.HitOutcome = null,
+    combo_hits: ?u32 = null,
+    combo_damage: ?u32 = null,
     posture: ?model.Posture = null,
     blocking: ?model.Blocking = null,
     crushing: ?model.Crushing = null,
     can_move: ?bool = null,
     input: ?model.Input = null,
     health: ?i32 = null,
+    health_recover_limit: ?i32 = null,
+    max_health: ?i32 = null,
     rage: ?model.Rage = null,
     heat: ?model.Heat = null,
     rotation: ?f32 = null,
@@ -109,6 +117,12 @@ pub const Player = struct {
             .left_ankle = cylinders.getPtrConst(.left_ankle).cylinder.center,
             .right_ankle = cylinders.getPtrConst(.right_ankle).cylinder.center,
         });
+    }
+
+    pub fn getRecoverableHealth(self: *const Self) ?i32 {
+        const health = self.health orelse return null;
+        const limit = self.health_recover_limit orelse return null;
+        return limit -| health;
     }
 
     pub fn getMoveFrame(self: *const Self) ?u32 {
@@ -515,6 +529,12 @@ test "Player.getSkeleton should return correct value" {
         .right_ankle = .fromArray(.{ 46, 47, 48 }),
     }), player.getSkeleton());
     try testing.expectEqual(null, (Player{}).getSkeleton());
+}
+
+test "Player.getRecoverableHealth should return correct value" {
+    try testing.expectEqual(20, (Player{ .health = 80, .health_recover_limit = 100 }).getRecoverableHealth());
+    try testing.expectEqual(null, (Player{ .health = null, .health_recover_limit = 100 }).getRecoverableHealth());
+    try testing.expectEqual(null, (Player{ .health = 80, .health_recover_limit = null }).getRecoverableHealth());
 }
 
 test "Player.getMoveFrame should return correct value" {

@@ -367,6 +367,8 @@ pub fn Player(comptime game_id: build_info.Game) type {
     };
 }
 
+pub const PlayerName = [32]u8;
+
 // MovesetExtractor: TK__Move
 pub fn Animation(comptime game_id: build_info.Game) type {
     return switch (game_id) {

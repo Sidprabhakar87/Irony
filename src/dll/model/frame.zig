@@ -3,7 +3,9 @@ const sdk = @import("../../sdk/root.zig");
 const model = @import("root.zig");
 
 pub const Frame = struct {
+    rounds_needed_to_win: ?u32 = null,
     frames_since_round_start: ?u32 = null,
+    frames_left_in_round: ?u32 = null,
     floor_z: ?f32 = null,
     players: [2]model.Player = .{ .{}, .{} },
     camera: ?model.Camera = null,

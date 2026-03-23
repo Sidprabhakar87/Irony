@@ -33,6 +33,7 @@ pub const ActivatedHeat = @import("misc.zig").ActivatedHeat;
 pub const PlayerId = @import("player.zig").PlayerId;
 pub const PlayerSide = @import("player.zig").PlayerSide;
 pub const PlayerRole = @import("player.zig").PlayerRole;
+pub const PlayerName = @import("player.zig").PlayerName;
 pub const Player = @import("player.zig").Player;
 pub const Settings = @import("settings.zig").Settings;
 pub const HitLinesSettings = @import("settings.zig").HitLinesSettings;

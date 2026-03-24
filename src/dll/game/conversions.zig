@@ -208,7 +208,7 @@ pub fn encryptHeatGauge(value: f32) u32 {
 
 pub fn decryptHealth(value: game.Health) game.Health {
     var converted = value;
-    converted.value = cc(i32, decryptHealthInner(converted.value, cc(i64, converted.encryption_key)));
+    converted.value = cc(u32, decryptHealthInner(cc(i32, converted.value), cc(i64, converted.encryption_key)));
     converted.value = converted.value >> 16;
     return converted;
 }
@@ -216,7 +216,7 @@ pub fn decryptHealth(value: game.Health) game.Health {
 pub fn encryptHealth(value: game.Health) game.Health {
     var converted = value;
     converted.value = converted.value << 16;
-    converted.value = cc(i32, encryptHealthInner(converted.value, cc(i64, converted.encryption_key)));
+    converted.value = cc(u32, encryptHealthInner(cc(i32, converted.value), cc(i64, converted.encryption_key)));
     return converted;
 }
 

@@ -74,9 +74,9 @@ pub const Player = struct {
     crushing: ?model.Crushing = null,
     can_move: ?bool = null,
     input: ?model.Input = null,
-    health: ?i32 = null,
-    health_recover_limit: ?i32 = null,
-    max_health: ?i32 = null,
+    health: ?u32 = null,
+    health_recover_limit: ?u32 = null,
+    max_health: ?u32 = null,
     rage: ?model.Rage = null,
     heat: ?model.Heat = null,
     rotation: ?f32 = null,
@@ -119,7 +119,7 @@ pub const Player = struct {
         });
     }
 
-    pub fn getRecoverableHealth(self: *const Self) ?i32 {
+    pub fn getRecoverableHealth(self: *const Self) ?u32 {
         const health = self.health orelse return null;
         const limit = self.health_recover_limit orelse return null;
         return limit -| health;

@@ -291,7 +291,7 @@ pub const CollisionSpheres = extern struct {
 };
 
 pub const Health = extern struct {
-    value: i32 = 0,
+    value: u32 = 0,
     _padding: u32 = 0,
     encryption_key: u64 = 0,
 };
@@ -302,7 +302,7 @@ pub fn Player(comptime game_id: build_info.Game) type {
     const Rotation = Converted(u16, f32, game.u16ToRadians, game.u16FromRadians);
     const HeatGauge = Converted(u32, f32, game.decryptHeatGauge, game.encryptHeatGauge);
     const HealthValue = Converted(Health, Health, game.decryptHealth, game.encryptHealth);
-    const T7MaxHealth = Converted(i32, i32, game.bitShiftRight(i32, 16), game.bitShiftLeft(i32, 16));
+    const T7MaxHealth = Converted(u32, u32, game.bitShiftRight(u32, 16), game.bitShiftLeft(u32, 16));
     @setEvalBranchQuota(40000);
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{

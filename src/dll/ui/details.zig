@@ -50,30 +50,30 @@ pub const Details = struct {
     health: Row(
         "Health",
         "Health points that keep the player in the fight.",
-        i32,
+        u32,
         null,
-        drawI32,
+        drawU32,
     ) = .{},
     recoverable_health: Row(
         "Recoverable Health",
         "Health points that the player can recover.",
-        i32,
+        u32,
         null,
-        drawI32,
+        drawU32,
     ) = .{},
     health_recover_limit: Row(
         "Health Recover Limit",
         "Limit to health points that the player can reach by recovering all recoverable health.",
-        i32,
+        u32,
         null,
-        drawI32,
+        drawU32,
     ) = .{},
     max_health: Row(
         "Max Health",
         "Health points that the player has when the health bar is full.",
-        i32,
+        u32,
         null,
-        drawI32,
+        drawU32,
     ) = .{},
     rage: Row(
         "Rage",
@@ -643,12 +643,6 @@ fn drawYesNo(value: bool, alpha: f32) void {
 }
 
 fn drawU32(value: u32, alpha: f32) void {
-    var buffer: [string_buffer_size]u8 = undefined;
-    const text = std.fmt.bufPrintZ(&buffer, "{}", .{value}) catch error_string;
-    drawText(text, alpha);
-}
-
-fn drawI32(value: i32, alpha: f32) void {
     var buffer: [string_buffer_size]u8 = undefined;
     const text = std.fmt.bufPrintZ(&buffer, "{}", .{value}) catch error_string;
     drawText(text, alpha);

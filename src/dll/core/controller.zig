@@ -72,7 +72,6 @@ pub const Controller = struct {
             ?bool,
             ?u32,
             ?f32,
-            ?i32,
             ?model.MovePhase,
             ?model.AttackType,
             ?model.HitOutcome,

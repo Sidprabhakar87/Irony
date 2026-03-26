@@ -7,6 +7,7 @@ const model = @import("../model/root.zig");
 const ui = @import("root.zig");
 
 pub const MainWindow = struct {
+    match_bar: ui.MatchBar = .{},
     quadrant_layout: ui.QuadrantLayout = .{},
     view: ui.View = .{},
     details: ui.Details = .{},
@@ -23,11 +24,13 @@ pub const MainWindow = struct {
     };
 
     pub fn processFrame(self: *Self, settings: *const model.Settings, frame: *const model.Frame) void {
+        self.match_bar.processFrame(&settings.match_bar, frame);
         self.view.processFrame(settings, frame);
         self.details.processFrame(&settings.details, frame);
     }
 
     pub fn update(self: *Self, delta_time: f32, controller: *core.Controller) void {
+        self.match_bar.update(delta_time);
         self.view.update(delta_time);
         self.details.update(delta_time);
         self.file_menu.update(controller);
@@ -79,6 +82,7 @@ pub const MainWindow = struct {
             latest_version,
             memory_usage,
         );
+        self.match_bar.draw(&settings.match_bar);
         if (imgui.igBeginChild_Str("views", .{ .y = -self.controls_height }, 0, imgui.ImGuiWindowFlags_NoScrollbar)) {
             const context = QuadrantContext{
                 .self = self,

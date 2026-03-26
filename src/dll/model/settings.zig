@@ -12,6 +12,7 @@ pub const Settings = struct {
     stage: StageSettings = .{},
     ingame_camera: IngameCameraSettings = .{},
     measure_tool: MeasureToolSettings = .{},
+    match_bar: MatchBarSettings = .{},
     details: DetailsSettings = .{},
     misc: MiscSettings = .{},
 
@@ -364,6 +365,36 @@ pub const MeasureToolSettings = struct {
     pub const ColorAndThickness = struct {
         color: sdk.math.Vec4,
         thickness: f32,
+    };
+};
+
+pub const MatchBarSettings = struct {
+    enabled: bool = true,
+    health_bar: HealthBar = .{},
+    heat_bar: HeatBar = .{},
+    round_count: RoundCount = .{},
+
+    pub const HealthBar = struct {
+        text_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 1.0, 1.0 }),
+        background_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 1.0, 0.06 }),
+        health_color: sdk.math.Vec4 = .fromArray(.{ 0.0, 1.0, 0.0, 0.5 }),
+        recoverable_health_color: sdk.math.Vec4 = .fromArray(.{ 0.5, 0.5, 0.5, 0.5 }),
+        combo_damage_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 0.0, 0.0, 0.5 }),
+        combo_damage_animation_duration: f32 = 0.5,
+        rage_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 0.0, 0.0, 0.5 }),
+        rage_thickness: f32 = 2,
+    };
+    pub const HeatBar = struct {
+        text_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 1.0, 1.0 }),
+        background_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 1.0, 0.06 }),
+        fill_color: sdk.math.Vec4 = .fromArray(.{ 0.0, 0.0, 1.0, 0.5 }),
+        activated_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 1.0, 0.5 }),
+        activated_thickness: f32 = 2,
+    };
+    pub const RoundCount = struct {
+        empty_circle_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 1.0, 0.06 }),
+        filled_circle_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 0.0, 0.75 }),
+        animation_duration: f32 = 0.2,
     };
 };
 

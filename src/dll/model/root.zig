@@ -44,6 +44,7 @@ pub const ForwardDirectionSettings = @import("settings.zig").ForwardDirectionSet
 pub const StageSettings = @import("settings.zig").StageSettings;
 pub const IngameCameraSettings = @import("settings.zig").IngameCameraSettings;
 pub const MeasureToolSettings = @import("settings.zig").MeasureToolSettings;
+pub const MatchBarSettings = @import("settings.zig").MatchBarSettings;
 pub const DetailsSettings = @import("settings.zig").DetailsSettings;
 pub const PlayerSettingsMode = @import("settings.zig").PlayerSettingsMode;
 pub const PlayerSettings = @import("settings.zig").PlayerSettings;

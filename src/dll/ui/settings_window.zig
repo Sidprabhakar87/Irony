@@ -161,6 +161,14 @@ pub const SettingsWindow = struct {
                 }.call,
             },
             .{
+                .name = "Match Bar",
+                .content = struct {
+                    fn call(c: *const Context) void {
+                        drawMatchBarSettings(&c.settings.match_bar, &default_settings.match_bar);
+                    }
+                }.call,
+            },
+            .{
                 .name = "Details Table",
                 .content = struct {
                     fn call(c: *const Context) void {
@@ -793,6 +801,72 @@ fn drawMeasureToolSettings(value: *model.MeasureToolSettings, default: *const mo
     drawColorAndThickness("Hovered Point", &value.hovered_point, &default.hovered_point);
     drawColor("Text Color", &value.text_color, &default.text_color);
     drawThickness("Hover Distance", &value.hover_distance, &default.hover_distance);
+}
+
+fn drawMatchBarSettings(value: *model.MatchBarSettings, default: *const model.MatchBarSettings) void {
+    const drawHealthBar = struct {
+        fn call(
+            label: [:0]const u8,
+            v: *model.MatchBarSettings.HealthBar,
+            d: *const model.MatchBarSettings.HealthBar,
+        ) void {
+            imgui.igText("%s", label.ptr);
+            imgui.igPushID_Str(label);
+            defer imgui.igPopID();
+            imgui.igIndent(0);
+            defer imgui.igUnindent(0);
+            drawColor("Text Color", &v.text_color, &d.text_color);
+            drawColor("Background Color", &v.background_color, &d.background_color);
+            drawColor("Health Color", &v.health_color, &d.health_color);
+            drawColor("Recoverable Health Color", &v.recoverable_health_color, &d.recoverable_health_color);
+            drawColor("Combo Damage Color", &v.combo_damage_color, &d.combo_damage_color);
+            drawDuration("Animation Duration", &v.combo_damage_animation_duration, &d.combo_damage_animation_duration);
+            drawColor("Rage Color", &v.rage_color, &d.rage_color);
+            drawThickness("Rage Thickness", &v.rage_thickness, &d.rage_thickness);
+        }
+    }.call;
+    const drawHeatBar = struct {
+        fn call(
+            label: [:0]const u8,
+            v: *model.MatchBarSettings.HeatBar,
+            d: *const model.MatchBarSettings.HeatBar,
+        ) void {
+            imgui.igText("%s", label.ptr);
+            imgui.igPushID_Str(label);
+            defer imgui.igPopID();
+            imgui.igIndent(0);
+            defer imgui.igUnindent(0);
+            drawColor("Text Color", &v.text_color, &d.text_color);
+            drawColor("Background Color", &v.background_color, &d.background_color);
+            drawColor("Fill Color", &v.fill_color, &d.fill_color);
+            drawColor("Activated Color", &v.activated_color, &d.activated_color);
+            drawThickness("Activated Thickness", &v.activated_thickness, &d.activated_thickness);
+        }
+    }.call;
+    const drawRoundCount = struct {
+        fn call(
+            label: [:0]const u8,
+            v: *model.MatchBarSettings.RoundCount,
+            d: *const model.MatchBarSettings.RoundCount,
+        ) void {
+            imgui.igText("%s", label.ptr);
+            imgui.igPushID_Str(label);
+            defer imgui.igPopID();
+            imgui.igIndent(0);
+            defer imgui.igUnindent(0);
+            drawColor("Empty Circle Color", &v.empty_circle_color, &d.empty_circle_color);
+            drawColor("Filled Circle Color", &v.filled_circle_color, &d.filled_circle_color);
+            drawDuration("Animation Duration", &v.animation_duration, &d.animation_duration);
+        }
+    }.call;
+
+    drawBool("Enabled", &value.enabled, &default.enabled);
+    imgui.igBeginDisabled(!value.enabled);
+    defer imgui.igEndDisabled();
+
+    drawHealthBar("Health Bar", &value.health_bar, &default.health_bar);
+    drawHeatBar("Heat Bar", &value.heat_bar, &default.heat_bar);
+    drawRoundCount("Round Count", &value.round_count, &default.round_count);
 }
 
 fn drawDetailsSettings(value: *model.DetailsSettings, default: *const model.DetailsSettings) void {
@@ -1769,6 +1843,125 @@ test "measure tool settings should function correctly" {
             try testing.expectEqual(123, current.hover_distance);
             ctx.itemClick("Hover Distance/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.hover_distance, current.hover_distance);
+        }
+    };
+    Test.window = .init(testing.allocator);
+    defer Test.window.deinit();
+    Test.window.is_open = true;
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "match bar settings should function correctly" {
+    const Test = struct {
+        const default_settings = model.Settings{};
+        var settings = default_settings;
+        var window: SettingsWindow = undefined;
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            window.draw(&testing_base_dir, &settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            const current = &settings.match_bar;
+            const default = &default_settings.match_bar;
+
+            ctx.setRef(SettingsWindow.name);
+            ctx.itemClick("**/Match Bar", imgui.ImGuiMouseButton_Left, 0);
+            ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
+
+            ctx.itemUncheck("Enabled", 0);
+            try testing.expectEqual(false, current.enabled);
+            ctx.itemClick("Enabled/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.enabled, current.enabled);
+            ctx.itemCheck("Enabled", 0);
+            try testing.expectEqual(true, current.enabled);
+
+            ctx.itemInputValueFloat("Health Bar/Text Color/##X", 153);
+            try testing.expectEqual(0.6, current.health_bar.text_color.x());
+            ctx.itemClick("Health Bar/Text Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.health_bar.text_color, current.health_bar.text_color);
+
+            ctx.itemInputValueFloat("Health Bar/Background Color/##Y", 153);
+            try testing.expectEqual(0.6, current.health_bar.background_color.y());
+            ctx.itemClick("Health Bar/Background Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.health_bar.background_color, current.health_bar.background_color);
+
+            ctx.itemInputValueFloat("Health Bar/Health Color/##Z", 153);
+            try testing.expectEqual(0.6, current.health_bar.health_color.z());
+            ctx.itemClick("Health Bar/Health Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.health_bar.health_color, current.health_bar.health_color);
+
+            ctx.itemInputValueFloat("Health Bar/Recoverable Health Color/##W", 153);
+            try testing.expectEqual(0.6, current.health_bar.recoverable_health_color.w());
+            ctx.itemClick("Health Bar/Recoverable Health Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.health_bar.recoverable_health_color,
+                current.health_bar.recoverable_health_color,
+            );
+
+            ctx.itemInputValueFloat("Health Bar/Combo Damage Color/##X", 153);
+            try testing.expectEqual(0.6, current.health_bar.combo_damage_color.x());
+            ctx.itemClick("Health Bar/Combo Damage Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.health_bar.combo_damage_color, current.health_bar.combo_damage_color);
+
+            ctx.itemInputValueFloat("Health Bar/Animation Duration", 123);
+            try testing.expectEqual(123, current.health_bar.combo_damage_animation_duration);
+            ctx.itemClick("Health Bar/Animation Duration/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(
+                default.health_bar.combo_damage_animation_duration,
+                current.health_bar.combo_damage_animation_duration,
+            );
+
+            ctx.itemInputValueFloat("Health Bar/Rage Color/##Y", 153);
+            try testing.expectEqual(0.6, current.health_bar.rage_color.y());
+            ctx.itemClick("Health Bar/Rage Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.health_bar.rage_color, current.health_bar.rage_color);
+
+            ctx.itemInputValueFloat("Health Bar/Rage Thickness", 123);
+            try testing.expectEqual(123, current.health_bar.rage_thickness);
+            ctx.itemClick("Health Bar/Rage Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.health_bar.rage_thickness, current.health_bar.rage_thickness);
+
+            ctx.itemInputValueFloat("Heat Bar/Text Color/##Z", 153);
+            try testing.expectEqual(0.6, current.heat_bar.text_color.z());
+            ctx.itemClick("Heat Bar/Text Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.heat_bar.text_color, current.heat_bar.text_color);
+
+            ctx.itemInputValueFloat("Heat Bar/Background Color/##W", 153);
+            try testing.expectEqual(0.6, current.heat_bar.background_color.w());
+            ctx.itemClick("Heat Bar/Background Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.heat_bar.background_color, current.heat_bar.background_color);
+
+            ctx.itemInputValueFloat("Heat Bar/Fill Color/##X", 153);
+            try testing.expectEqual(0.6, current.heat_bar.fill_color.x());
+            ctx.itemClick("Heat Bar/Fill Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.heat_bar.fill_color, current.heat_bar.fill_color);
+
+            ctx.itemInputValueFloat("Heat Bar/Activated Color/##Y", 153);
+            try testing.expectEqual(0.6, current.heat_bar.activated_color.y());
+            ctx.itemClick("Heat Bar/Activated Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.heat_bar.activated_color, current.heat_bar.activated_color);
+
+            ctx.itemInputValueFloat("Heat Bar/Activated Thickness", 123);
+            try testing.expectEqual(123, current.heat_bar.activated_thickness);
+            ctx.itemClick("Heat Bar/Activated Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.heat_bar.activated_thickness, current.heat_bar.activated_thickness);
+
+            ctx.itemInputValueFloat("Round Count/Empty Circle Color/##Z", 153);
+            try testing.expectEqual(0.6, current.round_count.empty_circle_color.z());
+            ctx.itemClick("Round Count/Empty Circle Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.round_count.empty_circle_color, current.round_count.empty_circle_color);
+
+            ctx.itemInputValueFloat("Round Count/Filled Circle Color/##W", 153);
+            try testing.expectEqual(0.6, current.round_count.filled_circle_color.w());
+            ctx.itemClick("Round Count/Filled Circle Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.round_count.filled_circle_color, current.round_count.filled_circle_color);
+
+            ctx.itemInputValueFloat("Round Count/Animation Duration", 123);
+            try testing.expectEqual(123, current.round_count.animation_duration);
+            ctx.itemClick("Round Count/Animation Duration/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.round_count.animation_duration, current.round_count.animation_duration);
         }
     };
     Test.window = .init(testing.allocator);

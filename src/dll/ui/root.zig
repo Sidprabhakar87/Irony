@@ -17,6 +17,7 @@ pub const HurtCylinders = @import("hurt_cylinders.zig").HurtCylinders;
 pub const drawIngameCamera = @import("ingame_camera.zig").drawIngameCamera;
 pub const LogsWindow = @import("logs_window.zig").LogsWindow;
 pub const MainWindow = @import("main_window.zig").MainWindow;
+pub const MatchBar = @import("match_bar.zig").MatchBar;
 pub const MeasureTool = @import("measure_tool.zig").MeasureTool;
 pub const drawMemoryUsage = @import("memory_usage.zig").drawMemoryUsage;
 pub const MessageWindowPlacement = @import("message_window.zig").MessageWindowPlacement;

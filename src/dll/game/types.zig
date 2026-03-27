@@ -306,7 +306,6 @@ pub fn Player(comptime game_id: build_info.Game) type {
     @setEvalBranchQuota(40000);
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x0009, "is_picked_by_main_player", Bool, &.false),
             field(0x00D8, "character_id", u32, &0),
             field(0x0130, "transform_matrix", Transform, &.fromRaw(.identity)),
             field(0x01B0, "floor_z", FloorZ, &.fromRaw(0)),
@@ -333,7 +332,6 @@ pub fn Player(comptime game_id: build_info.Game) type {
             field(0x14F8, "max_health", T7MaxHealth, &.fromRaw(0)),
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x0009, "is_picked_by_main_player", Bool, &.false),
             field(0x0168, "character_id", u32, &0),
             field(0x0200, "transform_matrix", Transform, &.fromRaw(.identity)),
             field(0x0354, "floor_z", FloorZ, &.fromRaw(0)),
@@ -367,7 +365,26 @@ pub fn Player(comptime game_id: build_info.Game) type {
     };
 }
 
+pub const PlayerId = enum(u8) {
+    player_1 = 0,
+    player_2 = 1,
+    _,
+};
+
 pub const PlayerName = [32]u8;
+
+pub fn PlayerInfo(comptime game_id: build_info.Game) type {
+    return switch (game_id) {
+        .t7 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x068, "player_id", PlayerId, &.player_1),
+            field(0x11C, "name", PlayerName, &([1]u8{0} ** 32)),
+        }),
+        .t8 => sdk.memory.StructWithOffsets(null, &.{
+            field(0x005, "player_id", PlayerId, &.player_1),
+            field(0x0B0, "name", PlayerName, &([1]u8{0} ** 32)),
+        }),
+    };
+}
 
 // MovesetExtractor: TK__Move
 pub fn Animation(comptime game_id: build_info.Game) type {

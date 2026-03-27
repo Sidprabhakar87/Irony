@@ -8,8 +8,8 @@ pub fn Memory(comptime game_id: build_info.Game) type {
     return struct {
         player_1: Proxy(game.Player(game_id)),
         player_2: Proxy(game.Player(game_id)),
-        main_player_name: Proxy(game.PlayerName),
-        secondary_player_name: Proxy(game.PlayerName),
+        main_player_info: Proxy(game.PlayerInfo(game_id)),
+        secondary_player_info: Proxy(game.PlayerInfo(game_id)),
         match: Pointer(game.Match(game_id)),
         ruleset: Pointer(game.Ruleset(game_id)),
         camera_manager: Pointer(game.CameraManager(game_id)) = .fromPointer(null),
@@ -72,8 +72,8 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub fn testingInit(params: struct {
             player_1: ?*const game.Player(game_id) = null,
             player_2: ?*const game.Player(game_id) = null,
-            main_player_name: ?*const game.PlayerName = null,
-            secondary_player_name: ?*const game.PlayerName = null,
+            main_player_info: ?*const game.PlayerInfo(game_id) = null,
+            secondary_player_info: ?*const game.PlayerInfo(game_id) = null,
             match: ?*const game.Match(game_id) = null,
             ruleset: ?*const game.Ruleset(game_id) = null,
             camera_manager: ?*const game.CameraManager(game_id) = null,
@@ -105,8 +105,8 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             return .{
                 .player_1 = .fromPointer(params.player_1),
                 .player_2 = .fromPointer(params.player_2),
-                .main_player_name = .fromPointer(params.main_player_name),
-                .secondary_player_name = .fromPointer(params.secondary_player_name),
+                .main_player_info = .fromPointer(params.main_player_info),
+                .secondary_player_info = .fromPointer(params.secondary_player_info),
                 .match = .fromPointer(params.match),
                 .ruleset = .fromPointer(params.ruleset),
                 .camera_manager = .fromPointer(params.camera_manager),
@@ -128,23 +128,23 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     relativeOffset(i32, add(0xD, pattern(cache, "48 8B 15 ?? ?? ?? ?? 44 8B C3"))),
                     0x0,
                 }),
-                .main_player_name = proxy("main_player_name", game.PlayerName, .{
+                .main_player_info = proxy("main_player_info", game.PlayerInfo(.t7), .{
                     relativeOffset(i32, add(0x9, pattern(
                         cache,
                         "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? 48 83 3D ?? ?? ?? ?? 00",
                     ))),
                     0x0,
                     0x0,
-                    0x11C,
+                    0x0,
                 }),
-                .secondary_player_name = proxy("secondary_player_name", game.PlayerName, .{
+                .secondary_player_info = proxy("secondary_player_info", game.PlayerInfo(.t7), .{
                     relativeOffset(i32, add(0x9, pattern(
                         cache,
                         "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? 48 83 3D ?? ?? ?? ?? 00",
                     ))),
                     0x0,
                     0x8,
-                    0x11C,
+                    0x0,
                 }),
                 .match = pointer(
                     "match",
@@ -199,7 +199,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x38,
                     0x0,
                 }),
-                .main_player_name = proxy("main_player_name", game.PlayerName, .{
+                .main_player_info = proxy("main_player_info", game.PlayerInfo(.t8), .{
                     relativeOffset(i32, add(0x9, pattern(
                         cache,
                         "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? BA 01 00 00 00",
@@ -207,9 +207,9 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x0,
                     0x0,
                     0x20,
-                    0xB0,
+                    0x0,
                 }),
-                .secondary_player_name = proxy("secondary_player_name", game.PlayerName, .{
+                .secondary_player_info = proxy("secondary_player_info", game.PlayerInfo(.t8), .{
                     relativeOffset(i32, add(0x9, pattern(
                         cache,
                         "40 53 48 83 EC 20 48 8B 1D ?? ?? ?? ?? 48 85 DB 74 ?? BA 01 00 00 00",
@@ -217,7 +217,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x0,
                     0x8,
                     0x20,
-                    0xB0,
+                    0x0,
                 }),
                 .match = .fromPointer(null), // Continiously updated address.
                 .ruleset = .fromPointer(null), // Continiously updated address.

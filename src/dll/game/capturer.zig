@@ -27,25 +27,27 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         pub fn captureFrame(self: *Self, game_memory: *const game.Memory(game_id)) model.Frame {
             const player_1 = game_memory.player_1.toConstPointer();
             const player_2 = game_memory.player_2.toConstPointer();
+            const main_player_info = game_memory.main_player_info.toConstPointer();
+            const secondary_player_info = game_memory.secondary_player_info.toConstPointer();
             const match = game_memory.match.toConstPointer();
             const ruleset = game_memory.ruleset.toConstPointer();
             const frames_from_round_start = captureFramesSinceRoundStart(player_1, player_2);
-            const main_player_id = captureMainPlayerId(player_1, player_2);
+            const main_player_id = captureMainPlayerId(main_player_info, secondary_player_info);
             const left_player_id = captureLeftPlayerId(player_1, player_2, main_player_id);
             const floor_z = captureFloorZ(player_1, player_2);
-            const player_1_name = switch (main_player_id) {
-                .player_1 => game_memory.main_player_name.toConstPointer(),
-                .player_2 => game_memory.secondary_player_name.toConstPointer(),
+            const player_1_info = switch (main_player_id) {
+                .player_1 => main_player_info,
+                .player_2 => secondary_player_info,
             };
-            const player_2_name = switch (main_player_id) {
-                .player_1 => game_memory.secondary_player_name.toConstPointer(),
-                .player_2 => game_memory.main_player_name.toConstPointer(),
+            const player_2_info = switch (main_player_id) {
+                .player_1 => secondary_player_info,
+                .player_2 => main_player_info,
             };
             const match_player_1 = if (match) |m| &m.players[0] else null;
             const match_player_2 = if (match) |m| &m.players[1] else null;
             const players = [2]model.Player{
-                capturePlayer(&self.player_1_state, player_1_name, player_1, match_player_1),
-                capturePlayer(&self.player_2_state, player_2_name, player_2, match_player_2),
+                capturePlayer(&self.player_1_state, player_1, player_1_info, match_player_1),
+                capturePlayer(&self.player_2_state, player_2, player_2_info, match_player_2),
             };
             const camera_manager = game_memory.camera_manager.toConstPointer();
             const camera = captureCamera(camera_manager);
@@ -133,15 +135,22 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             };
         }
 
-        fn captureMainPlayerId(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) model.PlayerId {
-            if (player_1) |p1| {
-                if (p1.is_picked_by_main_player.toBool()) |is_main| {
-                    return if (is_main) .player_1 else .player_2;
+        fn captureMainPlayerId(
+            main_info: ?*const game.PlayerInfo(game_id),
+            secondary_info: ?*const game.PlayerInfo(game_id),
+        ) model.PlayerId {
+            if (main_info) |main| {
+                switch (main.player_id) {
+                    .player_1 => return .player_1,
+                    .player_2 => return .player_2,
+                    else => {},
                 }
             }
-            if (player_2) |p2| {
-                if (p2.is_picked_by_main_player.toBool()) |is_main| {
-                    return if (is_main) .player_2 else .player_1;
+            if (secondary_info) |secondary| {
+                switch (secondary.player_id) {
+                    .player_1 => return .player_2,
+                    .player_2 => return .player_1,
+                    else => {},
                 }
             }
             return .player_1;
@@ -166,13 +175,13 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
 
         fn capturePlayer(
             state: *PlayerState,
-            name: ?*const game.PlayerName,
             player: ?*const GamePlayer,
+            info: ?*const game.PlayerInfo(game_id),
             match: ?*const game.MatchPlayer(game_id),
         ) model.Player {
             updateRageState(state, player);
             const captured_player = model.Player{
-                .name = capturePlayerName(name),
+                .name = capturePlayerName(info),
                 .rounds_won = if (match) |m| m.rounds_won else null,
                 .character_id = if (player) |p| p.character_id else null,
                 .animation_id = if (player) |p| p.animation_id else null,
@@ -224,9 +233,9 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             state.previous_hit_lines = if (player_maybe) |player| player.hit_lines else null;
         }
 
-        fn capturePlayerName(name_maybe: ?*const game.PlayerName) model.PlayerName {
-            const name = name_maybe orelse return .empty;
-            const slice = std.mem.sliceTo(name, 0);
+        fn capturePlayerName(info_maybe: ?*const game.PlayerInfo(game_id)) model.PlayerName {
+            const info = info_maybe orelse return .empty;
+            const slice = std.mem.sliceTo(&info.name, 0);
             return model.PlayerName.fromSlice(slice) catch .empty;
         }
 
@@ -1071,36 +1080,46 @@ test "should capture left player id correctly" {
     try testing.expectEqual(
         .player_1,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .true, .input_side = @enumFromInt(2) },
-            .player_2 = &.{ .is_picked_by_main_player = .false, .input_side = @enumFromInt(2) },
+            .player_1 = &.{ .input_side = @enumFromInt(2) },
+            .player_2 = &.{ .input_side = @enumFromInt(2) },
+            .main_player_info = &.{ .player_id = .player_1 },
+            .secondary_player_info = &.{ .player_id = .player_2 },
         })).left_player_id,
     );
     try testing.expectEqual(
         .player_1,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .true, .input_side = .left },
-            .player_2 = &.{ .is_picked_by_main_player = .false, .input_side = @enumFromInt(2) },
+            .player_1 = &.{ .input_side = .left },
+            .player_2 = &.{ .input_side = @enumFromInt(2) },
+            .main_player_info = &.{ .player_id = .player_1 },
+            .secondary_player_info = &.{ .player_id = .player_2 },
         })).left_player_id,
     );
     try testing.expectEqual(
         .player_2,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .true, .input_side = .right },
-            .player_2 = &.{ .is_picked_by_main_player = .false, .input_side = @enumFromInt(2) },
+            .player_1 = &.{ .input_side = .right },
+            .player_2 = &.{ .input_side = @enumFromInt(2) },
+            .main_player_info = &.{ .player_id = .player_1 },
+            .secondary_player_info = &.{ .player_id = .player_2 },
         })).left_player_id,
     );
     try testing.expectEqual(
         .player_2,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .false, .input_side = @enumFromInt(2) },
-            .player_2 = &.{ .is_picked_by_main_player = .true, .input_side = .left },
+            .player_1 = &.{ .input_side = @enumFromInt(2) },
+            .player_2 = &.{ .input_side = .left },
+            .main_player_info = &.{ .player_id = .player_2 },
+            .secondary_player_info = &.{ .player_id = .player_1 },
         })).left_player_id,
     );
     try testing.expectEqual(
         .player_1,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .false, .input_side = @enumFromInt(2) },
-            .player_2 = &.{ .is_picked_by_main_player = .true, .input_side = .right },
+            .player_1 = &.{ .input_side = @enumFromInt(2) },
+            .player_2 = &.{ .input_side = .right },
+            .main_player_info = &.{ .player_id = .player_2 },
+            .secondary_player_info = &.{ .player_id = .player_1 },
         })).left_player_id,
     );
 }
@@ -1111,73 +1130,69 @@ test "should capture main player id correctly" {
     try testing.expectEqual(
         .player_1,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .true },
-            .player_2 = &.{ .is_picked_by_main_player = .false },
+            .main_player_info = &.{ .player_id = .player_1 },
+            .secondary_player_info = &.{ .player_id = .player_2 },
         })).main_player_id,
     );
     try testing.expectEqual(
         .player_2,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .false },
-            .player_2 = &.{ .is_picked_by_main_player = .true },
+            .main_player_info = &.{ .player_id = .player_2 },
+            .secondary_player_info = &.{ .player_id = .player_1 },
         })).main_player_id,
     );
     try testing.expectEqual(
         .player_1,
         capturer.captureFrame(&gm(.{
-            .player_1 = null,
-            .player_2 = null,
+            .main_player_info = null,
+            .secondary_player_info = null,
         })).main_player_id,
     );
     try testing.expectEqual(
         .player_1,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .true },
-            .player_2 = null,
+            .main_player_info = &.{ .player_id = .player_1 },
+            .secondary_player_info = null,
         })).main_player_id,
     );
     try testing.expectEqual(
         .player_2,
         capturer.captureFrame(&gm(.{
-            .player_1 = &.{ .is_picked_by_main_player = .false },
-            .player_2 = null,
+            .main_player_info = &.{ .player_id = .player_2 },
+            .secondary_player_info = null,
         })).main_player_id,
     );
     try testing.expectEqual(
         .player_2,
         capturer.captureFrame(&gm(.{
-            .player_1 = null,
-            .player_2 = &.{ .is_picked_by_main_player = .true },
+            .main_player_info = null,
+            .secondary_player_info = &.{ .player_id = .player_1 },
         })).main_player_id,
     );
     try testing.expectEqual(
         .player_1,
         capturer.captureFrame(&gm(.{
-            .player_1 = null,
-            .player_2 = &.{ .is_picked_by_main_player = .false },
+            .main_player_info = null,
+            .secondary_player_info = &.{ .player_id = .player_2 },
         })).main_player_id,
     );
 }
 
 test "should capture player name correctly" {
     const makePlayerName = struct {
-        fn call(comptime name: []const u8) *const game.PlayerName {
-            return name ++ ([1]u8{0} ** (@sizeOf(game.PlayerName) - name.len));
+        fn call(comptime name: []const u8) game.PlayerName {
+            return (name ++ ([1]u8{0} ** (@sizeOf(game.PlayerName) - name.len))).*;
         }
     }.call;
     const gm = game.Memory(.t8).testingInit;
     var capturer = Capturer(.t8){};
     const frame_1 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .is_picked_by_main_player = .true },
-        .player_2 = &.{ .is_picked_by_main_player = .false },
-        .main_player_name = makePlayerName("Player 1"),
-        .secondary_player_name = makePlayerName("Player 2"),
+        .main_player_info = &.{ .player_id = .player_1, .name = makePlayerName("Player 1") },
+        .secondary_player_info = &.{ .player_id = .player_2, .name = makePlayerName("Player 2") },
     }));
     const frame_2 = capturer.captureFrame(&gm(.{
-        .player_1 = &.{ .is_picked_by_main_player = .false },
-        .player_2 = &.{ .is_picked_by_main_player = .true },
-        .main_player_name = makePlayerName("Player 3"),
-        .secondary_player_name = null,
+        .main_player_info = &.{ .player_id = .player_2, .name = makePlayerName("Player 3") },
+        .secondary_player_info = null,
     }));
     try testing.expectEqualStrings("Player 1", frame_1.getPlayerById(.player_1).name.asSlice());
     try testing.expectEqualStrings("Player 2", frame_1.getPlayerById(.player_2).name.asSlice());

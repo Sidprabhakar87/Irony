@@ -403,7 +403,19 @@ pub const DetailsSettings = struct {
     column_2: Column = .player_2,
     fade_out_duration: f32 = 0.2,
     fade_out_alpha: f32 = 0.25,
-    rows_enabled: RowsEnabled = .{},
+    rows_enabled: RowsEnabled = block: {
+        var map: sdk.misc.FieldMap(ui.Details, bool, &true) = .{};
+        map.player_name = false;
+        map.rounds_won = false;
+        map.rounds_needed_to_win = false;
+        map.health = false;
+        map.recoverable_health = false;
+        map.health_recover_limit = false;
+        map.max_health = false;
+        map.rage = false;
+        map.heat = false;
+        break :block map;
+    },
 
     pub const Column = enum {
         player_1,

@@ -895,6 +895,10 @@ fn drawDetailsSettings(value: *model.DetailsSettings, default: *const model.Deta
                     @field(v, field.name) = false;
                 }
             }
+            imgui.igSameLine(0, -1);
+            if (imgui.igButton("Reset All To Default Value", .{})) {
+                v.* = d.*;
+            }
         }
     }.call;
     const column_names = std.enums.EnumFieldStruct(model.DetailsSettings.Column, [:0]const u8, null){
@@ -2026,6 +2030,8 @@ test "details table settings should function correctly" {
             inline for (@typeInfo(model.DetailsSettings.RowsEnabled).@"struct".fields) |*field| {
                 try testing.expectEqual(true, @field(current.rows_enabled, field.name));
             }
+            ctx.itemClick("Enabled Rows/Reset All To Default Value", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.rows_enabled, current.rows_enabled);
         }
     };
     Test.window = .init(testing.allocator);

@@ -1028,7 +1028,7 @@ const testing = std.testing;
 
 test "should draw correct table headers based on settings" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1084,7 +1084,7 @@ test "should draw correct table headers based on settings" {
 
 test "should draw data in correct columns based on settings" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1153,7 +1153,7 @@ test "should draw data in correct columns based on settings" {
 
 test "should put text into clipboard when clicking text" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1206,7 +1206,7 @@ test "should put text into clipboard when clicking text" {
 
 test "should should slowly fade out from last present value to null or empty value" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1251,7 +1251,7 @@ test "should should slowly fade out from last present value to null or empty val
 
 test "should not draw row when row is disabled in settings" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1285,7 +1285,7 @@ test "should not draw row when row is disabled in settings" {
 
 test "should draw frames since round start correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1319,7 +1319,7 @@ test "should draw frames since round start correctly" {
 
 test "should draw frames left in round correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1353,7 +1353,7 @@ test "should draw frames left in round correctly" {
 
 test "should draw player name correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1380,7 +1380,7 @@ test "should draw player name correctly" {
 
 test "should draw rounds won correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1415,7 +1415,7 @@ test "should draw rounds won correctly" {
 
 test "should draw rounds needed to win correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1449,7 +1449,7 @@ test "should draw rounds needed to win correctly" {
 
 test "should draw health correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1484,7 +1484,7 @@ test "should draw health correctly" {
 
 test "should draw recoverable health correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1519,7 +1519,7 @@ test "should draw recoverable health correctly" {
 
 test "should draw health recover limit correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1554,7 +1554,7 @@ test "should draw health recover limit correctly" {
 
 test "should draw max health correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1589,7 +1589,7 @@ test "should draw max health correctly" {
 
 test "should draw rage correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1624,7 +1624,7 @@ test "should draw rage correctly" {
 
 test "should draw heat correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1659,7 +1659,7 @@ test "should draw heat correctly" {
 
 test "should draw character ID correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1694,7 +1694,7 @@ test "should draw character ID correctly" {
 
 test "should draw animation ID correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1729,7 +1729,7 @@ test "should draw animation ID correctly" {
 
 test "should draw animation frame correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1764,7 +1764,7 @@ test "should draw animation frame correctly" {
 
 test "should draw animation total frames correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1799,7 +1799,7 @@ test "should draw animation total frames correctly" {
 
 test "should draw move phase correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1842,7 +1842,7 @@ test "should draw move phase correctly" {
 
 test "should draw move frame correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1877,7 +1877,7 @@ test "should draw move frame correctly" {
 
 test "should draw startup frames correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1912,7 +1912,7 @@ test "should draw startup frames correctly" {
 
 test "should draw active frames correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -1947,7 +1947,7 @@ test "should draw active frames correctly" {
 
 test "should draw recovery frames correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2006,7 +2006,7 @@ test "should draw recovery frames correctly" {
 
 test "should draw total frames correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2053,7 +2053,7 @@ test "should draw total frames correctly" {
 
 test "should draw frame advantage correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2098,7 +2098,7 @@ test "should draw frame advantage correctly" {
 
 test "should draw attack type correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2165,7 +2165,7 @@ test "should draw attack type correctly" {
 
 test "should draw attack range correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2200,7 +2200,7 @@ test "should draw attack range correctly" {
 
 test "should draw attack height correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2241,7 +2241,7 @@ test "should draw attack height correctly" {
 
 test "should draw recovery range correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2276,7 +2276,7 @@ test "should draw recovery range correctly" {
 
 test "should draw hit outcome correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2367,7 +2367,7 @@ test "should draw hit outcome correctly" {
 
 test "should draw combo hits correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2402,7 +2402,7 @@ test "should draw combo hits correctly" {
 
 test "should draw combo damage" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2437,7 +2437,7 @@ test "should draw combo damage" {
 
 test "should draw posture correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2480,7 +2480,7 @@ test "should draw posture correctly" {
 
 test "should draw blocking correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2523,7 +2523,7 @@ test "should draw blocking correctly" {
 
 test "should draw crushing correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2574,7 +2574,7 @@ test "should draw crushing correctly" {
 
 test "should draw can move correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2609,7 +2609,7 @@ test "should draw can move correctly" {
 
 test "should draw input correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2701,7 +2701,7 @@ test "should draw input correctly" {
 
 test "should draw distance to opponent correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2753,7 +2753,7 @@ test "should draw distance to opponent correctly" {
 
 test "should draw angle to opponent correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2797,7 +2797,7 @@ test "should draw angle to opponent correctly" {
 
 test "should draw distance to wall correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2846,7 +2846,7 @@ test "should draw distance to wall correctly" {
 
 test "should draw angle to wall correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2894,7 +2894,7 @@ test "should draw angle to wall correctly" {
 
 test "should draw hit lines height correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -2942,7 +2942,7 @@ test "should draw hit lines height correctly" {
 
 test "should draw hurt cylinders height correctly" {
     const Test = struct {
-        var settings = model.DetailsSettings{};
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
         var details = Details{};
 
         fn guiFunction(_: sdk.ui.TestContext) !void {

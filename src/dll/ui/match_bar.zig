@@ -6,7 +6,7 @@ const model = @import("../model/root.zig");
 
 pub const MatchBar = struct {
     frames_left_in_round: ?u32 = null,
-    rounds_needed_to_win: u32 = 0,
+    rounds_needed_to_win: u32 = 3,
     player_states: std.EnumArray(model.PlayerId, PlayerState) = .initFill(.{}),
 
     const Self = @This();
@@ -32,7 +32,7 @@ pub const MatchBar = struct {
 
     pub fn processFrame(self: *Self, settings: *const model.MatchBarSettings, frame: *const model.Frame) void {
         self.frames_left_in_round = frame.frames_left_in_round;
-        self.rounds_needed_to_win = frame.rounds_needed_to_win orelse 0;
+        self.rounds_needed_to_win = frame.rounds_needed_to_win orelse 3;
         for (model.PlayerId.all) |player_id| {
             const state = self.player_states.getPtr(player_id);
             const player: *const model.Player = frame.getPlayerById(player_id);
@@ -109,8 +109,11 @@ pub const MatchBar = struct {
             0.5 * health_bar_width,
             0.5 * (available_size.x - (2 * round_count_width) - timer_width - (4 * spacing)),
         );
-        const player_name_width =
-            0.5 * (available_size.x - (2 * round_count_width) - (2 * heat_bar_width) - timer_width - (6 * spacing));
+        const player_name_width = switch (self.rounds_needed_to_win) {
+            0 => 0.5 * (available_size.x - (2 * heat_bar_width) - timer_width - (4 * spacing)),
+            else => 0.5 *
+                (available_size.x - (2 * round_count_width) - (2 * heat_bar_width) - timer_width - (6 * spacing)),
+        };
 
         {
             imgui.igPushID_Str("left");
@@ -123,15 +126,17 @@ pub const MatchBar = struct {
             drawPlayerName("player_name", &p.name, player_name_width, .left);
             imgui.igSameLine(0, -1);
             drawHeatBar("heat_bar", &settings.heat_bar, p.heat, heat_bar_width, .left);
-            imgui.igSameLine(0, -1);
-            drawRoundCount(
-                "round_count",
-                &settings.round_count,
-                &p.rounds_won,
-                self.rounds_needed_to_win,
-                round_count_width,
-                .left,
-            );
+            if (self.rounds_needed_to_win > 0) {
+                imgui.igSameLine(0, -1);
+                drawRoundCount(
+                    "round_count",
+                    &settings.round_count,
+                    &p.rounds_won,
+                    self.rounds_needed_to_win,
+                    round_count_width,
+                    .left,
+                );
+            }
         }
         imgui.igSameLine(0, -1);
         {
@@ -149,15 +154,17 @@ pub const MatchBar = struct {
 
             const p = self.player_states.getPtrConst(.player_2);
             drawHealthBar("health_bar", &settings.health_bar, &p.health_bar, health_bar_width, .right);
-            drawRoundCount(
-                "round_count",
-                &settings.round_count,
-                &p.rounds_won,
-                self.rounds_needed_to_win,
-                round_count_width,
-                .right,
-            );
-            imgui.igSameLine(0, -1);
+            if (self.rounds_needed_to_win > 0) {
+                drawRoundCount(
+                    "round_count",
+                    &settings.round_count,
+                    &p.rounds_won,
+                    self.rounds_needed_to_win,
+                    round_count_width,
+                    .right,
+                );
+                imgui.igSameLine(0, -1);
+            }
             drawHeatBar("heat_bar", &settings.heat_bar, p.heat, heat_bar_width, .right);
             imgui.igSameLine(0, -1);
             drawPlayerName("player_name", &p.name, player_name_width, .right);
@@ -722,26 +729,37 @@ test "should draw correct value inside correct round count" {
             ctx.setRef("Window");
 
             bar.processFrame(&settings, &.{
-                .rounds_needed_to_win = 3,
+                .rounds_needed_to_win = 4,
                 .players = .{
                     .{ .rounds_won = 1 },
                     .{ .rounds_won = null },
                 },
             });
             ctx.yield(1);
-            try ctx.expectItemExists("left/round_count: 1\\/3");
-            try ctx.expectItemExists("right/round_count: 0\\/3");
+            try ctx.expectItemExists("left/round_count: 1\\/4");
+            try ctx.expectItemExists("right/round_count: 0\\/4");
 
             bar.processFrame(&settings, &.{
                 .rounds_needed_to_win = null,
                 .players = .{
-                    .{ .rounds_won = 1 },
+                    .{ .rounds_won = 2 },
                     .{ .rounds_won = null },
                 },
             });
             ctx.yield(1);
-            try ctx.expectItemExists("left/round_count: 0\\/0");
-            try ctx.expectItemExists("right/round_count: 0\\/0");
+            try ctx.expectItemExists("left/round_count: 2\\/3");
+            try ctx.expectItemExists("right/round_count: 0\\/3");
+
+            bar.processFrame(&settings, &.{
+                .rounds_needed_to_win = 0,
+                .players = .{
+                    .{ .rounds_won = 3 },
+                    .{ .rounds_won = null },
+                },
+            });
+            ctx.yield(1);
+            try ctx.expectItemNotExists("left/round_count");
+            try ctx.expectItemNotExists("right/round_count");
         }
     };
     const context = try sdk.ui.getTestingContext();
@@ -836,7 +854,7 @@ test "should copy correct text to clipboard when clicking on items" {
         fn testFunction(ctx: sdk.ui.TestContext) !void {
             bar.processFrame(&settings, &.{
                 .frames_left_in_round = 3600,
-                .rounds_needed_to_win = 3,
+                .rounds_needed_to_win = 4,
                 .players = .{
                     .{
                         .name = .fromArray("Player 1".*),
@@ -876,13 +894,13 @@ test "should copy correct text to clipboard when clicking on items" {
             sdk.ui.toasts.update(100);
 
             ctx.itemClick("left/round_count", imgui.ImGuiMouseButton_Left, imgui.ImGuiTestOpFlags_NoCheckHoveredId);
-            try ctx.expectClipboardText("1/3");
-            try ctx.expectItemExists("//toast-0/Copied to clipboard: 1\\/3");
+            try ctx.expectClipboardText("1/4");
+            try ctx.expectItemExists("//toast-0/Copied to clipboard: 1\\/4");
             sdk.ui.toasts.update(100);
 
             ctx.itemClick("right/round_count", imgui.ImGuiMouseButton_Left, imgui.ImGuiTestOpFlags_NoCheckHoveredId);
-            try ctx.expectClipboardText("2/3");
-            try ctx.expectItemExists("//toast-0/Copied to clipboard: 2\\/3");
+            try ctx.expectClipboardText("2/4");
+            try ctx.expectItemExists("//toast-0/Copied to clipboard: 2\\/4");
             sdk.ui.toasts.update(100);
 
             ctx.itemClick("left/health_bar", imgui.ImGuiMouseButton_Left, imgui.ImGuiTestOpFlags_NoCheckHoveredId);

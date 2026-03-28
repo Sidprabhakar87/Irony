@@ -13,6 +13,7 @@ pub const MainWindow = struct {
     details: ui.Details = .{},
     controls: ui.Controls(.{}) = .{},
     file_menu: ui.FileMenu(.{}) = .{},
+    match_bar_height: f32 = 0,
     controls_height: f32 = 0,
     menu_bar_right_side_width: f32 = 0,
 
@@ -82,7 +83,13 @@ pub const MainWindow = struct {
             latest_version,
             memory_usage,
         );
-        self.match_bar.draw(&settings.match_bar);
+
+        if (imgui.igBeginChild_Str("match_bar", .{ .y = self.match_bar_height }, 0, 0)) {
+            const start_y = imgui.igGetCursorPosY();
+            self.match_bar.draw(&settings.match_bar);
+            self.match_bar_height = imgui.igGetCursorPosY() - start_y;
+        }
+        imgui.igEndChild();
         if (imgui.igBeginChild_Str("views", .{ .y = -self.controls_height }, 0, imgui.ImGuiWindowFlags_NoScrollbar)) {
             const context = QuadrantContext{
                 .self = self,
@@ -98,9 +105,9 @@ pub const MainWindow = struct {
         }
         imgui.igEndChild();
         if (imgui.igBeginChild_Str("controls", .{}, 0, 0)) {
-            const controls_start_y = imgui.igGetCursorPosY();
+            const start_y = imgui.igGetCursorPosY();
             self.controls.draw(controller);
-            self.controls_height = imgui.igGetCursorPosY() - controls_start_y;
+            self.controls_height = imgui.igGetCursorPosY() - start_y;
         }
         imgui.igEndChild();
     }

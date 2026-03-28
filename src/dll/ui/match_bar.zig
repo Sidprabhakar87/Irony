@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const imgui = @import("imgui");
 const sdk = @import("../../sdk/root.zig");
 const model = @import("../model/root.zig");
@@ -85,8 +86,6 @@ pub const MatchBar = struct {
         if (!settings.enabled) {
             return;
         }
-        var start_pos: imgui.ImVec2 = undefined;
-        imgui.igGetCursorPos(&start_pos);
         var available_size: imgui.ImVec2 = undefined;
         imgui.igGetContentRegionAvail(&available_size);
         const spacing = imgui.igGetStyle().*.ItemSpacing.x;
@@ -98,18 +97,10 @@ pub const MatchBar = struct {
         const timer_width = block: {
             imgui.igPushFont(null, 2 * imgui.igGetFontSize());
             defer imgui.igPopFont();
-
-            drawRoundTimer(self.frames_left_in_round, available_size.x);
-
             var size: imgui.ImVec2 = undefined;
             imgui.igCalcTextSize(&size, "---", null, false, -1);
             break :block size.x;
         };
-        imgui.igSetCursorPos(start_pos);
-
-        const p1 = self.player_states.getPtrConst(.player_1);
-        const p2 = self.player_states.getPtrConst(.player_2);
-
         const health_bar_width = 0.5 * (available_size.x - timer_width - (2 * spacing));
         const rounds_needed_to_win_float: f32 = @floatFromInt(self.rounds_needed_to_win);
         const round_count_width = (rounds_needed_to_win_float * imgui.igGetFrameHeight()) +
@@ -121,25 +112,42 @@ pub const MatchBar = struct {
         const player_name_width =
             0.5 * (available_size.x - (2 * round_count_width) - (2 * heat_bar_width) - timer_width - (6 * spacing));
 
-        drawHealthBar(&settings.health_bar, &p1.health_bar, health_bar_width, .left);
-        imgui.igSameLine(0, -1);
-        imgui.igDummy(.{ .x = timer_width, .y = 0 });
-        imgui.igSameLine(0, -1);
-        drawHealthBar(&settings.health_bar, &p2.health_bar, health_bar_width, .right);
+        {
+            imgui.igBeginGroup();
+            defer imgui.igEndGroup();
+            imgui.igPushID_Str("left");
+            defer imgui.igPopID();
 
-        drawPlayerName(&p1.name, player_name_width, .left);
+            const p = self.player_states.getPtrConst(.player_1);
+            drawHealthBar(&settings.health_bar, &p.health_bar, health_bar_width, .left);
+            drawPlayerName(&p.name, player_name_width, .left);
+            imgui.igSameLine(0, -1);
+            drawHeatBar(&settings.heat_bar, p.heat, heat_bar_width, .left);
+            imgui.igSameLine(0, -1);
+            drawRoundCount(&settings.round_count, &p.rounds_won, self.rounds_needed_to_win, round_count_width, .left);
+        }
         imgui.igSameLine(0, -1);
-        drawHeatBar(&settings.heat_bar, p1.heat, heat_bar_width, .left);
+        {
+            imgui.igPushFont(null, 2 * imgui.igGetFontSize());
+            defer imgui.igPopFont();
+
+            drawRoundTimer(self.frames_left_in_round, timer_width);
+        }
         imgui.igSameLine(0, -1);
-        drawRoundCount(&settings.round_count, &p1.rounds_won, self.rounds_needed_to_win, round_count_width, .left);
-        imgui.igSameLine(0, -1);
-        imgui.igDummy(.{ .x = timer_width, .y = 0 });
-        imgui.igSameLine(0, -1);
-        drawRoundCount(&settings.round_count, &p2.rounds_won, self.rounds_needed_to_win, round_count_width, .right);
-        imgui.igSameLine(0, -1);
-        drawHeatBar(&settings.heat_bar, p2.heat, heat_bar_width, .right);
-        imgui.igSameLine(0, -1);
-        drawPlayerName(&p2.name, player_name_width, .right);
+        {
+            imgui.igBeginGroup();
+            defer imgui.igEndGroup();
+            imgui.igPushID_Str("right");
+            defer imgui.igPopID();
+
+            const p = self.player_states.getPtrConst(.player_2);
+            drawHealthBar(&settings.health_bar, &p.health_bar, health_bar_width, .right);
+            drawRoundCount(&settings.round_count, &p.rounds_won, self.rounds_needed_to_win, round_count_width, .right);
+            imgui.igSameLine(0, -1);
+            drawHeatBar(&settings.heat_bar, p.heat, heat_bar_width, .right);
+            imgui.igSameLine(0, -1);
+            drawPlayerName(&p.name, player_name_width, .right);
+        }
     }
 
     fn drawRoundTimer(frames_left_in_round: ?u32, width: f32) void {
@@ -149,9 +157,13 @@ pub const MatchBar = struct {
         imgui.igGetCursorScreenPos(&rect.Min);
         rect.Max = .{ .x = rect.Min.x + size.x, .y = rect.Min.y + size.y };
 
+        const id = imgui.igGetID_Str("round_timer");
         imgui.igItemSize_Vec2(size, -1.0);
-        if (!imgui.igItemAdd(rect, 0, null, 0)) {
+        if (!imgui.igItemAdd(rect, id, null, 0)) {
             return;
+        }
+        if (builtin.is_test) {
+            imgui.teItemAdd(imgui.igGetCurrentContext(), id, &rect, null);
         }
 
         var buffer: [4]u8 = undefined;
@@ -162,6 +174,10 @@ pub const MatchBar = struct {
             };
             break :block std.fmt.bufPrintZ(&buffer, "{}", .{seconds}) catch "---";
         } else "---";
+        if (imgui.igButtonBehavior(rect, id, null, null, 0)) {
+            imgui.igSetClipboardText(text);
+            sdk.ui.toasts.send(.info, null, "Copied to clipboard: {s}", .{text});
+        }
 
         var text_size: imgui.ImVec2 = undefined;
         imgui.igCalcTextSize(&text_size, text, null, false, -1);
@@ -181,13 +197,22 @@ pub const MatchBar = struct {
         imgui.igGetCursorScreenPos(&rect.Min);
         rect.Max = .{ .x = rect.Min.x + size.x, .y = rect.Min.y + size.y };
 
+        const id = imgui.igGetID_Str("player_name");
         imgui.igItemSize_Vec2(size, -1.0);
-        if (!imgui.igItemAdd(rect, 0, null, 0)) {
+        if (!imgui.igItemAdd(rect, id, null, 0)) {
             return;
+        }
+        if (builtin.is_test) {
+            imgui.teItemAdd(imgui.igGetCurrentContext(), id, &rect, null);
         }
 
         var buffer: [name.buffer.len + 1]u8 = undefined;
         const text = std.fmt.bufPrintZ(&buffer, "{s}", .{name.asSlice()}) catch "error";
+        if (imgui.igButtonBehavior(rect, id, null, null, 0)) {
+            imgui.igSetClipboardText(text);
+            sdk.ui.toasts.send(.info, null, "Copied to clipboard: {s}", .{text});
+        }
+
         var text_size: imgui.ImVec2 = undefined;
         imgui.igCalcTextSize(&text_size, text, null, false, -1);
         const text_rect = imgui.ImRect{
@@ -223,9 +248,24 @@ pub const MatchBar = struct {
         imgui.igGetCursorScreenPos(&rect.Min);
         rect.Max = .{ .x = rect.Min.x + size.x, .y = rect.Min.y + size.y };
 
+        const id = imgui.igGetID_Str("round_count");
         imgui.igItemSize_Vec2(size, -1.0);
-        if (!imgui.igItemAdd(rect, 0, null, 0)) {
+        if (!imgui.igItemAdd(rect, id, null, 0)) {
             return;
+        }
+        if (builtin.is_test) {
+            imgui.teItemAdd(imgui.igGetCurrentContext(), id, &rect, null);
+        }
+
+        if (imgui.igButtonBehavior(rect, id, null, null, 0)) {
+            var buffer: [16]u8 = undefined;
+            const text = std.fmt.bufPrintZ(
+                &buffer,
+                "{}/{}",
+                .{ rounds_won.current_value, rounds_needed_to_win },
+            ) catch "error";
+            imgui.igSetClipboardText(text);
+            sdk.ui.toasts.send(.info, null, "Copied to clipboard: {s}", .{text});
         }
 
         const radius = 0.5 * size.y;
@@ -282,9 +322,13 @@ pub const MatchBar = struct {
         imgui.igGetCursorScreenPos(&rect.Min);
         rect.Max = .{ .x = rect.Min.x + size.x, .y = rect.Min.y + size.y };
 
+        const id = imgui.igGetID_Str("heat_bar");
         imgui.igItemSize_Vec2(size, -1.0);
-        if (!imgui.igItemAdd(rect, 0, null, 0)) {
+        if (!imgui.igItemAdd(rect, id, null, 0)) {
             return;
+        }
+        if (builtin.is_test) {
+            imgui.teItemAdd(imgui.igGetCurrentContext(), id, &rect, null);
         }
 
         const heat_value: f32 = switch (heat) {
@@ -294,6 +338,10 @@ pub const MatchBar = struct {
         };
         var buffer: [8]u8 = undefined;
         const text = std.fmt.bufPrintZ(&buffer, "{d:.1}%", .{heat_value * 100}) catch "error";
+        if (imgui.igButtonBehavior(rect, id, null, null, 0)) {
+            imgui.igSetClipboardText(text);
+            sdk.ui.toasts.send(.info, null, "Copied to clipboard: {s}", .{text});
+        }
 
         var text_size: imgui.ImVec2 = undefined;
         imgui.igCalcTextSize(&text_size, text, null, false, -1);
@@ -360,9 +408,13 @@ pub const MatchBar = struct {
         imgui.igGetCursorScreenPos(&rect.Min);
         rect.Max = .{ .x = rect.Min.x + size.x, .y = rect.Min.y + size.y };
 
+        const id = imgui.igGetID_Str("health_bar");
         imgui.igItemSize_Vec2(size, -1.0);
-        if (!imgui.igItemAdd(rect, 0, null, 0)) {
+        if (!imgui.igItemAdd(rect, id, null, 0)) {
             return;
+        }
+        if (builtin.is_test) {
+            imgui.teItemAdd(imgui.igGetCurrentContext(), id, &rect, null);
         }
 
         var buffer: [16]u8 = undefined;
@@ -370,6 +422,11 @@ pub const MatchBar = struct {
             .left => std.fmt.bufPrintZ(&buffer, "({}) {}", .{ state.recoverable_health, state.health }),
             .right => std.fmt.bufPrintZ(&buffer, "{} ({})", .{ state.health, state.recoverable_health }),
         } catch "error";
+        if (imgui.igButtonBehavior(rect, id, null, null, 0)) {
+            imgui.igSetClipboardText(text);
+            sdk.ui.toasts.send(.info, null, "Copied to clipboard: {s}", .{text});
+        }
+
         var text_size: imgui.ImVec2 = undefined;
         imgui.igCalcTextSize(&text_size, text, null, false, -1);
         const text_pos = imgui.ImVec2{

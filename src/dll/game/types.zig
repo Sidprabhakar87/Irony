@@ -410,14 +410,32 @@ pub const GlobalKey = enum(u32) {
     _,
 };
 
+pub const MatchPhase = enum(u32) {
+    intro_1 = 0,
+    intro_2 = 1,
+    round_start = 3,
+    mid_round = 4,
+    round_end = 5,
+    win_loose_outro = 8,
+    draw_outro = 9,
+    @"continue" = 17,
+    practice_mode = 21,
+    move_showcase = 22,
+    rematch_menu_1 = 37,
+    rematch_menu_2 = 38,
+    _,
+};
+
 pub fn Match(comptime game_id: build_info.Game) type {
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
             field(0x48, "frames_left_in_round", u32, &0),
+            field(0x54, "phase", MatchPhase, &.intro_1),
             field(0x60, "players", [2]MatchPlayer(.t7), &.{ .{}, .{} }),
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
             field(0x1C, "frames_left_in_round", u32, &0),
+            field(0x28, "phase", MatchPhase, &.intro_1),
             field(0x40, "players", [2]MatchPlayer(.t8), &.{ .{}, .{} }),
         }),
     };

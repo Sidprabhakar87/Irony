@@ -98,7 +98,7 @@ pub const MatchBar = struct {
             imgui.igPushFont(null, 2 * imgui.igGetFontSize());
             defer imgui.igPopFont();
             var size: imgui.ImVec2 = undefined;
-            imgui.igCalcTextSize(&size, "---", null, false, -1);
+            imgui.igCalcTextSize(&size, "88", null, false, -1);
             break :block size.x;
         };
         const health_bar_width = 0.5 * (available_size.x - timer_width - (2 * spacing));
@@ -194,7 +194,7 @@ pub const MatchBar = struct {
                 else => @divFloor(frames, 60) + 1,
             };
             break :block std.fmt.bufPrintZ(&buffer, "{}", .{seconds}) catch "---";
-        } else "---";
+        } else "∞";
         if (imgui.igButtonBehavior(rect, id, null, null, 0)) {
             imgui.igSetClipboardText(text);
             sdk.ui.toasts.send(.info, null, "Copied to clipboard: {s}", .{text});
@@ -678,7 +678,7 @@ test "should draw correct value inside round timer" {
 
             bar.processFrame(&settings, &.{ .frames_left_in_round = null });
             ctx.yield(1);
-            try ctx.expectItemExists("round_timer: ---");
+            try ctx.expectItemExists("round_timer: ∞");
         }
     };
     const context = try sdk.ui.getTestingContext();

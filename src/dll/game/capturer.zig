@@ -31,7 +31,6 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             const secondary_player_info = game_memory.secondary_player_info.toConstPointer();
             const match = game_memory.match.toConstPointer();
             const ruleset = game_memory.ruleset.toConstPointer();
-            const frames_from_round_start = captureFramesSinceRoundStart(player_1, player_2);
             const main_player_id = captureMainPlayerId(main_player_info, secondary_player_info);
             const left_player_id = captureLeftPlayerId(player_1, player_2, main_player_id);
             const floor_z = captureFloorZ(player_1, player_2);
@@ -63,8 +62,8 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             const floor_gimmicks = captureFloorGimmicks(floor_number, set_number, &game_memory.floors, walls.asSlice());
             return .{
                 .rounds_needed_to_win = if (ruleset) |r| r.rounds_needed_to_win else null,
-                .frames_since_round_start = frames_from_round_start,
-                .frames_left_in_round = if (match) |m| m.frames_left_in_round else null,
+                .frames_since_round_start = captureFramesSinceRoundStart(player_1, player_2),
+                .frames_left_in_round = captureFramesLeftInRound(match),
                 .floor_z = floor_z,
                 .players = players,
                 .camera = camera,
@@ -83,6 +82,14 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 return player.frames_since_round_start;
             }
             return null;
+        }
+
+        fn captureFramesLeftInRound(match_maybe: ?*const game.Match(game_id)) ?u32 {
+            const match = match_maybe orelse return null;
+            return switch (match.phase) {
+                .practice_mode, .move_showcase => null,
+                else => match.frames_left_in_round,
+            };
         }
 
         fn captureFloorZ(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?f32 {
@@ -1004,7 +1011,24 @@ test "should capture frames left in round correctly" {
     var capturer = Capturer(.t8){};
     try testing.expectEqual(
         123,
-        capturer.captureFrame(&gm(.{ .match = &.{ .frames_left_in_round = 123 } })).frames_left_in_round,
+        capturer.captureFrame(&gm(.{ .match = &.{
+            .phase = .mid_round,
+            .frames_left_in_round = 123,
+        } })).frames_left_in_round,
+    );
+    try testing.expectEqual(
+        null,
+        capturer.captureFrame(&gm(.{ .match = &.{
+            .phase = .practice_mode,
+            .frames_left_in_round = 123,
+        } })).frames_left_in_round,
+    );
+    try testing.expectEqual(
+        null,
+        capturer.captureFrame(&gm(.{ .match = &.{
+            .phase = .move_showcase,
+            .frames_left_in_round = 123,
+        } })).frames_left_in_round,
     );
     try testing.expectEqual(
         null,

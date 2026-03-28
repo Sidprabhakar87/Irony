@@ -20,7 +20,7 @@ pub const MatchBar = struct {
         max_health: u32 = 0,
         health: u32 = 0,
         recoverable_health: u32 = 0,
-        combo_damage: AnimatedValue = .{},
+        damage: AnimatedValue = .{},
         rage: model.Rage = .used_up,
     };
     const AnimatedValue = struct {
@@ -46,14 +46,14 @@ pub const MatchBar = struct {
             state.health_bar.health = health;
             state.health_bar.recoverable_health = recoverable_health;
             if (health > 0 and combo_damage > 0) {
-                state.health_bar.combo_damage.current_value = combo_damage;
-                state.health_bar.combo_damage.starting_value = combo_damage;
-                state.health_bar.combo_damage.remaining_time = settings.health_bar.combo_damage_animation_duration;
+                state.health_bar.damage.current_value = combo_damage;
+                state.health_bar.damage.starting_value = combo_damage;
+                state.health_bar.damage.remaining_time = settings.health_bar.damage_animation_duration;
             } else {
-                state.health_bar.combo_damage.current_value = 0;
+                state.health_bar.damage.current_value = 0;
             }
-            if (state.health_bar.combo_damage.starting_value > max_health - health) {
-                state.health_bar.combo_damage.starting_value = max_health - health;
+            if (state.health_bar.damage.starting_value > max_health - health) {
+                state.health_bar.damage.starting_value = max_health - health;
             }
 
             state.health_bar.rage = player.rage orelse .used_up;
@@ -71,9 +71,9 @@ pub const MatchBar = struct {
 
     pub fn update(self: *Self, delta_time: f32) void {
         for (&self.player_states.values) |*state| {
-            state.health_bar.combo_damage.remaining_time -= delta_time;
-            if (state.health_bar.combo_damage.remaining_time < 0) {
-                state.health_bar.combo_damage.remaining_time = 0;
+            state.health_bar.damage.remaining_time -= delta_time;
+            if (state.health_bar.damage.remaining_time < 0) {
+                state.health_bar.damage.remaining_time = 0;
             }
             state.rounds_won.remaining_time -= delta_time;
             if (state.rounds_won.remaining_time < 0) {
@@ -494,21 +494,21 @@ pub const MatchBar = struct {
         const max_health: f32 = @floatFromInt(state.max_health);
         const health: f32 = @floatFromInt(state.health);
         const recoverable_health: f32 = @floatFromInt(state.recoverable_health);
-        const combo_damage: f32 = if (settings.combo_damage_animation_duration > 0) block: {
-            const start: f32 = @floatFromInt(state.combo_damage.starting_value);
-            const current: f32 = @floatFromInt(state.combo_damage.current_value);
-            const t = 1.0 - (state.combo_damage.remaining_time / settings.combo_damage_animation_duration);
+        const damage: f32 = if (settings.damage_animation_duration > 0) block: {
+            const start: f32 = @floatFromInt(state.damage.starting_value);
+            const current: f32 = @floatFromInt(state.damage.current_value);
+            const t = 1.0 - (state.damage.remaining_time / settings.damage_animation_duration);
             break :block std.math.lerp(start, current, t);
-        } else @floatFromInt(state.combo_damage.current_value);
+        } else @floatFromInt(state.damage.current_value);
 
         const health_width = size.x * health / max_health;
         const recoverable_health_width = size.x * recoverable_health / max_health;
-        const combo_damage_width = size.x * combo_damage / max_health;
+        const damage_width = size.x * damage / max_health;
 
         const background_color = imgui.igGetColorU32_Vec4(settings.background_color.toImVec());
         const health_color = imgui.igGetColorU32_Vec4(settings.health_color.toImVec());
         const recoverable_health_color = imgui.igGetColorU32_Vec4(settings.recoverable_health_color.toImVec());
-        const combo_damage_color = imgui.igGetColorU32_Vec4(settings.combo_damage_color.toImVec());
+        const damage_color = imgui.igGetColorU32_Vec4(settings.damage_color.toImVec());
         const rage_color = imgui.igGetColorU32_Vec4(settings.rage_color.toImVec());
         const text_color = imgui.igGetColorU32_Vec4(settings.text_color.toImVec());
 
@@ -526,9 +526,9 @@ pub const MatchBar = struct {
                 );
                 imgui.ImDrawList_AddRectFilled(
                     draw_list,
-                    .{ .x = rect.Max.x - health_width - combo_damage_width, .y = rect.Min.y },
+                    .{ .x = rect.Max.x - health_width - damage_width, .y = rect.Min.y },
                     .{ .x = rect.Max.x - health_width, .y = rect.Max.y },
-                    combo_damage_color,
+                    damage_color,
                     style.*.FrameRounding,
                     0,
                 );
@@ -553,8 +553,8 @@ pub const MatchBar = struct {
                 imgui.ImDrawList_AddRectFilled(
                     draw_list,
                     .{ .x = rect.Min.x + health_width, .y = rect.Min.y },
-                    .{ .x = rect.Min.x + health_width + combo_damage_width, .y = rect.Max.y },
-                    combo_damage_color,
+                    .{ .x = rect.Min.x + health_width + damage_width, .y = rect.Max.y },
+                    damage_color,
                     style.*.FrameRounding,
                     0,
                 );

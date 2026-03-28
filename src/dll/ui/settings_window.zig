@@ -819,8 +819,8 @@ fn drawMatchBarSettings(value: *model.MatchBarSettings, default: *const model.Ma
             drawColor("Background Color", &v.background_color, &d.background_color);
             drawColor("Health Color", &v.health_color, &d.health_color);
             drawColor("Recoverable Health Color", &v.recoverable_health_color, &d.recoverable_health_color);
-            drawColor("Combo Damage Color", &v.combo_damage_color, &d.combo_damage_color);
-            drawDuration("Animation Duration", &v.combo_damage_animation_duration, &d.combo_damage_animation_duration);
+            drawColor("Damage Color", &v.damage_color, &d.damage_color);
+            drawDuration("Damage Animation Duration", &v.damage_animation_duration, &d.damage_animation_duration);
             drawColor("Rage Color", &v.rage_color, &d.rage_color);
             drawThickness("Rage Thickness", &v.rage_thickness, &d.rage_thickness);
         }
@@ -1904,17 +1904,17 @@ test "match bar settings should function correctly" {
                 current.health_bar.recoverable_health_color,
             );
 
-            ctx.itemInputValueFloat("Health Bar/Combo Damage Color/##X", 153);
-            try testing.expectEqual(0.6, current.health_bar.combo_damage_color.x());
-            ctx.itemClick("Health Bar/Combo Damage Color/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.health_bar.combo_damage_color, current.health_bar.combo_damage_color);
+            ctx.itemInputValueFloat("Health Bar/Damage Color/##X", 153);
+            try testing.expectEqual(0.6, current.health_bar.damage_color.x());
+            ctx.itemClick("Health Bar/Damage Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.health_bar.damage_color, current.health_bar.damage_color);
 
-            ctx.itemInputValueFloat("Health Bar/Animation Duration", 123);
-            try testing.expectEqual(123, current.health_bar.combo_damage_animation_duration);
-            ctx.itemClick("Health Bar/Animation Duration/###default", imgui.ImGuiMouseButton_Left, 0);
+            ctx.itemInputValueFloat("Health Bar/Damage Animation Duration", 123);
+            try testing.expectEqual(123, current.health_bar.damage_animation_duration);
+            ctx.itemClick("Health Bar/Damage Animation Duration/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(
-                default.health_bar.combo_damage_animation_duration,
-                current.health_bar.combo_damage_animation_duration,
+                default.health_bar.damage_animation_duration,
+                current.health_bar.damage_animation_duration,
             );
 
             ctx.itemInputValueFloat("Health Bar/Rage Color/##Y", 153);

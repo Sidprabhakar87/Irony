@@ -379,8 +379,8 @@ pub const MatchBarSettings = struct {
         background_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 1.0, 0.06 }),
         health_color: sdk.math.Vec4 = .fromArray(.{ 0.0, 1.0, 0.0, 0.5 }),
         recoverable_health_color: sdk.math.Vec4 = .fromArray(.{ 0.5, 0.5, 0.5, 0.5 }),
-        combo_damage_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 0.0, 0.0, 0.5 }),
-        combo_damage_animation_duration: f32 = 0.5,
+        damage_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 0.0, 0.0, 0.5 }),
+        damage_animation_duration: f32 = 0.5,
         rage_color: sdk.math.Vec4 = .fromArray(.{ 1.0, 0.0, 0.0, 0.5 }),
         rage_thickness: f32 = 2,
     };

@@ -1,6 +1,8 @@
 const std = @import("std");
 const misc = @import("root.zig");
 
+pub const bounded_array_tag = opaque {};
+
 pub fn BoundedArray(
     comptime capacity: usize,
     comptime Element: type,
@@ -11,12 +13,14 @@ pub fn BoundedArray(
         len: usize,
 
         const Self = @This();
+        pub const Child = Element;
 
         pub const max_len = capacity;
         pub const empty = Self{
             .buffer = [1]Element{empty_element} ** capacity,
             .len = 0,
         };
+        pub const tag = bounded_array_tag;
 
         pub fn fromArray(array: anytype) Self {
             if (@typeInfo(@TypeOf(array)) != .array) {
@@ -49,6 +53,19 @@ pub fn BoundedArray(
                 buffer[index] = element;
             }
             return .{ .buffer = buffer, .len = slice.len };
+        }
+
+        pub fn fromSliceTrimmed(slice: []const Element) Self {
+            var buffer = Self.empty.buffer;
+            var len: usize = 0;
+            for (slice) |element| {
+                if (len >= capacity) {
+                    break;
+                }
+                buffer[len] = element;
+                len += 1;
+            }
+            return .{ .buffer = buffer, .len = len };
         }
 
         pub fn append(self: *Self, element: Element) !void {
@@ -88,6 +105,15 @@ test "fromSlice should return a bounded array with elements from provided slice"
 
 test "fromSlice should error when slice length exceeds bounded array capacity" {
     try testing.expectError(error.NoSpaceLeft, BoundedArray(2, u8, 123).fromSlice(&.{ 1, 2, 3, 4 }));
+}
+
+test "fromSliceTrimmed should return a bounded array with elements from provided slice trimmed to capacity if exceeded" {
+    const array_1 = BoundedArray(4, u8, 123).fromSliceTrimmed(&.{ 1, 2 });
+    try testing.expectEqual([4]u8{ 1, 2, 123, 123 }, array_1.buffer);
+    try testing.expectEqual(2, array_1.len);
+    const array_2 = BoundedArray(4, u8, 123).fromSliceTrimmed(&.{ 1, 2, 3, 4, 5, 6 });
+    try testing.expectEqual([4]u8{ 1, 2, 3, 4 }, array_2.buffer);
+    try testing.expectEqual(4, array_2.len);
 }
 
 test "append should add a element to the end of the bounded array when it's not full" {

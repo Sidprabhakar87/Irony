@@ -28,25 +28,29 @@ fn writeValue(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
         .pointer => |info| info.child,
         else => @compileError("Expected value_pointer to be a pointer but got: " ++ @typeName(@TypeOf(value_pointer))),
     };
-    try switch (@typeInfo(Type)) {
-        .bool => writeBool(writer, value_pointer.*),
-        .int => writeInt(writer, value_pointer.*),
-        .float => writeFloat(writer, value_pointer.*),
-        .@"enum" => writeEnum(writer, value_pointer.*),
-        .optional => writeOptional(writer, value_pointer, indentation),
-        .array => writeArray(writer, value_pointer, indentation),
+    if (hasTag(Type, misc.bounded_array_tag)) {
+        try writeBoundedArray(writer, value_pointer, indentation);
+    } else switch (@typeInfo(Type)) {
+        .bool => try writeBool(writer, value_pointer.*),
+        .int => try writeInt(writer, value_pointer.*),
+        .float => try writeFloat(writer, value_pointer.*),
+        .@"enum" => try writeEnum(writer, value_pointer.*),
+        .optional => try writeOptional(writer, value_pointer, indentation),
+        .array => try writeArray(writer, value_pointer, indentation),
         .@"struct" => |*info| switch (info.is_tuple) {
-            true => writeTuple(writer, value_pointer, indentation),
-            false => writeStruct(writer, value_pointer, indentation),
+            true => try writeTuple(writer, value_pointer, indentation),
+            false => try writeStruct(writer, value_pointer, indentation),
         },
-        .@"union" => writeUnion(writer, value_pointer, indentation),
+        .@"union" => try writeUnion(writer, value_pointer, indentation),
         else => @compileError("Unsupported type: " ++ @typeName(Type)),
-    };
+    }
 }
 
 fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
     const start_height = reader.stackHeight();
-    return switch (@typeInfo(Type)) {
+    const value_or_error = if (hasTag(Type, misc.bounded_array_tag)) block: {
+        break :block readBoundedArray(Type, reader, allocator, default);
+    } else switch (@typeInfo(Type)) {
         .bool => readBool(reader),
         .int => readInt(Type, reader, allocator),
         .float => readFloat(Type, reader, allocator),
@@ -59,7 +63,8 @@ fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
         },
         .@"union" => readUnion(Type, reader, allocator, default),
         else => @compileError("Unsupported type: " ++ @typeName(Type)),
-    } catch |err_1| {
+    };
+    return value_or_error catch |err_1| {
         if (reader.stackHeight() != start_height) {
             reader.skipUntilStackHeight(start_height) catch |err_2| {
                 misc.error_context.append("Failed to skip the invalid value.", .{});
@@ -582,6 +587,108 @@ fn readUnion(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     return tagged_union;
 }
 
+fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+    const slice = value_pointer.asSlice();
+    const Element = @TypeOf(value_pointer.*).Child;
+    if (Element == u8) {
+        writer.print("\"{s}\"", .{slice}) catch |err| {
+            misc.error_context.new("Failed to write enum value: {s}", .{slice});
+            return err;
+        };
+        return;
+    }
+    writer.writeByte('[') catch |err| {
+        misc.error_context.new("Failed to write array start.", .{});
+        return err;
+    };
+    writeNewLine(writer, indentation + 1) catch |err| {
+        misc.error_context.append("Failed to write new line after array start.", .{});
+        return err;
+    };
+    for (slice, 0..) |*element_pointer, index| {
+        writeValue(writer, element_pointer, indentation + 1) catch |err| {
+            misc.error_context.append("Failed to write array element at index: {}", .{index});
+            return err;
+        };
+        if (index < slice.len - 1) {
+            writer.writeByte(',') catch |err| {
+                misc.error_context.new("Failed to write array element separator after element: {}", .{index});
+                return err;
+            };
+            writeNewLine(writer, indentation + 1) catch |err| {
+                misc.error_context.append("Failed to write new line after array element: {}", .{index});
+                return err;
+            };
+        }
+    }
+    writeNewLine(writer, indentation) catch |err| {
+        misc.error_context.append("Failed to write new line after last array element.", .{});
+        return err;
+    };
+    writer.writeByte(']') catch |err| {
+        misc.error_context.new("Failed to write array end.", .{});
+        return err;
+    };
+}
+
+fn readBoundedArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+    const Element = Type.Child;
+    if (Element == u8) {
+        const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
+            misc.error_context.new("Failed to read enum token.", .{});
+            return err;
+        };
+        defer freeIfAllocated(allocator, token);
+        const string = switch (token) {
+            .allocated_string => |string| string,
+            else => {
+                misc.error_context.new("Expected a string token but got: {s}", .{@tagName(token)});
+                return error.UnexpectedToken;
+            },
+        };
+        return .fromSliceTrimmed(string);
+    }
+    const begin_token = reader.next() catch |err| {
+        misc.error_context.new("Failed to read bounded array begin token.", .{});
+        return err;
+    };
+    if (begin_token != .array_begin) {
+        misc.error_context.new("Expected array begin token but got: {s}", .{@tagName(begin_token)});
+        return error.UnexpectedToken;
+    }
+    const default_slice = if (default) |d| d.asSlice() else &.{};
+    var array: Type = .empty;
+    var index: usize = 0;
+    while (true) {
+        const peek_token = reader.peekNextTokenType() catch |err| {
+            misc.error_context.new("Failed to peek next bounded array token at index: {}", .{index});
+            return err;
+        };
+        if (peek_token == .array_end) {
+            break;
+        }
+        if (array.len < array.buffer.len) {
+            const default_element = if (index < default_slice.len) default_slice[index] else null;
+            array.buffer[array.len] = readValue(Element, reader, allocator, default_element) catch |err| {
+                misc.error_context.append("Failed to read bounded array element at index: {}", .{index});
+                return err;
+            };
+            array.len += 1;
+        } else {
+            reader.skipValue() catch |err| {
+                misc.error_context.new("Failed to skip bounded array element: {}", .{index});
+                return err;
+            };
+        }
+        index += 1;
+    }
+    _ = reader.next() catch |err| {
+        misc.error_context.new("Failed to read bounded array end token.", .{});
+        return err;
+    };
+    return array;
+}
+
 fn writeNewLine(writer: *std.io.Writer, indentation: usize) !void {
     writer.writeByte('\n') catch |err| {
         misc.error_context.new("Failed to write new line character.", .{});
@@ -601,6 +708,16 @@ fn freeIfAllocated(allocator: std.mem.Allocator, token: std.json.Token) void {
             allocator.free(slice);
         },
         else => {},
+    }
+}
+
+inline fn hasTag(comptime Type: type, comptime tag: type) bool {
+    comptime {
+        const info = @typeInfo(Type);
+        if (info != .@"struct" and info != .@"enum" and info != .@"union") return false;
+        if (!@hasDecl(Type, "tag")) return false;
+        if (@TypeOf(Type.tag) != type) return false;
+        return Type.tag == tag;
     }
 }
 
@@ -629,6 +746,8 @@ test "readJson should read the same value that writeJson saved" {
         tagged_union: union(enum) { i: i32, f: f32 } = .{ .i = 0 },
         array_of_struct: [2]struct { a: f32 = 0, b: f32 = 0 } = .{ .{}, .{} },
         struct_of_array: struct { a: [2]f32 = .{ 0, 0 }, b: [2]f32 = .{ 0, 0 } } = .{},
+        bounded_array: misc.BoundedArray(4, f32, 0) = .empty,
+        bounded_string: misc.BoundedArray(4, u8, 0) = .empty,
     };
     const write_value = Value{
         .bool = false,
@@ -652,6 +771,8 @@ test "readJson should read the same value that writeJson saved" {
         .tagged_union = .{ .i = 9 },
         .array_of_struct = .{ .{ .a = 10, .b = 11 }, .{ .a = 12, .b = 13 } },
         .struct_of_array = .{ .a = .{ 14, 15 }, .b = .{ 16, 17 } },
+        .bounded_array = .fromArray(.{ 18, 19 }),
+        .bounded_string = .fromArray("123".*),
     };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
@@ -667,6 +788,8 @@ test "readJson should succeed when json has more values then expected" {
         d: struct { d1: f32 },
         e: [2]f32,
         f: [2]f32,
+        g: misc.BoundedArray(2, f32, 0),
+        h: misc.BoundedArray(2, u8, 0),
     };
     var reader = std.Io.Reader.fixed(
         \\{
@@ -675,7 +798,9 @@ test "readJson should succeed when json has more values then expected" {
         \\  "c": {"c1": 3},
         \\  "d": {"d1": 4, "d2": 5},
         \\  "e": [6, 7, 8],
-        \\  "f": [9, 10, 11]
+        \\  "f": [9, 10, 11],
+        \\  "g": [12, 13, 14],
+        \\  "h": "abc"
         \\}
     );
     const value = try readJson(Value, &reader, null);
@@ -684,6 +809,8 @@ test "readJson should succeed when json has more values then expected" {
         .d = .{ .d1 = 4 },
         .e = .{ 6, 7 },
         .f = .{ 9, 10 },
+        .g = .fromArray(.{ 12, 13 }),
+        .h = .fromArray("ab".*),
     }, value);
 }
 
@@ -731,6 +858,8 @@ test "readJson should use default value when encountering invalid value and defa
         f: struct { f32, f32, f32 } = .{ -14, -15, -16 },
         g: ?struct { g1: f32 = -17, g2: f32 = -18 } = .{ .g1 = -19, .g2 = -20 },
         h: ?struct { h1: f32 = -21, h2: f32 = -22 } = null,
+        i: misc.BoundedArray(4, f32, 0) = .fromArray(.{ -23, -24 }),
+        j: misc.BoundedArray(4, u8, 0) = .fromArray("ab".*),
     };
     var reader = std.Io.Reader.fixed(
         \\{
@@ -741,7 +870,9 @@ test "readJson should use default value when encountering invalid value and defa
         \\  "e": [3, false, 4],
         \\  "f": [5, false, 6],
         \\  "g": { "g1": 7, "g2": false },
-        \\  "h": { "h1": 8, "h2": false }
+        \\  "h": { "h1": 8, "h2": false },
+        \\  "i": [9, false, 10],
+        \\  "j": false
         \\}
     );
     const value = try readJson(Value, &reader, .{});
@@ -754,6 +885,8 @@ test "readJson should use default value when encountering invalid value and defa
         .f = .{ 5, -15, 6 },
         .g = .{ .g1 = 7, .g2 = -20 },
         .h = null,
+        .i = .fromArray(.{ 9, -24, 10 }),
+        .j = .fromArray("ab".*),
     }, value);
 }
 

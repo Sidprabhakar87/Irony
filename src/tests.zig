@@ -16,6 +16,7 @@ test {
 
     _ = @import("sdk/io/bit.zig");
     _ = @import("sdk/io/byte.zig");
+    _ = @import("sdk/io/json.zig");
     _ = @import("sdk/io/recording.zig");
     _ = @import("sdk/io/settings.zig");
     _ = @import("sdk/io/xz.zig");

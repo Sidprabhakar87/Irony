@@ -562,7 +562,7 @@ fn writeValue(writer: *io.ByteWriter, value_pointer: anytype) !void {
         .array => {
             for (value_pointer, 0..) |*element_pointer, index| {
                 writeValue(writer, element_pointer) catch |err| {
-                    misc.error_context.append("Failed to write array element on index: {}", .{index});
+                    misc.error_context.append("Failed to write array element at index: {}", .{index});
                     return err;
                 };
             }
@@ -708,7 +708,7 @@ fn readValue(comptime Type: type, reader: *io.ByteReader) anyerror!Type {
             }
             return value;
         },
-        .@"union" => |info| if (info.layout == .@"packed") {
+        .@"union" => |*info| if (info.layout == .@"packed") {
             const IntType = @Type(.{ .int = .{ .signedness = .unsigned, .bits = @bitSizeOf(Type) } });
             const int_value = readValue(IntType, reader) catch |err| {
                 misc.error_context.append(

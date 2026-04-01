@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const misc = @import("../misc/root.zig");
+const math = @import("../math/root.zig");
 
 const buffer_size = 1024;
 const indentation_string = "  ";
@@ -32,6 +33,10 @@ fn writeValue(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
         try writeBoundedArray(writer, value_pointer, indentation);
     } else if (isEnumArray(Type)) {
         try writeEnumArray(writer, value_pointer, indentation);
+    } else if (isVector(Type)) {
+        try writeVector(writer, value_pointer, indentation);
+    } else if (isMatrix(Type)) {
+        try writeMatrix(writer, value_pointer, indentation);
     } else switch (@typeInfo(Type)) {
         .bool => try writeBool(writer, value_pointer.*),
         .int => try writeInt(writer, value_pointer.*),
@@ -54,6 +59,10 @@ fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
         break :block readBoundedArray(Type, reader, allocator, default);
     } else if (isEnumArray(Type)) block: {
         break :block readEnumArray(Type, reader, allocator, default);
+    } else if (isVector(Type)) block: {
+        break :block readVector(Type, reader, allocator, default);
+    } else if (isMatrix(Type)) block: {
+        break :block readMatrix(Type, reader, allocator, default);
     } else switch (@typeInfo(Type)) {
         .bool => readBool(reader),
         .int => readInt(Type, reader, allocator),
@@ -820,6 +829,45 @@ fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.m
     return enum_array;
 }
 
+inline fn isVector(comptime Type: type) bool {
+    comptime return hasTag(Type, math.vector_tag);
+}
+
+fn writeVector(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+    writeValue(writer, &value_pointer.array, indentation) catch |err| {
+        misc.error_context.append("Failed to write vector's array.", .{});
+        return err;
+    };
+}
+
+fn readVector(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+    const default_array = if (default) |d| d.array else null;
+    const array = readValue(Type.Array, reader, allocator, default_array) catch |err| {
+        misc.error_context.append("Failed to read vector's array.", .{});
+        return err;
+    };
+    return .fromArray(array);
+}
+
+inline fn isMatrix(comptime Type: type) bool {
+    comptime return hasTag(Type, math.vector_tag);
+}
+
+fn writeMatrix(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+    return writeValue(writer, value_pointer.asFlat(), indentation) catch |err| {
+        misc.error_context.append("Failed to write matrix's array.", .{});
+        return err;
+    };
+}
+
+fn readMatrix(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+    const default_flat = if (default) |d| d.toFlat() else null;
+    return readValue(Type.Flat, reader, allocator, default_flat) catch |err| {
+        misc.error_context.append("Failed to read matrix's array.", .{});
+        return err;
+    };
+}
+
 inline fn hasTag(comptime Type: type, comptime tag: type) bool {
     comptime {
         const info = @typeInfo(Type);
@@ -880,6 +928,8 @@ test "readJson should read the same value that writeJson saved" {
         bounded_array: misc.BoundedArray(4, f32, 0) = .empty,
         bounded_string: misc.BoundedArray(4, u8, 0) = .empty,
         enum_array: std.EnumArray(enum { a, b }, f32) = .initFill(0),
+        vector: math.Vec2 = .zero,
+        matrix: math.Mat2 = .zero,
     };
     const write_value = Value{
         .bool = false,
@@ -906,6 +956,8 @@ test "readJson should read the same value that writeJson saved" {
         .bounded_array = .fromArray(.{ 18, 19 }),
         .bounded_string = .fromArray("123".*),
         .enum_array = .init(.{ .a = 20, .b = 21 }),
+        .vector = .fromArray(.{ 22, 23 }),
+        .matrix = .fromArray(.{ .{ 24, 25 }, .{ 26, 27 } }),
     };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);

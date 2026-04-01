@@ -28,8 +28,10 @@ fn writeValue(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
         .pointer => |info| info.child,
         else => @compileError("Expected value_pointer to be a pointer but got: " ++ @typeName(@TypeOf(value_pointer))),
     };
-    if (hasTag(Type, misc.bounded_array_tag)) {
+    if (isBoundedArray(Type)) {
         try writeBoundedArray(writer, value_pointer, indentation);
+    } else if (isEnumArray(Type)) {
+        try writeEnumArray(writer, value_pointer, indentation);
     } else switch (@typeInfo(Type)) {
         .bool => try writeBool(writer, value_pointer.*),
         .int => try writeInt(writer, value_pointer.*),
@@ -48,8 +50,10 @@ fn writeValue(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
 
 fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
     const start_height = reader.stackHeight();
-    const value_or_error = if (hasTag(Type, misc.bounded_array_tag)) block: {
+    const value_or_error = if (isBoundedArray(Type)) block: {
         break :block readBoundedArray(Type, reader, allocator, default);
+    } else if (isEnumArray(Type)) block: {
+        break :block readEnumArray(Type, reader, allocator, default);
     } else switch (@typeInfo(Type)) {
         .bool => readBool(reader),
         .int => readInt(Type, reader, allocator),
@@ -432,7 +436,7 @@ fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, indentation: usiz
         };
         if (index < info.fields.len - 1) {
             writer.writeByte(',') catch |err| {
-                misc.error_context.new("Failed to struct field separator after field: {s}", .{field.name});
+                misc.error_context.new("Failed to write struct field separator after field: {s}", .{field.name});
                 return err;
             };
             writeNewLine(writer, indentation + 1) catch |err| {
@@ -587,6 +591,10 @@ fn readUnion(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     return tagged_union;
 }
 
+inline fn isBoundedArray(comptime Type: type) bool {
+    comptime return hasTag(Type, misc.bounded_array_tag);
+}
+
 fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
     const slice = value_pointer.asSlice();
     const Element = @TypeOf(value_pointer.*).Child;
@@ -689,6 +697,139 @@ fn readBoundedArray(comptime Type: type, reader: *std.json.Reader, allocator: st
     return array;
 }
 
+inline fn isEnumArray(comptime Type: type) bool {
+    comptime {
+        const info = @typeInfo(Type);
+        if (info != .@"struct") return false;
+        if (!@hasDecl(Type, "Indexer")) return false;
+        if (!@hasDecl(Type, "Key")) return false;
+        if (!@hasDecl(Type, "Value")) return false;
+        if (!@hasDecl(Type, "len")) return false;
+        return true;
+    }
+}
+
+fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+    const Type = @TypeOf(value_pointer.*);
+    const Key = Type.Key;
+    const key_info = &@typeInfo(Key).@"enum";
+    writer.writeByte('{') catch |err| {
+        misc.error_context.new("Failed to write object start.", .{});
+        return err;
+    };
+    writeNewLine(writer, indentation + 1) catch |err| {
+        misc.error_context.append("Failed to write new line after object start.", .{});
+        return err;
+    };
+    inline for (key_info.fields, 0..) |*field, index| {
+        writer.print("\"{s}\": ", .{field.name}) catch |err| {
+            misc.error_context.new("Failed to write enum array key: {s}", .{field.name});
+            return err;
+        };
+        const key: Key = @enumFromInt(field.value);
+        const field_pointer = value_pointer.getPtrConst(key);
+        writeValue(writer, field_pointer, indentation + 1) catch |err| {
+            misc.error_context.append("Failed to write enum array value for key: {s}", .{field.name});
+            return err;
+        };
+        if (index < key_info.fields.len - 1) {
+            writer.writeByte(',') catch |err| {
+                misc.error_context.new("Failed to write entry separator after enum array entry: {s}", .{field.name});
+                return err;
+            };
+            writeNewLine(writer, indentation + 1) catch |err| {
+                misc.error_context.append("Failed to write new line after enum array entry: {s}", .{field.name});
+                return err;
+            };
+        }
+    }
+    writeNewLine(writer, indentation) catch |err| {
+        misc.error_context.append("Failed to write new line after last enum array entry.", .{});
+        return err;
+    };
+    writer.writeByte('}') catch |err| {
+        misc.error_context.new("Failed to write object end.", .{});
+        return err;
+    };
+}
+
+fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+    const Key = Type.Key;
+    const Value = Type.Value;
+    const key_info = &@typeInfo(Key).@"enum";
+    const begin_token = reader.next() catch |err| {
+        misc.error_context.new("Failed to read enum array begin token.", .{});
+        return err;
+    };
+    if (begin_token != .object_begin) {
+        misc.error_context.new("Expected object begin token but got: {s}", .{@tagName(begin_token)});
+        return error.UnexpectedToken;
+    }
+    var enum_array: Type = default orelse undefined;
+    var found_keys = [1]bool{default != null} ** key_info.fields.len;
+    while (true) {
+        const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
+            misc.error_context.new("Failed to read next enum array token.", .{});
+            return err;
+        };
+        var is_token_freed = false;
+        defer if (!is_token_freed) {
+            freeIfAllocated(allocator, token);
+            is_token_freed = true;
+        };
+        const key_name = switch (token) {
+            .allocated_string => |string| string,
+            .object_end => break,
+            else => {
+                misc.error_context.new("Expected string or object end token but got: {s}", .{@tagName(begin_token)});
+                return error.UnexpectedToken;
+            },
+        };
+        var key_found = false;
+        inline for (key_info.fields, 0..) |*field, index| {
+            if (std.mem.eql(u8, field.name, key_name)) {
+                if (!is_token_freed) { // Key name is not needed while parsing the value.
+                    freeIfAllocated(allocator, token);
+                    is_token_freed = true;
+                }
+                const key: Key = @enumFromInt(field.value);
+                const default_field = if (default) |d| d.get(key) else null;
+                const value = readValue(Value, reader, allocator, default_field) catch |err| {
+                    misc.error_context.append("Failed to read enum array entry value: {s}", .{field.name});
+                    return err;
+                };
+                enum_array.set(key, value);
+                key_found = true;
+                found_keys[index] = true;
+                break;
+            }
+        }
+        if (!key_found) {
+            reader.skipValue() catch |err| {
+                misc.error_context.new("Failed to skip enum array entry value: {s}", .{key_name});
+                return err;
+            };
+        }
+    }
+    inline for (key_info.fields, found_keys) |*field, found| {
+        if (!found) {
+            misc.error_context.new("Failed to find enum array entry inside JSON object: {s}", .{field.name});
+            return error.EntryNotFound;
+        }
+    }
+    return enum_array;
+}
+
+inline fn hasTag(comptime Type: type, comptime tag: type) bool {
+    comptime {
+        const info = @typeInfo(Type);
+        if (info != .@"struct" and info != .@"enum" and info != .@"union") return false;
+        if (!@hasDecl(Type, "tag")) return false;
+        if (@TypeOf(Type.tag) != type) return false;
+        return Type.tag == tag;
+    }
+}
+
 fn writeNewLine(writer: *std.io.Writer, indentation: usize) !void {
     writer.writeByte('\n') catch |err| {
         misc.error_context.new("Failed to write new line character.", .{});
@@ -708,16 +849,6 @@ fn freeIfAllocated(allocator: std.mem.Allocator, token: std.json.Token) void {
             allocator.free(slice);
         },
         else => {},
-    }
-}
-
-inline fn hasTag(comptime Type: type, comptime tag: type) bool {
-    comptime {
-        const info = @typeInfo(Type);
-        if (info != .@"struct" and info != .@"enum" and info != .@"union") return false;
-        if (!@hasDecl(Type, "tag")) return false;
-        if (@TypeOf(Type.tag) != type) return false;
-        return Type.tag == tag;
     }
 }
 
@@ -748,6 +879,7 @@ test "readJson should read the same value that writeJson saved" {
         struct_of_array: struct { a: [2]f32 = .{ 0, 0 }, b: [2]f32 = .{ 0, 0 } } = .{},
         bounded_array: misc.BoundedArray(4, f32, 0) = .empty,
         bounded_string: misc.BoundedArray(4, u8, 0) = .empty,
+        enum_array: std.EnumArray(enum { a, b }, f32) = .initFill(0),
     };
     const write_value = Value{
         .bool = false,
@@ -773,6 +905,7 @@ test "readJson should read the same value that writeJson saved" {
         .struct_of_array = .{ .a = .{ 14, 15 }, .b = .{ 16, 17 } },
         .bounded_array = .fromArray(.{ 18, 19 }),
         .bounded_string = .fromArray("123".*),
+        .enum_array = .init(.{ .a = 20, .b = 21 }),
     };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
@@ -790,17 +923,19 @@ test "readJson should succeed when json has more values then expected" {
         f: [2]f32,
         g: misc.BoundedArray(2, f32, 0),
         h: misc.BoundedArray(2, u8, 0),
+        i: std.EnumArray(enum { i1, i2 }, f32),
     };
     var reader = std.Io.Reader.fixed(
         \\{
         \\  "a": 1,
         \\  "b": 2,
-        \\  "c": {"c1": 3},
-        \\  "d": {"d1": 4, "d2": 5},
+        \\  "c": { "c1": 3 },
+        \\  "d": { "d1": 4, "d2": 5 },
         \\  "e": [6, 7, 8],
         \\  "f": [9, 10, 11],
         \\  "g": [12, 13, 14],
-        \\  "h": "abc"
+        \\  "h": "abc",
+        \\  "i": { "i1": 15, "i2": 16, "i3": 17 }
         \\}
     );
     const value = try readJson(Value, &reader, null);
@@ -811,6 +946,7 @@ test "readJson should succeed when json has more values then expected" {
         .f = .{ 9, 10 },
         .g = .fromArray(.{ 12, 13 }),
         .h = .fromArray("ab".*),
+        .i = .init(.{ .i1 = 15, .i2 = 16 }),
     }, value);
 }
 
@@ -824,6 +960,7 @@ test "readJson should use default value when encountering missing value and defa
         f: struct { f32, f32, f32 } = .{ -14, -15, -16 },
         g: ?struct { g1: f32 = -17, g2: f32 = -18 } = .{ .g1 = -19, .g2 = -20 },
         h: ?struct { h1: f32 = -21, h2: f32 = -22 } = null,
+        i: std.EnumArray(enum { i1, i2 }, f32) = .init(.{ .i1 = -23, .i2 = -24 }),
     };
     var reader = std.Io.Reader.fixed(
         \\{
@@ -832,7 +969,8 @@ test "readJson should use default value when encountering missing value and defa
         \\  "e": [3, 4],
         \\  "f": [5, 6],
         \\  "g": { "g1": 7 },
-        \\  "h": { "h1": 8 }
+        \\  "h": { "h1": 8 },
+        \\  "i": { "i1": 9 }
         \\}
     );
     const value = try readJson(Value, &reader, .{});
@@ -845,6 +983,7 @@ test "readJson should use default value when encountering missing value and defa
         .f = .{ 5, 6, -16 },
         .g = .{ .g1 = 7, .g2 = -20 },
         .h = null,
+        .i = .init(.{ .i1 = 9, .i2 = -24 }),
     }, value);
 }
 
@@ -860,6 +999,8 @@ test "readJson should use default value when encountering invalid value and defa
         h: ?struct { h1: f32 = -21, h2: f32 = -22 } = null,
         i: misc.BoundedArray(4, f32, 0) = .fromArray(.{ -23, -24 }),
         j: misc.BoundedArray(4, u8, 0) = .fromArray("ab".*),
+        k: std.EnumArray(enum { k1, k2 }, f32) = .init(.{ .k1 = -25, .k2 = -26 }),
+        l: std.EnumArray(enum { l1, l2 }, f32) = .init(.{ .l1 = -27, .l2 = -28 }),
     };
     var reader = std.Io.Reader.fixed(
         \\{
@@ -872,7 +1013,9 @@ test "readJson should use default value when encountering invalid value and defa
         \\  "g": { "g1": 7, "g2": false },
         \\  "h": { "h1": 8, "h2": false },
         \\  "i": [9, false, 10],
-        \\  "j": false
+        \\  "j": false,
+        \\  "k": { "k1": 11, "k2": false },
+        \\  "l": false
         \\}
     );
     const value = try readJson(Value, &reader, .{});
@@ -887,6 +1030,8 @@ test "readJson should use default value when encountering invalid value and defa
         .h = null,
         .i = .fromArray(.{ 9, -24, 10 }),
         .j = .fromArray("ab".*),
+        .k = .init(.{ .k1 = 11, .k2 = -26 }),
+        .l = .init(.{ .l1 = -27, .l2 = -28 }),
     }, value);
 }
 
@@ -894,8 +1039,8 @@ test "readJson should resolve mixed field order in JSON objects" {
     const Value = struct {
         a: struct { a1: f32, a2: f32 },
         b: struct { b1: f32, b2: f32 },
-        c: struct { c1: f32, c2: f32 },
-        d: struct { d1: f32, d2: f32 },
+        c: std.EnumArray(enum { c1, c2 }, f32),
+        d: std.EnumArray(enum { d1, d2 }, f32),
     };
     var reader = std.Io.Reader.fixed(
         \\{
@@ -909,7 +1054,7 @@ test "readJson should resolve mixed field order in JSON objects" {
     try testing.expectEqual(Value{
         .a = .{ .a1 = 1, .a2 = 2 },
         .b = .{ .b1 = 3, .b2 = 4 },
-        .c = .{ .c1 = 5, .c2 = 6 },
-        .d = .{ .d1 = 7, .d2 = 8 },
+        .c = .init(.{ .c1 = 5, .c2 = 6 }),
+        .d = .init(.{ .d1 = 7, .d2 = 8 }),
     }, value);
 }

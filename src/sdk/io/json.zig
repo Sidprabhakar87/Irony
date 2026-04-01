@@ -107,14 +107,14 @@ fn writeBool(writer: *std.io.Writer, value: bool) !void {
 
 fn readBool(reader: *std.json.Reader) !bool {
     const token = reader.next() catch |err| {
-        misc.error_context.new("Failed to read bool token.", .{});
+        misc.error_context.new("Failed to read boolean value token.", .{});
         return err;
     };
     switch (token) {
         .false => return false,
         .true => return true,
         else => {
-            misc.error_context.new("No default value to fall back to.", .{});
+            misc.error_context.new("Expected true or false token but got: {s}", .{@tagName(token)});
             return error.UnexpectedToken;
         },
     }
@@ -129,7 +129,7 @@ fn writeInt(writer: *std.io.Writer, value: anytype) !void {
 
 fn readInt(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator) !Type {
     const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
-        misc.error_context.new("Failed to read int token.", .{});
+        misc.error_context.new("Failed to read int value token.", .{});
         return err;
     };
     defer freeIfAllocated(allocator, token);
@@ -155,7 +155,7 @@ fn writeFloat(writer: *std.io.Writer, value: anytype) !void {
 
 fn readFloat(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator) !Type {
     const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
-        misc.error_context.new("Failed to read float token.", .{});
+        misc.error_context.new("Failed to read float value token.", .{});
         return err;
     };
     defer freeIfAllocated(allocator, token);
@@ -191,7 +191,7 @@ fn readEnum(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Al
         @compileError("Enum " ++ @typeName(Type) ++ " is not exhaustive and therefor not supported.");
     }
     const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
-        misc.error_context.new("Failed to read enum token.", .{});
+        misc.error_context.new("Failed to read enum value token.", .{});
         return err;
     };
     defer freeIfAllocated(allocator, token);
@@ -234,8 +234,8 @@ fn readOptional(comptime Type: type, reader: *std.json.Reader, allocator: std.me
     };
     switch (token_type) {
         .null => {
-            reader.skipValue() catch |err| {
-                misc.error_context.new("Failed to skip null token.", .{});
+            _ = reader.next() catch |err| {
+                misc.error_context.new("Failed to read null token.", .{});
                 return err;
             };
             return null;
@@ -254,35 +254,36 @@ fn readOptional(comptime Type: type, reader: *std.json.Reader, allocator: std.me
 
 fn writeArray(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
     writer.writeByte('[') catch |err| {
-        misc.error_context.new("Failed to write array start.", .{});
+        misc.error_context.new("Failed to write array begin token.", .{});
         return err;
     };
     writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write new line after array start.", .{});
+        misc.error_context.append("Failed to write first element new line.", .{});
         return err;
     };
     for (value_pointer, 0..) |*element_pointer, index| {
+        errdefer misc.error_context.append("Failed to write array element at index: {}", .{index});
         writeValue(writer, element_pointer, indentation + 1) catch |err| {
-            misc.error_context.append("Failed to write array element at index: {}", .{index});
+            misc.error_context.append("Failed to write element value.", .{});
             return err;
         };
         if (index < value_pointer.len - 1) {
             writer.writeByte(',') catch |err| {
-                misc.error_context.new("Failed to write array element separator after element: {}", .{index});
+                misc.error_context.new("Failed to write next element separator.", .{});
                 return err;
             };
             writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write new line after array element: {}", .{index});
+                misc.error_context.append("Failed to write next element new line.", .{});
                 return err;
             };
         }
     }
     writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write new line after last array element.", .{});
+        misc.error_context.append("Failed to write array end token new line.", .{});
         return err;
     };
     writer.writeByte(']') catch |err| {
-        misc.error_context.new("Failed to write array end.", .{});
+        misc.error_context.new("Failed to write array end token.", .{});
         return err;
     };
 }
@@ -301,22 +302,23 @@ fn readArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     var array: Type = default orelse undefined;
     var index: usize = 0;
     while (true) {
-        const peek_token = reader.peekNextTokenType() catch |err| {
-            misc.error_context.new("Failed to peek next array token at index: {}", .{index});
+        errdefer misc.error_context.append("Failed to read array element at index: {}", .{index});
+        const token_type = reader.peekNextTokenType() catch |err| {
+            misc.error_context.new("Failed to peek element token type.", .{});
             return err;
         };
-        if (peek_token == .array_end) {
+        if (token_type == .array_end) {
             break;
         }
         if (index < array.len) {
             const default_element = if (default) |d| d[index] else null;
             array[index] = readValue(Element, reader, allocator, default_element) catch |err| {
-                misc.error_context.append("Failed to read array element at index: {}", .{index});
+                misc.error_context.append("Failed to read element value.", .{});
                 return err;
             };
         } else {
             reader.skipValue() catch |err| {
-                misc.error_context.new("Failed to skip array element: {}", .{index});
+                misc.error_context.new("Failed to skip element value.", .{});
                 return err;
             };
         }
@@ -336,36 +338,37 @@ fn readArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
 fn writeTuple(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
     const info = @typeInfo(@TypeOf(value_pointer.*)).@"struct";
     writer.writeByte('[') catch |err| {
-        misc.error_context.new("Failed to write tuple start.", .{});
+        misc.error_context.new("Failed to write tuple begin token.", .{});
         return err;
     };
     writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write new line after tuple start.", .{});
+        misc.error_context.append("Failed to write first field new line.", .{});
         return err;
     };
     inline for (0..info.fields.len) |index| {
+        errdefer misc.error_context.append("Failed to write tuple field: {}", .{index});
         const field_pointer = &value_pointer[index];
         writeValue(writer, field_pointer, indentation + 1) catch |err| {
-            misc.error_context.append("Failed to write tuple field: {}", .{index});
+            misc.error_context.append("Failed to write field value.", .{});
             return err;
         };
         if (index < value_pointer.len - 1) {
             writer.writeByte(',') catch |err| {
-                misc.error_context.new("Failed to write tuple field separator field: {}", .{index});
+                misc.error_context.new("Failed to write next field separator.", .{});
                 return err;
             };
             writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write new line after tuple field: {}", .{index});
+                misc.error_context.append("Failed to write next field new line.", .{});
                 return err;
             };
         }
     }
     writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write new line after last tuple field.", .{});
+        misc.error_context.append("Failed to write tuple end token new line.", .{});
         return err;
     };
     writer.writeByte(']') catch |err| {
-        misc.error_context.new("Failed to write tuple end.", .{});
+        misc.error_context.new("Failed to write tuple end token.", .{});
         return err;
     };
 }
@@ -383,31 +386,33 @@ fn readTuple(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     var tuple: Type = default orelse undefined;
     var index: usize = 0;
     inline for (info.fields) |*field| {
-        const peek_token = reader.peekNextTokenType() catch |err| {
-            misc.error_context.new("Failed to peek next tuple token at index: {}", .{index});
+        errdefer misc.error_context.append("Failed to read tuple field: {}", .{index});
+        const token_type = reader.peekNextTokenType() catch |err| {
+            misc.error_context.new("Failed to peek field token type.", .{});
             return err;
         };
-        if (peek_token == .array_end) {
+        if (token_type == .array_end) {
             break;
         }
         const Field = field.type;
         const default_field = if (default) |d| @field(d, field.name) else null;
         @field(tuple, field.name) = readValue(Field, reader, allocator, default_field) catch |err| {
-            misc.error_context.append("Failed to read tuple field at index: {}", .{index});
+            misc.error_context.append("Failed to read field value.", .{});
             return err;
         };
         index += 1;
     }
     while (true) {
-        const peek_token = reader.peekNextTokenType() catch |err| {
-            misc.error_context.new("Failed to peek next tuple token at index: {}", .{index});
+        errdefer misc.error_context.append("Failed to skip tuple field: {}", .{index});
+        const token_type = reader.peekNextTokenType() catch |err| {
+            misc.error_context.new("Failed to peek field token type.", .{});
             return err;
         };
-        if (peek_token == .array_end) {
+        if (token_type == .array_end) {
             break;
         }
         reader.skipValue() catch |err| {
-            misc.error_context.new("Failed to skip tuple field: {}", .{index});
+            misc.error_context.new("Failed to skip field value.", .{});
             return err;
         };
         index += 1;
@@ -426,40 +431,41 @@ fn readTuple(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
 fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
     const info = @typeInfo(@TypeOf(value_pointer.*)).@"struct";
     writer.writeByte('{') catch |err| {
-        misc.error_context.new("Failed to write object start.", .{});
+        misc.error_context.new("Failed to write struct begin token.", .{});
         return err;
     };
     writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write new line after object start.", .{});
+        misc.error_context.append("Failed first field new line.", .{});
         return err;
     };
     inline for (info.fields, 0..) |*field, index| {
+        errdefer misc.error_context.append("Failed to write struct field: {s}", .{field.name});
         writer.print("\"{s}\": ", .{field.name}) catch |err| {
-            misc.error_context.new("Failed to write struct field name: {s}", .{field.name});
+            misc.error_context.new("Failed to write field name.", .{});
             return err;
         };
         const field_pointer = &@field(value_pointer, field.name);
         writeValue(writer, field_pointer, indentation + 1) catch |err| {
-            misc.error_context.append("Failed to write struct field: {s}", .{field.name});
+            misc.error_context.append("Failed to write field value.", .{});
             return err;
         };
         if (index < info.fields.len - 1) {
             writer.writeByte(',') catch |err| {
-                misc.error_context.new("Failed to write struct field separator after field: {s}", .{field.name});
+                misc.error_context.new("Failed to write next field separator.", .{});
                 return err;
             };
             writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write new line after struct field: {s}", .{field.name});
+                misc.error_context.append("Failed to write next field new line.", .{});
                 return err;
             };
         }
     }
     writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write new line after last struct field.", .{});
+        misc.error_context.append("Failed to write struct end token new line.", .{});
         return err;
     };
     writer.writeByte('}') catch |err| {
-        misc.error_context.new("Failed to write object end.", .{});
+        misc.error_context.new("Failed to write struct end token.", .{});
         return err;
     };
 }
@@ -478,7 +484,7 @@ fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.
     var found_fields = [1]bool{default != null} ** info.fields.len;
     while (true) {
         const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
-            misc.error_context.new("Failed to read next struct token.", .{});
+            misc.error_context.new("Failed to read next struct field token.", .{});
             return err;
         };
         var is_token_freed = false;
@@ -504,7 +510,7 @@ fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.
                 const Field = field.type;
                 const default_field = if (default) |d| @field(d, field.name) else null;
                 @field(structure, field.name) = readValue(Field, reader, allocator, default_field) catch |err| {
-                    misc.error_context.append("Failed to read struct field: {s}", .{field.name});
+                    misc.error_context.append("Failed to read field value: {s}", .{field.name});
                     return err;
                 };
                 field_found = true;
@@ -536,7 +542,7 @@ fn writeUnion(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
     }
     const tag_name = @tagName(value_pointer.*);
     writer.writeAll("{ ") catch |err| {
-        misc.error_context.new("Failed to write union start.", .{});
+        misc.error_context.new("Failed to write union begin token.", .{});
         return err;
     };
     writer.print("\"{s}\": ", .{tag_name}) catch |err| {
@@ -552,7 +558,7 @@ fn writeUnion(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
         },
     }
     writer.writeAll(" }") catch |err| {
-        misc.error_context.new("Failed to write union end.", .{});
+        misc.error_context.new("Failed to write union end token.", .{});
         return err;
     };
 }
@@ -609,41 +615,42 @@ fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, indentation
     const Element = @TypeOf(value_pointer.*).Child;
     if (Element == u8) {
         writer.print("\"{s}\"", .{slice}) catch |err| {
-            misc.error_context.new("Failed to write enum value: {s}", .{slice});
+            misc.error_context.new("Failed to write bounded string value: {s}", .{slice});
             return err;
         };
         return;
     }
     writer.writeByte('[') catch |err| {
-        misc.error_context.new("Failed to write array start.", .{});
+        misc.error_context.new("Failed to write bounded array begin token.", .{});
         return err;
     };
     writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write new line after array start.", .{});
+        misc.error_context.append("Failed to write first element new line.", .{});
         return err;
     };
     for (slice, 0..) |*element_pointer, index| {
+        errdefer misc.error_context.append("Failed to write bounded array element: {}", .{index});
         writeValue(writer, element_pointer, indentation + 1) catch |err| {
-            misc.error_context.append("Failed to write array element at index: {}", .{index});
+            misc.error_context.append("Failed to write element value.", .{});
             return err;
         };
         if (index < slice.len - 1) {
             writer.writeByte(',') catch |err| {
-                misc.error_context.new("Failed to write array element separator after element: {}", .{index});
+                misc.error_context.new("Failed to write next element separator.", .{});
                 return err;
             };
             writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write new line after array element: {}", .{index});
+                misc.error_context.append("Failed to write next element new line.", .{});
                 return err;
             };
         }
     }
     writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write new line after last array element.", .{});
+        misc.error_context.append("Failed to write bounded array end token new line.", .{});
         return err;
     };
     writer.writeByte(']') catch |err| {
-        misc.error_context.new("Failed to write array end.", .{});
+        misc.error_context.new("Failed to write bounded array end token.", .{});
         return err;
     };
 }
@@ -652,7 +659,7 @@ fn readBoundedArray(comptime Type: type, reader: *std.json.Reader, allocator: st
     const Element = Type.Child;
     if (Element == u8) {
         const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
-            misc.error_context.new("Failed to read enum token.", .{});
+            misc.error_context.new("Failed to read bounded string token.", .{});
             return err;
         };
         defer freeIfAllocated(allocator, token);
@@ -677,23 +684,24 @@ fn readBoundedArray(comptime Type: type, reader: *std.json.Reader, allocator: st
     var array: Type = .empty;
     var index: usize = 0;
     while (true) {
-        const peek_token = reader.peekNextTokenType() catch |err| {
-            misc.error_context.new("Failed to peek next bounded array token at index: {}", .{index});
+        errdefer misc.error_context.append("Failed to read bounded array element at index: {}", .{index});
+        const token_type = reader.peekNextTokenType() catch |err| {
+            misc.error_context.new("Failed to peek element token type.", .{});
             return err;
         };
-        if (peek_token == .array_end) {
+        if (token_type == .array_end) {
             break;
         }
         if (array.len < array.buffer.len) {
             const default_element = if (index < default_slice.len) default_slice[index] else null;
             array.buffer[array.len] = readValue(Element, reader, allocator, default_element) catch |err| {
-                misc.error_context.append("Failed to read bounded array element at index: {}", .{index});
+                misc.error_context.append("Failed to read element value.", .{});
                 return err;
             };
             array.len += 1;
         } else {
             reader.skipValue() catch |err| {
-                misc.error_context.new("Failed to skip bounded array element: {}", .{index});
+                misc.error_context.new("Failed to skip element value.", .{});
                 return err;
             };
         }
@@ -723,41 +731,42 @@ fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, indentation: u
     const Key = Type.Key;
     const key_info = &@typeInfo(Key).@"enum";
     writer.writeByte('{') catch |err| {
-        misc.error_context.new("Failed to write object start.", .{});
+        misc.error_context.new("Failed to write enum array start token.", .{});
         return err;
     };
     writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write new line after object start.", .{});
+        misc.error_context.append("Failed to write first entry new line.", .{});
         return err;
     };
     inline for (key_info.fields, 0..) |*field, index| {
+        errdefer misc.error_context.append("Failed to write enum array entry: {s}", .{field.name});
         writer.print("\"{s}\": ", .{field.name}) catch |err| {
-            misc.error_context.new("Failed to write enum array key: {s}", .{field.name});
+            misc.error_context.new("Failed to write entry key.", .{});
             return err;
         };
         const key: Key = @enumFromInt(field.value);
         const field_pointer = value_pointer.getPtrConst(key);
         writeValue(writer, field_pointer, indentation + 1) catch |err| {
-            misc.error_context.append("Failed to write enum array value for key: {s}", .{field.name});
+            misc.error_context.append("Failed to write entry value.", .{});
             return err;
         };
         if (index < key_info.fields.len - 1) {
             writer.writeByte(',') catch |err| {
-                misc.error_context.new("Failed to write entry separator after enum array entry: {s}", .{field.name});
+                misc.error_context.new("Failed to write next entry separator.", .{});
                 return err;
             };
             writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write new line after enum array entry: {s}", .{field.name});
+                misc.error_context.append("Failed to write next entry new line.", .{});
                 return err;
             };
         }
     }
     writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write new line after last enum array entry.", .{});
+        misc.error_context.append("Failed to write enum array end token new line.", .{});
         return err;
     };
     writer.writeByte('}') catch |err| {
-        misc.error_context.new("Failed to write object end.", .{});
+        misc.error_context.new("Failed to write enum array end token.", .{});
         return err;
     };
 }
@@ -778,7 +787,7 @@ fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.m
     var found_keys = [1]bool{default != null} ** key_info.fields.len;
     while (true) {
         const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
-            misc.error_context.new("Failed to read next enum array token.", .{});
+            misc.error_context.new("Failed to read next enum array entry token.", .{});
             return err;
         };
         var is_token_freed = false;
@@ -797,6 +806,7 @@ fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.m
         var key_found = false;
         inline for (key_info.fields, 0..) |*field, index| {
             if (std.mem.eql(u8, field.name, key_name)) {
+                errdefer misc.error_context.append("Failed to read enum array entry: {s}", .{field.name});
                 if (!is_token_freed) { // Key name is not needed while parsing the value.
                     freeIfAllocated(allocator, token);
                     is_token_freed = true;
@@ -804,7 +814,7 @@ fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.m
                 const key: Key = @enumFromInt(field.value);
                 const default_field = if (default) |d| d.get(key) else null;
                 const value = readValue(Value, reader, allocator, default_field) catch |err| {
-                    misc.error_context.append("Failed to read enum array entry value: {s}", .{field.name});
+                    misc.error_context.append("Failed to read entry value.", .{});
                     return err;
                 };
                 enum_array.set(key, value);

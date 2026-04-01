@@ -13,7 +13,7 @@ pub fn writeJson(comptime Type: type, value: *const Type, writer: *std.io.Writer
     };
 }
 
-pub fn readJson(comptime Type: type, reader: *std.io.Reader, default: ?Type) !Type {
+pub fn readJsonValue(comptime Type: type, reader: *std.io.Reader, default: ?Type) !Type {
     var buffer: [buffer_size]u8 = undefined;
     var allocator = std.heap.FixedBufferAllocator.init(&buffer);
     var json_reader = std.json.Reader.init(allocator.allocator(), reader);
@@ -902,7 +902,7 @@ fn freeIfAllocated(allocator: std.mem.Allocator, token: std.json.Token) void {
 
 const testing = std.testing;
 
-test "readJson should read the same value that writeJson saved" {
+test "readJsonValue should read the same value that writeJson saved" {
     const Value = struct {
         bool: bool = false,
         u8: u8 = 0,
@@ -963,11 +963,11 @@ test "readJson should read the same value that writeJson saved" {
     var writer = std.Io.Writer.fixed(&buffer);
     try writeJson(Value, &write_value, &writer);
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const read_value = try readJson(Value, &reader, .{});
+    const read_value = try readJsonValue(Value, &reader, .{});
     try testing.expectEqual(write_value, read_value);
 }
 
-test "readJson should succeed when json has more values then expected" {
+test "readJsonValue should succeed when json has more values then expected" {
     const Value = struct {
         a: f32,
         d: struct { d1: f32 },
@@ -990,7 +990,7 @@ test "readJson should succeed when json has more values then expected" {
         \\  "i": { "i1": 15, "i2": 16, "i3": 17 }
         \\}
     );
-    const value = try readJson(Value, &reader, null);
+    const value = try readJsonValue(Value, &reader, null);
     try testing.expectEqual(Value{
         .a = 1,
         .d = .{ .d1 = 4 },
@@ -1002,7 +1002,7 @@ test "readJson should succeed when json has more values then expected" {
     }, value);
 }
 
-test "readJson should use default value when encountering missing value and default exists" {
+test "readJsonValue should use default value when encountering missing value and default exists" {
     const Value = struct {
         a: f32 = -1,
         b: f32 = -2,
@@ -1025,7 +1025,7 @@ test "readJson should use default value when encountering missing value and defa
         \\  "i": { "i1": 9 }
         \\}
     );
-    const value = try readJson(Value, &reader, .{});
+    const value = try readJsonValue(Value, &reader, .{});
     try testing.expectEqual(Value{
         .a = 1,
         .b = -2,
@@ -1039,7 +1039,7 @@ test "readJson should use default value when encountering missing value and defa
     }, value);
 }
 
-test "readJson should use default value when encountering invalid value and default exists" {
+test "readJsonValue should use default value when encountering invalid value and default exists" {
     const Value = struct {
         a: f32 = -1,
         b: f32 = -2,
@@ -1070,7 +1070,7 @@ test "readJson should use default value when encountering invalid value and defa
         \\  "l": false
         \\}
     );
-    const value = try readJson(Value, &reader, .{});
+    const value = try readJsonValue(Value, &reader, .{});
     try testing.expectEqual(Value{
         .a = 1,
         .b = -2,
@@ -1087,7 +1087,7 @@ test "readJson should use default value when encountering invalid value and defa
     }, value);
 }
 
-test "readJson should resolve mixed field order in JSON objects" {
+test "readJsonValue should resolve mixed field order in JSON objects" {
     const Value = struct {
         a: struct { a1: f32, a2: f32 },
         b: struct { b1: f32, b2: f32 },
@@ -1102,7 +1102,7 @@ test "readJson should resolve mixed field order in JSON objects" {
         \\  "b": { "b2": 4, "b1": 3 }
         \\}
     );
-    const value = try readJson(Value, &reader, null);
+    const value = try readJsonValue(Value, &reader, null);
     try testing.expectEqual(Value{
         .a = .{ .a1 = 1, .a2 = 2 },
         .b = .{ .b1 = 3, .b2 = 4 },

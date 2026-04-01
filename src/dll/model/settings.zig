@@ -19,22 +19,46 @@ pub const Settings = struct {
     const Self = @This();
     pub const file_name = "settings.json";
 
-    pub fn load(base_dir: *const sdk.misc.BaseDir) !Self {
-        var buffer: [sdk.os.max_file_path_length]u8 = undefined;
-        const file_path = base_dir.getPath(&buffer, file_name) catch |err| {
+    pub fn save(self: *const Self, base_dir: *const sdk.misc.BaseDir) !void {
+        var path_buffer: [sdk.os.max_file_path_length]u8 = undefined;
+        const file_path = base_dir.getPath(&path_buffer, file_name) catch |err| {
             sdk.misc.error_context.append("Failed to construct file path.", .{});
             return err;
         };
-        return sdk.io.loadSettings(Self, file_path);
+        const file = std.fs.cwd().createFile(file_path, .{}) catch |err| {
+            sdk.misc.error_context.new("Failed to create or open file: {s}", .{file_path});
+            return err;
+        };
+        defer file.close();
+        var buffer: [1024]u8 = undefined;
+        var writer = file.writer(&buffer);
+        sdk.io.writeJson(Self, self, &writer.interface) catch |err| {
+            sdk.misc.error_context.append("Failed to write JSON file content.", .{});
+            return err;
+        };
+        writer.interface.flush() catch |err| {
+            sdk.misc.error_context.new("Failed to flush file writer.", .{});
+            return err;
+        };
     }
 
-    pub fn save(self: *const Self, base_dir: *const sdk.misc.BaseDir) !void {
-        var buffer: [sdk.os.max_file_path_length]u8 = undefined;
-        const file_path = base_dir.getPath(&buffer, file_name) catch |err| {
+    pub fn load(base_dir: *const sdk.misc.BaseDir) !Self {
+        var path_buffer: [sdk.os.max_file_path_length]u8 = undefined;
+        const file_path = base_dir.getPath(&path_buffer, file_name) catch |err| {
             sdk.misc.error_context.append("Failed to construct file path.", .{});
             return err;
         };
-        return sdk.io.saveSettings(self, file_path);
+        const file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
+            sdk.misc.error_context.new("Failed to open file: {s}", .{file_path});
+            return err;
+        };
+        defer file.close();
+        var buffer: [1024]u8 = undefined;
+        var reader = file.reader(&buffer);
+        return sdk.io.readJsonValue(Self, &reader.interface, .{}) catch |err| {
+            sdk.misc.error_context.append("Failed to parse JSON file content.", .{});
+            return err;
+        };
     }
 };
 
@@ -120,40 +144,6 @@ pub const HitLinesSettings = struct {
     pub const ColorsAndThickness = struct {
         colors: std.EnumArray(model.AttackType, sdk.math.Vec4),
         thickness: f32,
-
-        const Self = @This();
-        const JsonValue = struct {
-            colors: std.enums.EnumFieldStruct(model.AttackType, sdk.math.Vec4, null),
-            thickness: f32,
-        };
-
-        pub fn jsonStringify(self: *const Self, jsonWriter: anytype) !void {
-            const json_value = JsonValue{
-                .colors = sdk.misc.enumArrayToEnumFieldStruct(model.AttackType, sdk.math.Vec4, &self.colors),
-                .thickness = self.thickness,
-            };
-            try jsonWriter.write(json_value);
-        }
-
-        pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !Self {
-            const json_value = try std.json.innerParse(JsonValue, allocator, source, options);
-            return .{
-                .colors = .init(json_value.colors),
-                .thickness = json_value.thickness,
-            };
-        }
-
-        pub fn settingsParse(allocator: std.mem.Allocator, reader: *std.json.Reader, default_value: *const Self) !Self {
-            const json_default = JsonValue{
-                .colors = sdk.misc.enumArrayToEnumFieldStruct(model.AttackType, sdk.math.Vec4, &default_value.colors),
-                .thickness = default_value.thickness,
-            };
-            const json_value = try sdk.io.settingsInnerParse(JsonValue, allocator, reader, &json_default);
-            return .{
-                .colors = .init(json_value.colors),
-                .thickness = json_value.thickness,
-            };
-        }
     };
 };
 
@@ -222,50 +212,6 @@ pub const SkeletonSettings = struct {
     }),
     thickness: f32 = 2.0,
     cant_move_alpha: f32 = 0.5,
-
-    const Self = @This();
-    const JsonValue = struct {
-        enabled: bool,
-        colors: std.enums.EnumFieldStruct(model.Blocking, sdk.math.Vec4, null),
-        thickness: f32,
-        cant_move_alpha: f32,
-    };
-
-    pub fn jsonStringify(self: *const Self, jsonWriter: anytype) !void {
-        const json_value = JsonValue{
-            .enabled = self.enabled,
-            .colors = sdk.misc.enumArrayToEnumFieldStruct(model.Blocking, sdk.math.Vec4, &self.colors),
-            .thickness = self.thickness,
-            .cant_move_alpha = self.cant_move_alpha,
-        };
-        try jsonWriter.write(json_value);
-    }
-
-    pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !Self {
-        const json_value = try std.json.innerParse(JsonValue, allocator, source, options);
-        return .{
-            .enabled = json_value.enabled,
-            .colors = .init(json_value.colors),
-            .thickness = json_value.thickness,
-            .cant_move_alpha = json_value.cant_move_alpha,
-        };
-    }
-
-    pub fn settingsParse(allocator: std.mem.Allocator, reader: *std.json.Reader, default_value: *const Self) !Self {
-        const json_default = JsonValue{
-            .enabled = default_value.enabled,
-            .colors = sdk.misc.enumArrayToEnumFieldStruct(model.Blocking, sdk.math.Vec4, &default_value.colors),
-            .thickness = default_value.thickness,
-            .cant_move_alpha = default_value.cant_move_alpha,
-        };
-        const json_value = try sdk.io.settingsInnerParse(JsonValue, allocator, reader, &json_default);
-        return .{
-            .enabled = json_value.enabled,
-            .colors = .init(json_value.colors),
-            .thickness = json_value.thickness,
-            .cant_move_alpha = json_value.cant_move_alpha,
-        };
-    }
 };
 
 pub const ForwardDirectionSettings = struct {
@@ -534,6 +480,21 @@ test "Settings.load should load the same settings that Settings.save saves" {
     const base_dir = try sdk.misc.BaseDir.fromStr("./test_assets");
     try expected_settings.save(&base_dir);
     defer std.fs.cwd().deleteFile("./test_assets/" ++ Settings.file_name) catch @panic("Failed to cleanup test file.");
+    const actual_settings = try Settings.load(&base_dir);
+    try testing.expectEqual(expected_settings, actual_settings);
+}
+
+test "Settings.load should overwrite the settings file if it already exists" {
+    const default_settings = Settings{};
+    const expected_settings = Settings{
+        .ingame_camera = .{
+            .thickness = 123.0,
+        },
+    };
+    const base_dir = try sdk.misc.BaseDir.fromStr("./test_assets");
+    try default_settings.save(&base_dir);
+    defer std.fs.cwd().deleteFile("./test_assets/" ++ Settings.file_name) catch @panic("Failed to cleanup test file.");
+    try expected_settings.save(&base_dir);
     const actual_settings = try Settings.load(&base_dir);
     try testing.expectEqual(expected_settings, actual_settings);
 }

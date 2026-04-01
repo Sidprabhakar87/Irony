@@ -32,7 +32,7 @@ pub const Settings = struct {
         defer file.close();
         var buffer: [1024]u8 = undefined;
         var writer = file.writer(&buffer);
-        sdk.io.writeJson(Self, self, &writer.interface) catch |err| {
+        sdk.io.writeJsonValue(Self, self, &writer.interface, &.{ .new_line = .{} }) catch |err| {
             sdk.misc.error_context.append("Failed to write JSON file content.", .{});
             return err;
         };

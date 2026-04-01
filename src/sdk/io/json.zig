@@ -4,10 +4,74 @@ const misc = @import("../misc/root.zig");
 const math = @import("../math/root.zig");
 
 const buffer_size = 1024;
-const indentation_string = "  ";
 
-pub fn writeJson(comptime Type: type, value: *const Type, writer: *std.io.Writer) !void {
-    return writeValue(writer, value, 0) catch |err| {
+pub const JsonWhitespace = union(enum) {
+    none: void,
+    space: void,
+    new_line: NewLine,
+
+    const Self = @This();
+    pub const NewLine = struct {
+        current_indentation: usize = 0,
+        indentation_string: []const u8 = "  ",
+    };
+
+    pub fn indented(self: *const Self) Self {
+        switch (self.*) {
+            .none => return .none,
+            .space => return .space,
+            .new_line => |n| {
+                var new_line = n;
+                new_line.current_indentation += 1;
+                return .{ .new_line = new_line };
+            },
+        }
+    }
+
+    pub fn write(self: *const Self, writer: *std.io.Writer) !void {
+        switch (self.*) {
+            .none => {},
+            .space => {
+                writer.writeByte(' ') catch |err| {
+                    misc.error_context.new("Failed to write space character.", .{});
+                    return err;
+                };
+            },
+            .new_line => |*new_line| {
+                writer.writeByte('\n') catch |err| {
+                    misc.error_context.new("Failed to write new line character.", .{});
+                    return err;
+                };
+                for (0..new_line.current_indentation) |index| {
+                    writer.writeAll(new_line.indentation_string) catch |err| {
+                        misc.error_context.new("Failed to write indentation: {}", .{index});
+                        return err;
+                    };
+                }
+            },
+        }
+    }
+
+    pub fn writeSpace(self: *const Self, writer: *std.io.Writer) !void {
+        switch (self.*) {
+            .none => {},
+            .space, .new_line => {
+                writer.writeByte(' ') catch |err| {
+                    misc.error_context.new("Failed to write space character.", .{});
+                    return err;
+                };
+            },
+        }
+    }
+};
+
+pub fn writeJsonValue(
+    comptime Type: type,
+    value: *const Type,
+    writer: *std.io.Writer,
+    whitespace: *const JsonWhitespace,
+) !void {
+    return writeValue(writer, value, whitespace) catch |err| {
         misc.error_context.append("Failed to write root value.", .{});
         return err;
     };
@@ -24,31 +88,31 @@ pub fn readJsonValue(comptime Type: type, reader: *std.io.Reader, default: ?Type
     };
 }
 
-fn writeValue(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+fn writeValue(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const Type = switch (@typeInfo(@TypeOf(value_pointer))) {
         .pointer => |info| info.child,
         else => @compileError("Expected value_pointer to be a pointer but got: " ++ @typeName(@TypeOf(value_pointer))),
     };
     if (isBoundedArray(Type)) {
-        try writeBoundedArray(writer, value_pointer, indentation);
+        try writeBoundedArray(writer, value_pointer, whitespace);
     } else if (isEnumArray(Type)) {
-        try writeEnumArray(writer, value_pointer, indentation);
+        try writeEnumArray(writer, value_pointer, whitespace);
     } else if (isVector(Type)) {
-        try writeVector(writer, value_pointer, indentation);
+        try writeVector(writer, value_pointer, whitespace);
     } else if (isMatrix(Type)) {
-        try writeMatrix(writer, value_pointer, indentation);
+        try writeMatrix(writer, value_pointer, whitespace);
     } else switch (@typeInfo(Type)) {
         .bool => try writeBool(writer, value_pointer.*),
         .int => try writeInt(writer, value_pointer.*),
         .float => try writeFloat(writer, value_pointer.*),
         .@"enum" => try writeEnum(writer, value_pointer.*),
-        .optional => try writeOptional(writer, value_pointer, indentation),
-        .array => try writeArray(writer, value_pointer, indentation),
+        .optional => try writeOptional(writer, value_pointer, whitespace),
+        .array => try writeArray(writer, value_pointer, whitespace),
         .@"struct" => |*info| switch (info.is_tuple) {
-            true => try writeTuple(writer, value_pointer, indentation),
-            false => try writeStruct(writer, value_pointer, indentation),
+            true => try writeTuple(writer, value_pointer, whitespace),
+            false => try writeStruct(writer, value_pointer, whitespace),
         },
-        .@"union" => try writeUnion(writer, value_pointer, indentation),
+        .@"union" => try writeUnion(writer, value_pointer, whitespace),
         else => @compileError("Unsupported type: " ++ @typeName(Type)),
     }
 }
@@ -211,9 +275,9 @@ fn readEnum(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Al
     return error.InvalidEnumValue;
 }
 
-fn writeOptional(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+fn writeOptional(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     if (value_pointer.*) |*child_pointer| {
-        writeValue(writer, child_pointer, indentation) catch |err| {
+        writeValue(writer, child_pointer, whitespace) catch |err| {
             misc.error_context.append("Failed to write optional's payload.", .{});
             return err;
         };
@@ -252,18 +316,19 @@ fn readOptional(comptime Type: type, reader: *std.json.Reader, allocator: std.me
     }
 }
 
-fn writeArray(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+fn writeArray(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+    const indented_whitespace = whitespace.indented();
     writer.writeByte('[') catch |err| {
         misc.error_context.new("Failed to write array begin token.", .{});
         return err;
     };
-    writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write first element new line.", .{});
+    indented_whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write first element whitespace.", .{});
         return err;
     };
     for (value_pointer, 0..) |*element_pointer, index| {
         errdefer misc.error_context.append("Failed to write array element at index: {}", .{index});
-        writeValue(writer, element_pointer, indentation + 1) catch |err| {
+        writeValue(writer, element_pointer, &indented_whitespace) catch |err| {
             misc.error_context.append("Failed to write element value.", .{});
             return err;
         };
@@ -272,14 +337,14 @@ fn writeArray(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
                 misc.error_context.new("Failed to write next element separator.", .{});
                 return err;
             };
-            writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write next element new line.", .{});
+            indented_whitespace.write(writer) catch |err| {
+                misc.error_context.append("Failed to write next element whitespace.", .{});
                 return err;
             };
         }
     }
-    writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write array end token new line.", .{});
+    whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write array end token whitespace.", .{});
         return err;
     };
     writer.writeByte(']') catch |err| {
@@ -335,20 +400,21 @@ fn readArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     return array;
 }
 
-fn writeTuple(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+fn writeTuple(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+    const indented_whitespace = whitespace.indented();
     const info = @typeInfo(@TypeOf(value_pointer.*)).@"struct";
     writer.writeByte('[') catch |err| {
         misc.error_context.new("Failed to write tuple begin token.", .{});
         return err;
     };
-    writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write first field new line.", .{});
+    indented_whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write first field whitespace.", .{});
         return err;
     };
     inline for (0..info.fields.len) |index| {
         errdefer misc.error_context.append("Failed to write tuple field: {}", .{index});
         const field_pointer = &value_pointer[index];
-        writeValue(writer, field_pointer, indentation + 1) catch |err| {
+        writeValue(writer, field_pointer, &indented_whitespace) catch |err| {
             misc.error_context.append("Failed to write field value.", .{});
             return err;
         };
@@ -357,14 +423,14 @@ fn writeTuple(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
                 misc.error_context.new("Failed to write next field separator.", .{});
                 return err;
             };
-            writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write next field new line.", .{});
+            indented_whitespace.write(writer) catch |err| {
+                misc.error_context.append("Failed to write next field whitespace.", .{});
                 return err;
             };
         }
     }
-    writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write tuple end token new line.", .{});
+    whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write tuple end token whitespace.", .{});
         return err;
     };
     writer.writeByte(']') catch |err| {
@@ -428,14 +494,15 @@ fn readTuple(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     return tuple;
 }
 
-fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+    const indented_whitespace = whitespace.indented();
     const info = @typeInfo(@TypeOf(value_pointer.*)).@"struct";
     writer.writeByte('{') catch |err| {
         misc.error_context.new("Failed to write struct begin token.", .{});
         return err;
     };
-    writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed first field new line.", .{});
+    indented_whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed first field whitespace.", .{});
         return err;
     };
     inline for (info.fields, 0..) |*field, index| {
@@ -444,12 +511,16 @@ fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, indentation: usiz
             misc.error_context.new("Failed to write field name.", .{});
             return err;
         };
-        writer.writeAll(": ") catch |err| {
+        writer.writeByte(':') catch |err| {
             misc.error_context.new("Failed to write name value separator.", .{});
             return err;
         };
+        indented_whitespace.writeSpace(writer) catch |err| {
+            misc.error_context.append("Failed to write field value whitespace.", .{});
+            return err;
+        };
         const field_pointer = &@field(value_pointer, field.name);
-        writeValue(writer, field_pointer, indentation + 1) catch |err| {
+        writeValue(writer, field_pointer, &indented_whitespace) catch |err| {
             misc.error_context.append("Failed to write field value.", .{});
             return err;
         };
@@ -458,14 +529,14 @@ fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, indentation: usiz
                 misc.error_context.new("Failed to write next field separator.", .{});
                 return err;
             };
-            writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write next field new line.", .{});
+            indented_whitespace.write(writer) catch |err| {
+                misc.error_context.append("Failed to write next field whitespace.", .{});
                 return err;
             };
         }
     }
-    writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write struct end token new line.", .{});
+    whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write struct end token whitespace.", .{});
         return err;
     };
     writer.writeByte('}') catch |err| {
@@ -538,7 +609,7 @@ fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.
     return structure;
 }
 
-fn writeUnion(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+fn writeUnion(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const Type = @TypeOf(value_pointer.*);
     const info = @typeInfo(Type).@"union";
     if (info.tag_type == null) {
@@ -553,13 +624,17 @@ fn writeUnion(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
         misc.error_context.new("Failed to write union's tag: {s}", .{tag_name});
         return err;
     };
-    writer.writeAll(": ") catch |err| {
+    writer.writeByte(':') catch |err| {
         misc.error_context.new("Failed to write union's tag payload separator: {s}", .{tag_name});
+        return err;
+    };
+    whitespace.writeSpace(writer) catch |err| {
+        misc.error_context.append("Failed to write union's tag payload whitespace.", .{});
         return err;
     };
     switch (value_pointer.*) {
         inline else => |*payload_pointer| {
-            writeValue(writer, payload_pointer, indentation) catch |err| {
+            writeValue(writer, payload_pointer, whitespace) catch |err| {
                 misc.error_context.append("Failed to write union's payload: {s}", .{tag_name});
                 return err;
             };
@@ -618,7 +693,8 @@ inline fn isBoundedArray(comptime Type: type) bool {
     comptime return hasTag(Type, misc.bounded_array_tag);
 }
 
-fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+    const indented_whitespace = whitespace.indented();
     const slice = value_pointer.asSlice();
     const Element = @TypeOf(value_pointer.*).Child;
     if (Element == u8) {
@@ -632,13 +708,13 @@ fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, indentation
         misc.error_context.new("Failed to write bounded array begin token.", .{});
         return err;
     };
-    writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write first element new line.", .{});
+    indented_whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write first element whitespace.", .{});
         return err;
     };
     for (slice, 0..) |*element_pointer, index| {
         errdefer misc.error_context.append("Failed to write bounded array element: {}", .{index});
-        writeValue(writer, element_pointer, indentation + 1) catch |err| {
+        writeValue(writer, element_pointer, &indented_whitespace) catch |err| {
             misc.error_context.append("Failed to write element value.", .{});
             return err;
         };
@@ -647,14 +723,14 @@ fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, indentation
                 misc.error_context.new("Failed to write next element separator.", .{});
                 return err;
             };
-            writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write next element new line.", .{});
+            indented_whitespace.write(writer) catch |err| {
+                misc.error_context.append("Failed to write next element whitespace.", .{});
                 return err;
             };
         }
     }
-    writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write bounded array end token new line.", .{});
+    whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write bounded array end token whitespace.", .{});
         return err;
     };
     writer.writeByte(']') catch |err| {
@@ -734,7 +810,8 @@ inline fn isEnumArray(comptime Type: type) bool {
     }
 }
 
-fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
+fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+    const indented_whitespace = whitespace.indented();
     const Type = @TypeOf(value_pointer.*);
     const Key = Type.Key;
     const key_info = &@typeInfo(Key).@"enum";
@@ -742,8 +819,8 @@ fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, indentation: u
         misc.error_context.new("Failed to write enum array start token.", .{});
         return err;
     };
-    writeNewLine(writer, indentation + 1) catch |err| {
-        misc.error_context.append("Failed to write first entry new line.", .{});
+    indented_whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write first entry whitespace.", .{});
         return err;
     };
     inline for (key_info.fields, 0..) |*field, index| {
@@ -752,13 +829,17 @@ fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, indentation: u
             misc.error_context.new("Failed to write entry key.", .{});
             return err;
         };
-        writer.writeAll(": ") catch |err| {
+        writer.writeByte(':') catch |err| {
             misc.error_context.new("Failed to write key value separator.", .{});
+            return err;
+        };
+        indented_whitespace.writeSpace(writer) catch |err| {
+            misc.error_context.append("Failed to write entry value whitespace.", .{});
             return err;
         };
         const key: Key = @enumFromInt(field.value);
         const field_pointer = value_pointer.getPtrConst(key);
-        writeValue(writer, field_pointer, indentation + 1) catch |err| {
+        writeValue(writer, field_pointer, &indented_whitespace) catch |err| {
             misc.error_context.append("Failed to write entry value.", .{});
             return err;
         };
@@ -767,14 +848,14 @@ fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, indentation: u
                 misc.error_context.new("Failed to write next entry separator.", .{});
                 return err;
             };
-            writeNewLine(writer, indentation + 1) catch |err| {
-                misc.error_context.append("Failed to write next entry new line.", .{});
+            indented_whitespace.write(writer) catch |err| {
+                misc.error_context.append("Failed to write next entry whitespace.", .{});
                 return err;
             };
         }
     }
-    writeNewLine(writer, indentation) catch |err| {
-        misc.error_context.append("Failed to write enum array end token new line.", .{});
+    whitespace.write(writer) catch |err| {
+        misc.error_context.append("Failed to write enum array end token whitespace.", .{});
         return err;
     };
     writer.writeByte('}') catch |err| {
@@ -855,8 +936,13 @@ inline fn isVector(comptime Type: type) bool {
     comptime return hasTag(Type, math.vector_tag);
 }
 
-fn writeVector(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
-    writeValue(writer, &value_pointer.array, indentation) catch |err| {
+fn writeVector(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+    const inner_whitespace: JsonWhitespace = switch (whitespace.*) {
+        .none => .none,
+        .space => .space,
+        .new_line => .space,
+    };
+    writeValue(writer, &value_pointer.array, &inner_whitespace) catch |err| {
         misc.error_context.append("Failed to write vector's array.", .{});
         return err;
     };
@@ -875,8 +961,13 @@ inline fn isMatrix(comptime Type: type) bool {
     comptime return hasTag(Type, math.vector_tag);
 }
 
-fn writeMatrix(writer: *std.io.Writer, value_pointer: anytype, indentation: usize) !void {
-    return writeValue(writer, value_pointer.asFlat(), indentation) catch |err| {
+fn writeMatrix(writer: *std.io.Writer, value_pointer: anytype, whitespace: JsonWhitespace) !void {
+    const inner_whitespace: JsonWhitespace = switch (whitespace) {
+        .none => .none,
+        .space => .space,
+        .new_line => .space,
+    };
+    return writeValue(writer, value_pointer.asFlat(), inner_whitespace) catch |err| {
         misc.error_context.append("Failed to write matrix's array.", .{});
         return err;
     };
@@ -900,19 +991,6 @@ inline fn hasTag(comptime Type: type, comptime tag: type) bool {
     }
 }
 
-fn writeNewLine(writer: *std.io.Writer, indentation: usize) !void {
-    writer.writeByte('\n') catch |err| {
-        misc.error_context.new("Failed to write new line character.", .{});
-        return err;
-    };
-    for (0..indentation) |index| {
-        writer.writeAll(indentation_string) catch |err| {
-            misc.error_context.new("Failed to write indentation: {}", .{index});
-            return err;
-        };
-    }
-}
-
 fn freeIfAllocated(allocator: std.mem.Allocator, token: std.json.Token) void {
     switch (token) {
         .allocated_number, .allocated_string => |slice| {
@@ -924,7 +1002,7 @@ fn freeIfAllocated(allocator: std.mem.Allocator, token: std.json.Token) void {
 
 const testing = std.testing;
 
-test "readJsonValue should read the same value that writeJson saved" {
+test "readJsonValue should read the same value that writeJsonValue saved" {
     const Value = struct {
         bool: bool = false,
         u8: u8 = 0,
@@ -985,7 +1063,7 @@ test "readJsonValue should read the same value that writeJson saved" {
     };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeJson(Value, &write_value, &writer);
+    try writeJsonValue(Value, &write_value, &writer, &.none);
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
     const read_value = try readJsonValue(Value, &reader, .{});
     try testing.expectEqual(write_value, read_value);

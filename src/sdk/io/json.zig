@@ -179,7 +179,7 @@ fn writeEnum(writer: *std.io.Writer, value: anytype) !void {
         @compileError("Enum " ++ @typeName(Type) ++ " is not exhaustive and therefor not supported.");
     }
     const tag_name = @tagName(value);
-    writer.print("\"{s}\"", .{tag_name}) catch |err| {
+    std.json.Stringify.encodeJsonString(tag_name, .{}, writer) catch |err| {
         misc.error_context.new("Failed to write enum value: {s}", .{tag_name});
         return err;
     };
@@ -440,8 +440,12 @@ fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, indentation: usiz
     };
     inline for (info.fields, 0..) |*field, index| {
         errdefer misc.error_context.append("Failed to write struct field: {s}", .{field.name});
-        writer.print("\"{s}\": ", .{field.name}) catch |err| {
+        std.json.Stringify.encodeJsonString(field.name, .{}, writer) catch |err| {
             misc.error_context.new("Failed to write field name.", .{});
+            return err;
+        };
+        writer.writeAll(": ") catch |err| {
+            misc.error_context.new("Failed to write name value separator.", .{});
             return err;
         };
         const field_pointer = &@field(value_pointer, field.name);
@@ -545,8 +549,12 @@ fn writeUnion(writer: *std.io.Writer, value_pointer: anytype, indentation: usize
         misc.error_context.new("Failed to write union begin token.", .{});
         return err;
     };
-    writer.print("\"{s}\": ", .{tag_name}) catch |err| {
+    std.json.Stringify.encodeJsonString(tag_name, .{}, writer) catch |err| {
         misc.error_context.new("Failed to write union's tag: {s}", .{tag_name});
+        return err;
+    };
+    writer.writeAll(": ") catch |err| {
+        misc.error_context.new("Failed to write union's tag payload separator: {s}", .{tag_name});
         return err;
     };
     switch (value_pointer.*) {
@@ -614,7 +622,7 @@ fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, indentation
     const slice = value_pointer.asSlice();
     const Element = @TypeOf(value_pointer.*).Child;
     if (Element == u8) {
-        writer.print("\"{s}\"", .{slice}) catch |err| {
+        std.json.Stringify.encodeJsonString(slice, .{}, writer) catch |err| {
             misc.error_context.new("Failed to write bounded string value: {s}", .{slice});
             return err;
         };
@@ -740,8 +748,12 @@ fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, indentation: u
     };
     inline for (key_info.fields, 0..) |*field, index| {
         errdefer misc.error_context.append("Failed to write enum array entry: {s}", .{field.name});
-        writer.print("\"{s}\": ", .{field.name}) catch |err| {
+        std.json.Stringify.encodeJsonString(field.name, .{}, writer) catch |err| {
             misc.error_context.new("Failed to write entry key.", .{});
+            return err;
+        };
+        writer.writeAll(": ") catch |err| {
+            misc.error_context.new("Failed to write key value separator.", .{});
             return err;
         };
         const key: Key = @enumFromInt(field.value);
@@ -940,6 +952,7 @@ test "readJsonValue should read the same value that writeJson saved" {
         enum_array: std.EnumArray(enum { a, b }, f32) = .initFill(0),
         vector: math.Vec2 = .zero,
         matrix: math.Mat2 = .zero,
+        @"\"escape\"": enum { @"\"", @"\"\"" } = .@"\"",
     };
     const write_value = Value{
         .bool = false,
@@ -968,6 +981,7 @@ test "readJsonValue should read the same value that writeJson saved" {
         .enum_array = .init(.{ .a = 20, .b = 21 }),
         .vector = .fromArray(.{ 22, 23 }),
         .matrix = .fromArray(.{ .{ 24, 25 }, .{ 26, 27 } }),
+        .@"\"escape\"" = .@"\"\"",
     };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);

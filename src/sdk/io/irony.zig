@@ -30,7 +30,7 @@ const RemoteField = struct {
 
 const endian = std.builtin.Endian.little;
 const magic_number = @tagName(build_info.name);
-const version_number = build_info.recording_version;
+const version_number = build_info.recording_format_version;
 const max_number_of_fields = std.math.maxInt(FieldIndexV2);
 const max_field_path_len = std.math.maxInt(FieldPathLength);
 const path_separator = '.';
@@ -39,17 +39,17 @@ const optional_payload_path_component = "payload";
 const pattern_wildcard = '?';
 const buffer_size = 4096;
 
-pub const RecordingConfig = struct {
+pub const IronyFormatConfig = struct {
     atomic_types: []const type = &.{},
     atomic_paths: []const []const u8 = &.{},
 };
 
-pub fn writeRecording(
+pub fn writeIronyFormat(
     comptime Frame: type,
     allocator: std.mem.Allocator,
     frames: []const Frame,
     writer: *std.io.Writer,
-    comptime config: *const RecordingConfig,
+    comptime config: *const IronyFormatConfig,
 ) !void {
     writer.writeAll(magic_number) catch |err| {
         misc.error_context.new("Failed to write magic number.", .{});
@@ -87,11 +87,11 @@ pub fn writeRecording(
     };
 }
 
-pub fn readRecording(
+pub fn readIronyFormat(
     comptime Frame: type,
     allocator: std.mem.Allocator,
     reader: *std.io.Reader,
-    comptime config: *const RecordingConfig,
+    comptime config: *const IronyFormatConfig,
 ) ![]Frame {
     var magic_buffer: [magic_number.len]u8 = undefined;
     reader.readSliceAll(&magic_buffer) catch |err| {
@@ -836,7 +836,7 @@ const GetLocalFieldsState = struct {
     atomic_path_usage: []bool,
 };
 
-inline fn getLocalFields(comptime Frame: type, comptime config: *const RecordingConfig) []const LocalField {
+inline fn getLocalFields(comptime Frame: type, comptime config: *const IronyFormatConfig) []const LocalField {
     comptime {
         @setEvalBranchQuota(100000);
 
@@ -879,7 +879,7 @@ inline fn getLocalFields(comptime Frame: type, comptime config: *const Recording
 }
 
 fn getLocalFieldsRecursive(
-    comptime config: *const RecordingConfig,
+    comptime config: *const IronyFormatConfig,
     field: *const LocalField,
     state: *const GetLocalFieldsState,
 ) void {
@@ -1037,7 +1037,7 @@ fn doesPathMatchPattern(path: []const u8, pattern: []const u8) bool {
 
 const testing = std.testing;
 
-test "readRecording should load the same recording that writeRecording saved" {
+test "readIronyFormat should load the same recording that writeIronyFormat saved" {
     const Frame = struct {
         bool: bool = false,
         u8: u8 = 0,
@@ -1108,25 +1108,25 @@ test "readRecording should load the same recording that writeRecording saved" {
     };
     var buffer: [4096]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(Frame, testing.allocator, &saved_recording, &writer, &.{});
+    try writeIronyFormat(Frame, testing.allocator, &saved_recording, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const loaded_recording = try readRecording(Frame, testing.allocator, &reader, &.{});
+    const loaded_recording = try readIronyFormat(Frame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(loaded_recording);
     try testing.expectEqualSlices(Frame, &saved_recording, loaded_recording);
 }
 
-test "readRecording should succeed when when recording has more fields then expected" {
+test "readIronyFormat should succeed when when recording has more fields then expected" {
     const SavedFrame = struct { a: f32 = -1, b: f32 = -2 };
     const LoadedFrame = struct { a: f32 = -3 };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(SavedFrame, testing.allocator, &.{
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
         .{ .a = 1, .b = 2 },
         .{ .a = 3, .b = 4 },
         .{ .a = 5, .b = 6 },
     }, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = 1 },
@@ -1135,18 +1135,18 @@ test "readRecording should succeed when when recording has more fields then expe
     }, recording);
 }
 
-test "readRecording should load default value when recording does not contain a value" {
+test "readIronyFormat should load default value when recording does not contain a value" {
     const SavedFrame = struct { a: f32 = -1 };
     const LoadedFrame = struct { a: f32 = -2, b: f32 = -3 };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(SavedFrame, testing.allocator, &.{
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
         .{ .a = 1 },
         .{ .a = 2 },
         .{ .a = 3 },
     }, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = 1, .b = -3 },
@@ -1155,18 +1155,18 @@ test "readRecording should load default value when recording does not contain a 
     }, recording);
 }
 
-test "readRecording should use default value when a field has different size then expected" {
+test "readIronyFormat should use default value when a field has different size then expected" {
     const SavedFrame = struct { a: f32 = -1, b: f64 = -2 };
     const LoadedFrame = struct { a: f32 = -3, b: f32 = -4 };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(SavedFrame, testing.allocator, &.{
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
         .{ .a = 1, .b = 2 },
         .{ .a = 3, .b = 4 },
         .{ .a = 5, .b = 6 },
     }, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = 1, .b = -4 },
@@ -1175,19 +1175,19 @@ test "readRecording should use default value when a field has different size the
     }, recording);
 }
 
-test "readRecording should use default value when encountering invalid bool value" {
+test "readIronyFormat should use default value when encountering invalid bool value" {
     const SavedFrame = struct { a: u8 = 1, b: ?u8 = null };
     const LoadedFrame = struct { a: bool = false, b: ?bool = null };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(SavedFrame, testing.allocator, &.{
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
         .{ .a = 0, .b = null },
         .{ .a = 0, .b = 0 },
         .{ .a = 1, .b = 1 },
         .{ .a = 2, .b = 2 },
     }, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = false, .b = null },
@@ -1197,19 +1197,19 @@ test "readRecording should use default value when encountering invalid bool valu
     }, recording);
 }
 
-test "readRecording should use default value when encountering invalid int value" {
+test "readIronyFormat should use default value when encountering invalid int value" {
     const SavedFrame = struct { a: u16 = 0, b: ?u16 = null };
     const LoadedFrame = struct { a: u9 = 1, b: ?u9 = null };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(SavedFrame, testing.allocator, &.{
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
         .{ .a = 0, .b = null },
         .{ .a = 0, .b = 0 },
         .{ .a = 511, .b = 511 },
         .{ .a = 512, .b = 512 },
     }, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = 0, .b = null },
@@ -1219,20 +1219,20 @@ test "readRecording should use default value when encountering invalid int value
     }, recording);
 }
 
-test "readRecording should use default value when encountering invalid enum value" {
+test "readIronyFormat should use default value when encountering invalid enum value" {
     const Enum = enum(u8) { a = 0, b = 1 };
     const SavedFrame = struct { a: u8 = 0, b: ?u8 = null };
     const LoadedFrame = struct { a: Enum = .a, b: ?Enum = null };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(SavedFrame, testing.allocator, &.{
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
         .{ .a = 0, .b = null },
         .{ .a = 0, .b = 0 },
         .{ .a = 1, .b = 1 },
         .{ .a = 2, .b = 2 },
     }, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = .a, .b = null },
@@ -1242,20 +1242,20 @@ test "readRecording should use default value when encountering invalid enum valu
     }, recording);
 }
 
-test "readRecording should use default value when encountering invalid optional" {
+test "readIronyFormat should use default value when encountering invalid optional" {
     const TagAndPayload = packed struct { tag: u8 = 255, payload: u8 = 255 };
     const SavedFrame = struct { a: TagAndPayload = .{}, b: TagAndPayload = .{} };
     const LoadedFrame = struct { a: ?u8 = null, b: ?u8 = 0 };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(SavedFrame, testing.allocator, &.{
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
         .{ .a = .{ .tag = 0, .payload = 0 }, .b = .{ .tag = 0, .payload = 0 } },
         .{ .a = .{ .tag = 1, .payload = 0 }, .b = .{ .tag = 1, .payload = 0 } },
         .{ .a = .{ .tag = 1, .payload = 1 }, .b = .{ .tag = 1, .payload = 1 } },
         .{ .a = .{ .tag = 2, .payload = 1 }, .b = .{ .tag = 2, .payload = 1 } },
     }, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = null, .b = null },
@@ -1265,7 +1265,7 @@ test "readRecording should use default value when encountering invalid optional"
     }, recording);
 }
 
-test "readRecording should use default value when encountering invalid tagged union" {
+test "readIronyFormat should use default value when encountering invalid tagged union" {
     const TagAndPayload = packed struct { tag: u8 = 0xFF, payload: u16 = 0xFFFF };
     const Tag = enum(u8) { a = 1, b = 2 };
     const Union = union(Tag) { a: u8, b: u16 };
@@ -1274,7 +1274,7 @@ test "readRecording should use default value when encountering invalid tagged un
     try testing.expectEqual(serializedSizeOf(Union), serializedSizeOf(TagAndPayload));
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(SavedFrame, testing.allocator, &.{
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
         .{ .f1 = .{ .tag = 0, .payload = 0 }, .f2 = .{ .tag = 0, .payload = 0 } },
         .{ .f1 = .{ .tag = 1, .payload = 0 }, .f2 = .{ .tag = 1, .payload = 0 } },
         .{ .f1 = .{ .tag = 1, .payload = 1 }, .f2 = .{ .tag = 1, .payload = 1 } },
@@ -1287,7 +1287,7 @@ test "readRecording should use default value when encountering invalid tagged un
         .{ .f1 = .{ .tag = 2, .payload = 256 }, .f2 = .{ .tag = 2, .payload = 256 } },
     }, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .f1 = .{ .a = 128 }, .f2 = .{ .b = 129 } },
@@ -1303,7 +1303,7 @@ test "readRecording should use default value when encountering invalid tagged un
     }, recording);
 }
 
-test "readRecording should load the same recording that writeRecording saved when working with packed types" {
+test "readIronyFormat should load the same recording that writeIronyFormat saved when working with packed types" {
     const StructOfUnions = packed struct {
         a: packed union { u: u8, i: i8 } = .{ .u = 255 },
         b: packed union { u: u16, i: i16 } = .{ .u = 255 },
@@ -1334,9 +1334,9 @@ test "readRecording should load the same recording that writeRecording saved whe
     };
     var buffer: [1024]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buffer);
-    try writeRecording(Frame, testing.allocator, &saved_recording, &writer, &.{});
+    try writeIronyFormat(Frame, testing.allocator, &saved_recording, &writer, &.{});
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const loaded_recording = try readRecording(Frame, testing.allocator, &reader, &.{});
+    const loaded_recording = try readIronyFormat(Frame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(loaded_recording);
     try testing.expectEqual(saved_recording.len, loaded_recording.len);
     for (0..saved_recording.len) |index| {

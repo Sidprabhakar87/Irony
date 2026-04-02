@@ -4,7 +4,7 @@ const model = @import("root.zig");
 
 pub const Recording = std.ArrayList(model.Frame);
 
-const serialization_config = sdk.io.RecordingConfig{
+const irony_format_config = sdk.io.IronyFormatConfig{
     .atomic_types = &.{
         ?bool,
         ?u32,
@@ -32,8 +32,8 @@ pub fn saveRecording(allocator: std.mem.Allocator, frames: []const model.Frame, 
     defer file.close();
     var buffer: [4096]u8 = undefined;
     var writer = file.writer(&buffer);
-    sdk.io.writeRecording(model.Frame, allocator, frames, &writer.interface, &serialization_config) catch |err| {
-        sdk.misc.error_context.append("Failed write recording content.", .{});
+    sdk.io.writeIronyFormat(model.Frame, allocator, frames, &writer.interface, &irony_format_config) catch |err| {
+        sdk.misc.error_context.append("Failed write recording content in irony format.", .{});
         return err;
     };
     writer.end() catch |err| {
@@ -50,8 +50,8 @@ pub fn loadRecording(allocator: std.mem.Allocator, file_path: []const u8) ![]mod
     defer file.close();
     var buffer: [4096]u8 = undefined;
     var reader = file.reader(&buffer);
-    return sdk.io.readRecording(model.Frame, allocator, &reader.interface, &serialization_config) catch |err| {
-        sdk.misc.error_context.append("Failed read recording content.", .{});
+    return sdk.io.readIronyFormat(model.Frame, allocator, &reader.interface, &irony_format_config) catch |err| {
+        sdk.misc.error_context.append("Failed read recording content from irony format.", .{});
         return err;
     };
 }

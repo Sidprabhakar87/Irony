@@ -243,7 +243,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         fn capturePlayerName(info_maybe: ?*const game.PlayerInfo(game_id)) model.PlayerName {
             const info = info_maybe orelse return .empty;
             const slice = std.mem.sliceTo(&info.name, 0);
-            return model.PlayerName.fromSlice(slice) catch .empty;
+            return model.PlayerName.fromSliceTrimmed(slice);
         }
 
         fn captureAttackType(player_maybe: ?*const GamePlayer) ?model.AttackType {

@@ -237,14 +237,13 @@ pub const MatchBar = struct {
             imgui.teItemAdd(imgui.igGetCurrentContext(), id, &rect, null);
         }
 
-        var buffer: [name.buffer.len + 1]u8 = undefined;
-        const text = std.fmt.bufPrintZ(&buffer, "{s}", .{name.asSlice()}) catch "error";
+        const text = name.asSlice();
         if (imgui.igButtonBehavior(rect, id, null, null, 0)) {
             imgui.igSetClipboardText(text);
             sdk.ui.toasts.send(.info, null, "Copied to clipboard: {s}", .{text});
         }
         if (builtin.is_test) {
-            var test_buffer: [buffer.len + 32]u8 = undefined;
+            var test_buffer: [model.PlayerName.buffer_len + 32]u8 = undefined;
             const test_text = std.fmt.bufPrintZ(&test_buffer, "{s}: {s}", .{ id_string, text }) catch "error";
             imgui.teItemAdd(imgui.igGetCurrentContext(), imgui.igGetID_Str(test_text), &rect, null);
         }

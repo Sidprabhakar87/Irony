@@ -22,7 +22,7 @@ pub fn drawStage(
 }
 
 fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Frame, matrix: sdk.math.Mat4) void {
-    const Polygon = sdk.misc.BoundedArray(model.Walls.max_len + 4, sdk.math.Vec2, .zero);
+    const Polygon = sdk.misc.BoundedArray(model.Walls.max_len + 4, sdk.math.Vec2, .zero, false);
 
     const floor_z = frame.floor_z orelse 0;
     const walls: []const model.Wall = frame.walls.asSlice();

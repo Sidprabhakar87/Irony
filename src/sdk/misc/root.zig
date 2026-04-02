@@ -9,6 +9,7 @@ pub const ErrorContext = @import("error_context.zig").ErrorContext;
 pub threadlocal var error_context = ErrorContext(.{}){};
 pub const SelfBasedPointer = @import("meta.zig").SelfBasedPointer;
 pub const SelfBasedSlice = @import("meta.zig").SelfBasedSlice;
+pub const SelfBasedSentinelSlice = @import("meta.zig").SelfBasedSentinelSlice;
 pub const Partial = @import("meta.zig").Partial;
 pub const FieldMap = @import("meta.zig").FieldMap;
 pub const areAllFieldsNull = @import("meta.zig").areAllFieldsNull;

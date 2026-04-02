@@ -20,4 +20,4 @@ pub const HitLineFlags = packed struct {
 
 pub const HitLines = sdk.misc.BoundedArray(8, HitLine, .{
     .line = .{ .point_1 = .zero, .point_2 = .zero },
-});
+}, false);

@@ -47,7 +47,7 @@ pub const PlayerRole = enum(u1) {
     }
 };
 
-pub const PlayerName = sdk.misc.BoundedArray(32, u8, 0);
+pub const PlayerName = sdk.misc.BoundedArray(31, u8, 0, true);
 
 pub const Player = struct {
     name: model.PlayerName = .empty,

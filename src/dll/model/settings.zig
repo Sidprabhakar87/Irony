@@ -36,8 +36,8 @@ pub const Settings = struct {
             sdk.misc.error_context.append("Failed to write JSON file content.", .{});
             return err;
         };
-        writer.interface.flush() catch |err| {
-            sdk.misc.error_context.new("Failed to flush file writer.", .{});
+        writer.end() catch |err| {
+            sdk.misc.error_context.new("Failed to end file writing.", .{});
             return err;
         };
     }

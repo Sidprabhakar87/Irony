@@ -788,7 +788,7 @@ fn readBoundedArray(
         if (token_type == .array_end) {
             break;
         }
-        if (array.len < array.buffer.len) {
+        if (array.len < Type.max_len) {
             const default_element = if (index < default_slice.len) &default_slice[index] else null;
             array.buffer[array.len] = readValue(Element, reader, allocator, default_element) catch |err| {
                 misc.error_context.append("Failed to read element value.", .{});
@@ -1050,8 +1050,8 @@ test "readJsonValue should read the same value that writeJsonValue saved" {
         tagged_union: union(enum) { i: i32, f: f32 } = .{ .i = 0 },
         array_of_struct: [2]struct { a: f32 = 0, b: f32 = 0 } = .{ .{}, .{} },
         struct_of_array: struct { a: [2]f32 = .{ 0, 0 }, b: [2]f32 = .{ 0, 0 } } = .{},
-        bounded_array: misc.BoundedArray(4, f32, 0) = .empty,
-        bounded_string: misc.BoundedArray(4, u8, 0) = .empty,
+        bounded_array: misc.BoundedArray(4, f32, 0, false) = .empty,
+        bounded_string: misc.BoundedArray(4, u8, 0, true) = .empty,
         enum_array: std.EnumArray(enum { a, b }, f32) = .initFill(0),
         vector: math.Vec2 = .zero,
         matrix: math.Mat2 = .zero,
@@ -1100,8 +1100,8 @@ test "readJsonValue should succeed when json has more values then expected" {
         d: struct { d1: f32 },
         e: [2]f32,
         f: [2]f32,
-        g: misc.BoundedArray(2, f32, 0),
-        h: misc.BoundedArray(2, u8, 0),
+        g: misc.BoundedArray(2, f32, 0, false),
+        h: misc.BoundedArray(2, u8, 0, true),
         i: std.EnumArray(enum { i1, i2 }, f32),
     };
     var reader = std.Io.Reader.fixed(
@@ -1176,8 +1176,8 @@ test "readJsonValue should use default value when encountering invalid value and
         f: struct { f32, f32, f32 } = .{ -14, -15, -16 },
         g: ?struct { g1: f32 = -17, g2: f32 = -18 } = .{ .g1 = -19, .g2 = -20 },
         h: ?struct { h1: f32 = -21, h2: f32 = -22 } = null,
-        i: misc.BoundedArray(4, f32, 0) = .fromArray(.{ -23, -24 }),
-        j: misc.BoundedArray(4, u8, 0) = .fromArray("ab".*),
+        i: misc.BoundedArray(4, f32, 0, false) = .fromArray(.{ -23, -24 }),
+        j: misc.BoundedArray(4, u8, 0, true) = .fromArray("ab".*),
         k: std.EnumArray(enum { k1, k2 }, f32) = .init(.{ .k1 = -25, .k2 = -26 }),
         l: std.EnumArray(enum { l1, l2 }, f32) = .init(.{ .l1 = -27, .l2 = -28 }),
     };

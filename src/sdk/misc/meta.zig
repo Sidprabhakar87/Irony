@@ -30,6 +30,26 @@ pub fn SelfBasedSlice(comptime SelfPointer: type, comptime Self: type, comptime 
     };
 }
 
+pub fn SelfBasedSentinelSlice(
+    comptime SelfPointer: type,
+    comptime Self: type,
+    comptime Element: type,
+    comptime sentinel: Element,
+) type {
+    return switch (SelfPointer) {
+        *Self => [:sentinel]Element,
+        *const Self => [:sentinel]const Element,
+        else => @compileError(
+            "Expected self to be of type \"" ++
+                @typeName(*const Self) ++
+                "\" or \"" ++
+                @typeName(*Self) ++
+                "\" but got: " ++
+                @typeName(SelfPointer),
+        ),
+    };
+}
+
 pub fn Partial(comptime Struct: type) type {
     const fields: []const std.builtin.Type.StructField = switch (@typeInfo(Struct)) {
         .@"struct" => |info| info.fields,
@@ -136,6 +156,11 @@ test "SelfBasedPointer should return a pointer type with same mutability as Self
 test "SelfBasedSlice should return a slice type with same mutability as SelfPointer" {
     try testing.expect(SelfBasedSlice(*const u64, u64, f32) == []const f32);
     try testing.expect(SelfBasedSlice(*u64, u64, f32) == []f32);
+}
+
+test "SelfBasedSentinelSlice should return a slice type with same mutability as SelfPointer" {
+    try testing.expect(SelfBasedSentinelSlice(*const u64, u64, f32, 0) == [:0]const f32);
+    try testing.expect(SelfBasedSentinelSlice(*u64, u64, f32, 0) == [:0]f32);
 }
 
 test "FieldMap should make every field typed with the specified type" {

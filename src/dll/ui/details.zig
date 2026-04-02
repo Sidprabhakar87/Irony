@@ -667,9 +667,7 @@ fn drawPlayerName(value: model.PlayerName, alpha: f32) void {
         drawText(empty_value_string, alpha);
         return;
     }
-    var buffer: [string_buffer_size]u8 = undefined;
-    const text = std.fmt.bufPrintZ(&buffer, "{s}", .{value.asSlice()}) catch error_string;
-    drawText(text, alpha);
+    drawText(value.asSlice(), alpha);
 }
 
 fn drawU32ActualMax(value: model.U32ActualMax, alpha: f32) void {

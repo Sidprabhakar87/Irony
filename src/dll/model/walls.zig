@@ -30,4 +30,4 @@ pub const WallFlags = packed struct(u4) {
 pub const Walls = sdk.misc.BoundedArray(24, Wall, .{
     .edge_1 = .zero,
     .edge_2_index = 0,
-});
+}, false);

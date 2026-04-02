@@ -44,33 +44,24 @@ pub const RecordingConfig = struct {
     atomic_paths: []const []const u8 = &.{},
 };
 
-pub fn saveRecording(
+pub fn writeRecording(
     comptime Frame: type,
     allocator: std.mem.Allocator,
     frames: []const Frame,
-    file_path: []const u8,
+    writer: *std.io.Writer,
     comptime config: *const RecordingConfig,
 ) !void {
-    const file = std.fs.cwd().createFile(file_path, .{}) catch |err| {
-        misc.error_context.new("Failed to create or open file: {s}", .{file_path});
-        return err;
-    };
-    defer file.close();
-
-    var file_buffer: [buffer_size]u8 = undefined;
-    var file_writer = file.writer(&file_buffer);
-
-    file_writer.interface.writeAll(magic_number) catch |err| {
+    writer.writeAll(magic_number) catch |err| {
         misc.error_context.new("Failed to write magic number.", .{});
         return err;
     };
 
-    file_writer.interface.writeInt(VersionNumber, version_number, endian) catch |err| {
+    writer.writeInt(VersionNumber, version_number, endian) catch |err| {
         misc.error_context.new("Failed to write version number.", .{});
         return err;
     };
 
-    var encoder = io.XzEncoder.init(allocator, &file_writer.interface) catch |err| {
+    var encoder = io.XzEncoder.init(allocator, writer) catch |err| {
         misc.error_context.append("Failed to initialize XZ encoder.", .{});
         return err;
     };
@@ -94,29 +85,16 @@ pub fn saveRecording(
         misc.error_context.append("Failed to flush byte writer.", .{});
         return err;
     };
-    file_writer.end() catch |err| {
-        misc.error_context.new("Failed to end file writing.", .{});
-        return err;
-    };
 }
 
-pub fn loadRecording(
+pub fn readRecording(
     comptime Frame: type,
     allocator: std.mem.Allocator,
-    file_path: []const u8,
+    reader: *std.io.Reader,
     comptime config: *const RecordingConfig,
 ) ![]Frame {
-    const file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
-        misc.error_context.new("Failed to open file: {s}", .{file_path});
-        return err;
-    };
-    defer file.close();
-
-    var file_buffer: [buffer_size]u8 = undefined;
-    var file_reader = file.reader(&file_buffer);
-
     var magic_buffer: [magic_number.len]u8 = undefined;
-    file_reader.interface.readSliceAll(&magic_buffer) catch |err| {
+    reader.readSliceAll(&magic_buffer) catch |err| {
         misc.error_context.new("Failed to read magic number.", .{});
         return err;
     };
@@ -125,7 +103,7 @@ pub fn loadRecording(
         return error.MagicNumber;
     }
 
-    const version = file_reader.interface.takeInt(VersionNumber, endian) catch |err| {
+    const version = reader.takeInt(VersionNumber, endian) catch |err| {
         misc.error_context.new("Failed to read version number.", .{});
         return err;
     };
@@ -136,7 +114,7 @@ pub fn loadRecording(
         );
     }
 
-    var decoder = io.XzDecoder.init(allocator, &file_reader.interface) catch |err| {
+    var decoder = io.XzDecoder.init(allocator, reader) catch |err| {
         misc.error_context.append("Failed to initialize XZ decoder.", .{});
         return err;
     };
@@ -1059,7 +1037,7 @@ fn doesPathMatchPattern(path: []const u8, pattern: []const u8) bool {
 
 const testing = std.testing;
 
-test "loadRecording should load the same recording that saveRecording saved" {
+test "readRecording should load the same recording that writeRecording saved" {
     const Frame = struct {
         bool: bool = false,
         u8: u8 = 0,
@@ -1128,45 +1106,27 @@ test "loadRecording should load the same recording that saveRecording saved" {
             .struct_of_array = .{ .a = .{ 4, 3 }, .b = .{ 2, 1 } },
         },
     };
-    try saveRecording(Frame, testing.allocator, &saved_recording, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const loaded_recording = try loadRecording(Frame, testing.allocator, "./test_assets/recording.irony", &.{});
+    var buffer: [4096]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(Frame, testing.allocator, &saved_recording, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const loaded_recording = try readRecording(Frame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(loaded_recording);
     try testing.expectEqualSlices(Frame, &saved_recording, loaded_recording);
 }
 
-test "saveRecording should overwrite the file if it already exists" {
-    const Frame = struct { a: f32 = 0 };
-    try saveRecording(Frame, testing.allocator, &.{
-        .{ .a = 1 },
-        .{ .a = 2 },
-        .{ .a = 3 },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    try saveRecording(Frame, testing.allocator, &.{
-        .{ .a = 2 },
-        .{ .a = 3 },
-        .{ .a = 4 },
-    }, "./test_assets/recording.irony", &.{});
-    const recording = try loadRecording(Frame, testing.allocator, "./test_assets/recording.irony", &.{});
-    defer testing.allocator.free(recording);
-    try testing.expectEqualSlices(Frame, &.{
-        .{ .a = 2 },
-        .{ .a = 3 },
-        .{ .a = 4 },
-    }, recording);
-}
-
-test "loadRecording should succeed when when recording has more fields then expected" {
+test "readRecording should succeed when when recording has more fields then expected" {
     const SavedFrame = struct { a: f32 = -1, b: f32 = -2 };
     const LoadedFrame = struct { a: f32 = -3 };
-    try saveRecording(SavedFrame, testing.allocator, &.{
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(SavedFrame, testing.allocator, &.{
         .{ .a = 1, .b = 2 },
         .{ .a = 3, .b = 4 },
         .{ .a = 5, .b = 6 },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const recording = try loadRecording(LoadedFrame, testing.allocator, "./test_assets/recording.irony", &.{});
+    }, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = 1 },
@@ -1175,16 +1135,18 @@ test "loadRecording should succeed when when recording has more fields then expe
     }, recording);
 }
 
-test "loadRecording should load default value when recording does not contain a value" {
+test "readRecording should load default value when recording does not contain a value" {
     const SavedFrame = struct { a: f32 = -1 };
     const LoadedFrame = struct { a: f32 = -2, b: f32 = -3 };
-    try saveRecording(SavedFrame, testing.allocator, &.{
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(SavedFrame, testing.allocator, &.{
         .{ .a = 1 },
         .{ .a = 2 },
         .{ .a = 3 },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const recording = try loadRecording(LoadedFrame, testing.allocator, "./test_assets/recording.irony", &.{});
+    }, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = 1, .b = -3 },
@@ -1193,16 +1155,18 @@ test "loadRecording should load default value when recording does not contain a 
     }, recording);
 }
 
-test "loadRecording should use default value when a field has different size then expected" {
+test "readRecording should use default value when a field has different size then expected" {
     const SavedFrame = struct { a: f32 = -1, b: f64 = -2 };
     const LoadedFrame = struct { a: f32 = -3, b: f32 = -4 };
-    try saveRecording(SavedFrame, testing.allocator, &.{
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(SavedFrame, testing.allocator, &.{
         .{ .a = 1, .b = 2 },
         .{ .a = 3, .b = 4 },
         .{ .a = 5, .b = 6 },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const recording = try loadRecording(LoadedFrame, testing.allocator, "./test_assets/recording.irony", &.{});
+    }, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = 1, .b = -4 },
@@ -1211,17 +1175,19 @@ test "loadRecording should use default value when a field has different size the
     }, recording);
 }
 
-test "loadRecording should use default value when encountering invalid bool value" {
+test "readRecording should use default value when encountering invalid bool value" {
     const SavedFrame = struct { a: u8 = 1, b: ?u8 = null };
     const LoadedFrame = struct { a: bool = false, b: ?bool = null };
-    try saveRecording(SavedFrame, testing.allocator, &.{
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(SavedFrame, testing.allocator, &.{
         .{ .a = 0, .b = null },
         .{ .a = 0, .b = 0 },
         .{ .a = 1, .b = 1 },
         .{ .a = 2, .b = 2 },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const recording = try loadRecording(LoadedFrame, testing.allocator, "./test_assets/recording.irony", &.{});
+    }, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = false, .b = null },
@@ -1231,17 +1197,19 @@ test "loadRecording should use default value when encountering invalid bool valu
     }, recording);
 }
 
-test "loadRecording should use default value when encountering invalid int value" {
+test "readRecording should use default value when encountering invalid int value" {
     const SavedFrame = struct { a: u16 = 0, b: ?u16 = null };
     const LoadedFrame = struct { a: u9 = 1, b: ?u9 = null };
-    try saveRecording(SavedFrame, testing.allocator, &.{
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(SavedFrame, testing.allocator, &.{
         .{ .a = 0, .b = null },
         .{ .a = 0, .b = 0 },
         .{ .a = 511, .b = 511 },
         .{ .a = 512, .b = 512 },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const recording = try loadRecording(LoadedFrame, testing.allocator, "./test_assets/recording.irony", &.{});
+    }, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = 0, .b = null },
@@ -1251,18 +1219,20 @@ test "loadRecording should use default value when encountering invalid int value
     }, recording);
 }
 
-test "loadRecording should use default value when encountering invalid enum value" {
+test "readRecording should use default value when encountering invalid enum value" {
     const Enum = enum(u8) { a = 0, b = 1 };
     const SavedFrame = struct { a: u8 = 0, b: ?u8 = null };
     const LoadedFrame = struct { a: Enum = .a, b: ?Enum = null };
-    try saveRecording(SavedFrame, testing.allocator, &.{
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(SavedFrame, testing.allocator, &.{
         .{ .a = 0, .b = null },
         .{ .a = 0, .b = 0 },
         .{ .a = 1, .b = 1 },
         .{ .a = 2, .b = 2 },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const recording = try loadRecording(LoadedFrame, testing.allocator, "./test_assets/recording.irony", &.{});
+    }, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = .a, .b = null },
@@ -1272,18 +1242,20 @@ test "loadRecording should use default value when encountering invalid enum valu
     }, recording);
 }
 
-test "loadRecording should use default value when encountering invalid optional" {
+test "readRecording should use default value when encountering invalid optional" {
     const TagAndPayload = packed struct { tag: u8 = 255, payload: u8 = 255 };
     const SavedFrame = struct { a: TagAndPayload = .{}, b: TagAndPayload = .{} };
     const LoadedFrame = struct { a: ?u8 = null, b: ?u8 = 0 };
-    try saveRecording(SavedFrame, testing.allocator, &.{
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(SavedFrame, testing.allocator, &.{
         .{ .a = .{ .tag = 0, .payload = 0 }, .b = .{ .tag = 0, .payload = 0 } },
         .{ .a = .{ .tag = 1, .payload = 0 }, .b = .{ .tag = 1, .payload = 0 } },
         .{ .a = .{ .tag = 1, .payload = 1 }, .b = .{ .tag = 1, .payload = 1 } },
         .{ .a = .{ .tag = 2, .payload = 1 }, .b = .{ .tag = 2, .payload = 1 } },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const recording = try loadRecording(LoadedFrame, testing.allocator, "./test_assets/recording.irony", &.{});
+    }, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .a = null, .b = null },
@@ -1293,14 +1265,16 @@ test "loadRecording should use default value when encountering invalid optional"
     }, recording);
 }
 
-test "loadRecording should use default value when encountering invalid tagged union" {
+test "readRecording should use default value when encountering invalid tagged union" {
     const TagAndPayload = packed struct { tag: u8 = 0xFF, payload: u16 = 0xFFFF };
     const Tag = enum(u8) { a = 1, b = 2 };
     const Union = union(Tag) { a: u8, b: u16 };
     const SavedFrame = struct { f1: TagAndPayload = .{}, f2: TagAndPayload = .{} };
     const LoadedFrame = struct { f1: Union = .{ .a = 128 }, f2: Union = .{ .b = 129 } };
     try testing.expectEqual(serializedSizeOf(Union), serializedSizeOf(TagAndPayload));
-    try saveRecording(SavedFrame, testing.allocator, &.{
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(SavedFrame, testing.allocator, &.{
         .{ .f1 = .{ .tag = 0, .payload = 0 }, .f2 = .{ .tag = 0, .payload = 0 } },
         .{ .f1 = .{ .tag = 1, .payload = 0 }, .f2 = .{ .tag = 1, .payload = 0 } },
         .{ .f1 = .{ .tag = 1, .payload = 1 }, .f2 = .{ .tag = 1, .payload = 1 } },
@@ -1311,9 +1285,9 @@ test "loadRecording should use default value when encountering invalid tagged un
         .{ .f1 = .{ .tag = 1, .payload = 256 }, .f2 = .{ .tag = 1, .payload = 256 } },
         .{ .f1 = .{ .tag = 2, .payload = 255 }, .f2 = .{ .tag = 2, .payload = 255 } },
         .{ .f1 = .{ .tag = 2, .payload = 256 }, .f2 = .{ .tag = 2, .payload = 256 } },
-    }, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const recording = try loadRecording(LoadedFrame, testing.allocator, "./test_assets/recording.irony", &.{});
+    }, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readRecording(LoadedFrame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(recording);
     try testing.expectEqualSlices(LoadedFrame, &.{
         .{ .f1 = .{ .a = 128 }, .f2 = .{ .b = 129 } },
@@ -1329,7 +1303,7 @@ test "loadRecording should use default value when encountering invalid tagged un
     }, recording);
 }
 
-test "loadRecording should load the same recording that saveRecording saved when working with packed types" {
+test "readRecording should load the same recording that writeRecording saved when working with packed types" {
     const StructOfUnions = packed struct {
         a: packed union { u: u8, i: i8 } = .{ .u = 255 },
         b: packed union { u: u16, i: i16 } = .{ .u = 255 },
@@ -1358,9 +1332,11 @@ test "loadRecording should load the same recording that saveRecording saved when
             .union_of_structs = .{ .b = .{ .f1 = 1, .f2 = 1 } },
         },
     };
-    try saveRecording(Frame, testing.allocator, &saved_recording, "./test_assets/recording.irony", &.{});
-    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    const loaded_recording = try loadRecording(Frame, testing.allocator, "./test_assets/recording.irony", &.{});
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeRecording(Frame, testing.allocator, &saved_recording, &writer, &.{});
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const loaded_recording = try readRecording(Frame, testing.allocator, &reader, &.{});
     defer testing.allocator.free(loaded_recording);
     try testing.expectEqual(saved_recording.len, loaded_recording.len);
     for (0..saved_recording.len) |index| {

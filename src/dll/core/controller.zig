@@ -6,14 +6,13 @@ const model = @import("../model/root.zig");
 
 pub const Controller = struct {
     allocator: std.mem.Allocator,
-    recording: Recording,
+    recording: model.Recording,
     mode: Mode,
     playback_speed: f32,
     contains_unsaved_changes: bool,
     did_last_save_or_load_succeed: bool,
 
     const Self = @This();
-    pub const Recording = std.ArrayList(model.Frame);
     pub const Mode = union(enum) {
         live: LiveState,
         record: RecordState,
@@ -28,7 +27,7 @@ pub const Controller = struct {
     };
     pub const RecordState = struct {
         segment_start_index: usize,
-        segment: Recording,
+        segment: model.Recording,
     };
     pub const PauseState = struct {
         frame_index: usize,
@@ -67,25 +66,6 @@ pub const Controller = struct {
     pub const max_scrub_speed = 6.0;
     pub const scrub_ramp_up_time = 10.0;
     pub const max_number_of_unprocessed_frames = 300;
-    pub const serialization_config = sdk.io.RecordingConfig{
-        .atomic_types = &.{
-            ?bool,
-            ?u32,
-            ?f32,
-            ?model.MovePhase,
-            ?model.AttackType,
-            ?model.HitOutcome,
-            ?model.Posture,
-            ?model.Blocking,
-            ?model.Crushing,
-            ?model.Input,
-            ?model.Rage,
-            sdk.math.Vec3,
-            model.HitLine,
-            model.Wall,
-            model.FloorGimmick,
-        },
-    };
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return .{
@@ -429,7 +409,7 @@ pub const Controller = struct {
             ) ?[]model.Frame {
                 std.log.debug("Load recording task spawned.", .{});
                 const path = path_buffer[0..path_len];
-                if (sdk.io.loadRecording(model.Frame, allocator, path, &serialization_config)) |frames| {
+                if (model.loadRecording(allocator, path)) |frames| {
                     std.log.info("Recording loaded.", .{});
                     sdk.ui.toasts.send(.success, null, "Recording loaded successfully.", .{});
                     return frames;
@@ -476,7 +456,7 @@ pub const Controller = struct {
             ) ?void {
                 std.log.debug("Save recording task spawned.", .{});
                 const path = path_buffer[0..path_len];
-                if (sdk.io.saveRecording(model.Frame, allocator, frames, path, &serialization_config)) {
+                if (model.saveRecording(allocator, frames, path)) {
                     std.log.info("Recording saved.", .{});
                     sdk.ui.toasts.send(.success, null, "Recording saved successfully.", .{});
                 } else |err| {

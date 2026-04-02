@@ -55,7 +55,7 @@ pub const Settings = struct {
         defer file.close();
         var buffer: [1024]u8 = undefined;
         var reader = file.reader(&buffer);
-        return sdk.io.readJsonValue(Self, &reader.interface, .{}) catch |err| {
+        return sdk.io.readJsonValue(Self, &reader.interface, &.{}) catch |err| {
             sdk.misc.error_context.append("Failed to parse JSON file content.", .{});
             return err;
         };

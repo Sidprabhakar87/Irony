@@ -77,7 +77,7 @@ pub fn writeJsonValue(
     };
 }
 
-pub fn readJsonValue(comptime Type: type, reader: *std.io.Reader, default: ?Type) !Type {
+pub fn readJsonValue(comptime Type: type, reader: *std.io.Reader, default: ?*const Type) !Type {
     var buffer: [buffer_size]u8 = undefined;
     var allocator = std.heap.FixedBufferAllocator.init(&buffer);
     var json_reader = std.json.Reader.init(allocator.allocator(), reader);
@@ -117,7 +117,11 @@ fn writeValue(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const
     }
 }
 
-fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
+    const Default = @TypeOf(default);
+    if (!isPointerTo(Type, Default)) {
+        @compileError("Expected default to be a pointer to " ++ @typeName(Type) ++ " but got: " ++ @typeName(Default));
+    }
     const start_height = reader.stackHeight();
     const value_or_error = if (isBoundedArray(Type)) block: {
         break :block readBoundedArray(Type, reader, allocator, default);
@@ -148,12 +152,12 @@ fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
                 return err_2;
             };
         }
-        if (default) |default_value| {
+        if (default) |d| {
             misc.error_context.append("Falling back to default value.", .{});
             if (!builtin.is_test) {
                 misc.error_context.logWarning(err_1);
             }
-            return default_value;
+            return d.*;
         } else {
             misc.error_context.append("No default value to fall back to.", .{});
             return err_1;
@@ -289,7 +293,7 @@ fn writeOptional(writer: *std.io.Writer, value_pointer: anytype, whitespace: *co
     }
 }
 
-fn readOptional(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+fn readOptional(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
     const info = &@typeInfo(Type).optional;
     const Payload = info.child;
     const token_type = reader.peekNextTokenType() catch |err| {
@@ -306,7 +310,7 @@ fn readOptional(comptime Type: type, reader: *std.json.Reader, allocator: std.me
         },
         else => {
             const default_payload = if (default) |d| block: {
-                break :block if (d) |payload| payload else null;
+                break :block if (d.*) |*payload| payload else null;
             } else null;
             return readValue(Payload, reader, allocator, default_payload) catch |err| {
                 misc.error_context.append("Failed to read optional's payload.", .{});
@@ -353,7 +357,7 @@ fn writeArray(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const
     };
 }
 
-fn readArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+fn readArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
     const info = &@typeInfo(Type).array;
     const Element = info.child;
     const begin_token = reader.next() catch |err| {
@@ -364,7 +368,7 @@ fn readArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
         misc.error_context.new("Expected array begin token but got: {s}", .{@tagName(begin_token)});
         return error.UnexpectedToken;
     }
-    var array: Type = default orelse undefined;
+    var array: Type = if (default) |d| d.* else undefined;
     var index: usize = 0;
     while (true) {
         errdefer misc.error_context.append("Failed to read array element at index: {}", .{index});
@@ -376,7 +380,7 @@ fn readArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
             break;
         }
         if (index < array.len) {
-            const default_element = if (default) |d| d[index] else null;
+            const default_element = if (default) |d| &d[index] else null;
             array[index] = readValue(Element, reader, allocator, default_element) catch |err| {
                 misc.error_context.append("Failed to read element value.", .{});
                 return err;
@@ -439,7 +443,7 @@ fn writeTuple(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const
     };
 }
 
-fn readTuple(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+fn readTuple(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
     const info = @typeInfo(Type).@"struct";
     const begin_token = reader.next() catch |err| {
         misc.error_context.new("Failed to read tuple begin token.", .{});
@@ -449,7 +453,7 @@ fn readTuple(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
         misc.error_context.new("Expected array begin token but got: {s}", .{@tagName(begin_token)});
         return error.UnexpectedToken;
     }
-    var tuple: Type = default orelse undefined;
+    var tuple: Type = if (default) |d| d.* else undefined;
     var index: usize = 0;
     inline for (info.fields) |*field| {
         errdefer misc.error_context.append("Failed to read tuple field: {}", .{index});
@@ -461,7 +465,7 @@ fn readTuple(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
             break;
         }
         const Field = field.type;
-        const default_field = if (default) |d| @field(d, field.name) else null;
+        const default_field = if (default) |d| &@field(d, field.name) else null;
         @field(tuple, field.name) = readValue(Field, reader, allocator, default_field) catch |err| {
             misc.error_context.append("Failed to read field value.", .{});
             return err;
@@ -545,7 +549,7 @@ fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, whitespace: *cons
     };
 }
 
-fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
     const info = @typeInfo(Type).@"struct";
     const begin_token = reader.next() catch |err| {
         misc.error_context.new("Failed to read struct begin token.", .{});
@@ -555,7 +559,7 @@ fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.
         misc.error_context.new("Expected object begin token but got: {s}", .{@tagName(begin_token)});
         return error.UnexpectedToken;
     }
-    var structure: Type = default orelse undefined;
+    var structure: Type = if (default) |d| d.* else undefined;
     var found_fields = [1]bool{default != null} ** info.fields.len;
     while (true) {
         const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
@@ -583,7 +587,7 @@ fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.
                     is_token_freed = true;
                 }
                 const Field = field.type;
-                const default_field = if (default) |d| @field(d, field.name) else null;
+                const default_field = if (default) |d| &@field(d, field.name) else null;
                 @field(structure, field.name) = readValue(Field, reader, allocator, default_field) catch |err| {
                     misc.error_context.append("Failed to read field value: {s}", .{field.name});
                     return err;
@@ -646,7 +650,7 @@ fn writeUnion(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const
     };
 }
 
-fn readUnion(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+fn readUnion(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
     const info = @typeInfo(Type).@"union";
     const Tag = info.tag_type orelse {
         @compileError("Union " ++ @typeName(Type) ++ " is not tagged and therefor not serializable.");
@@ -660,7 +664,7 @@ fn readUnion(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
         return error.UnexpectedToken;
     }
     const tagged_union: Type = block: {
-        const default_tag = if (default) |d| std.meta.activeTag(d) else null;
+        const default_tag = if (default) |d| &std.meta.activeTag(d.*) else null;
         const tag = readValue(Tag, reader, allocator, default_tag) catch |err| {
             misc.error_context.append("Failed to read union's tag. ({s})", .{@typeName(Tag)});
             return err;
@@ -668,7 +672,10 @@ fn readUnion(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
         inline for (info.fields) |*field| {
             if (@field(Tag, field.name) == tag) {
                 const Payload = field.type;
-                const default_payload = if (tag == default_tag) @field(default.?, field.name) else null;
+                const default_payload = switch (default != null and tag == default_tag.?.*) {
+                    true => &@field(default.?, field.name),
+                    false => null,
+                };
                 const payload = readValue(Payload, reader, allocator, default_payload) catch |err| {
                     misc.error_context.append("Failed to read union's payload.", .{});
                     return err;
@@ -739,7 +746,12 @@ fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, whitespace:
     };
 }
 
-fn readBoundedArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+fn readBoundedArray(
+    comptime Type: type,
+    reader: *std.json.Reader,
+    allocator: std.mem.Allocator,
+    default: anytype,
+) !Type {
     const Element = Type.Child;
     if (Element == u8) {
         const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
@@ -777,7 +789,7 @@ fn readBoundedArray(comptime Type: type, reader: *std.json.Reader, allocator: st
             break;
         }
         if (array.len < array.buffer.len) {
-            const default_element = if (index < default_slice.len) default_slice[index] else null;
+            const default_element = if (index < default_slice.len) &default_slice[index] else null;
             array.buffer[array.len] = readValue(Element, reader, allocator, default_element) catch |err| {
                 misc.error_context.append("Failed to read element value.", .{});
                 return err;
@@ -864,7 +876,7 @@ fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, whitespace: *c
     };
 }
 
-fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
+fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
     const Key = Type.Key;
     const Value = Type.Value;
     const key_info = &@typeInfo(Key).@"enum";
@@ -876,7 +888,7 @@ fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.m
         misc.error_context.new("Expected object begin token but got: {s}", .{@tagName(begin_token)});
         return error.UnexpectedToken;
     }
-    var enum_array: Type = default orelse undefined;
+    var enum_array: Type = if (default) |d| d.* else undefined;
     var found_keys = [1]bool{default != null} ** key_info.fields.len;
     while (true) {
         const token = reader.nextAllocMax(allocator, .alloc_always, buffer_size) catch |err| {
@@ -905,7 +917,7 @@ fn readEnumArray(comptime Type: type, reader: *std.json.Reader, allocator: std.m
                     is_token_freed = true;
                 }
                 const key: Key = @enumFromInt(field.value);
-                const default_field = if (default) |d| d.get(key) else null;
+                const default_field = if (default) |d| d.getPtrConst(key) else null;
                 const value = readValue(Value, reader, allocator, default_field) catch |err| {
                     misc.error_context.append("Failed to read entry value.", .{});
                     return err;
@@ -948,8 +960,8 @@ fn writeVector(writer: *std.io.Writer, value_pointer: anytype, whitespace: *cons
     };
 }
 
-fn readVector(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
-    const default_array = if (default) |d| d.array else null;
+fn readVector(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
+    const default_array = if (default) |d| &d.array else null;
     const array = readValue(Type.Array, reader, allocator, default_array) catch |err| {
         misc.error_context.append("Failed to read vector's array.", .{});
         return err;
@@ -973,12 +985,21 @@ fn writeMatrix(writer: *std.io.Writer, value_pointer: anytype, whitespace: JsonW
     };
 }
 
-fn readMatrix(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: ?Type) !Type {
-    const default_flat = if (default) |d| d.toFlat() else null;
+fn readMatrix(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Allocator, default: anytype) !Type {
+    const default_flat = if (default) |d| d.asFlat() else null;
     return readValue(Type.Flat, reader, allocator, default_flat) catch |err| {
         misc.error_context.append("Failed to read matrix's array.", .{});
         return err;
     };
+}
+
+fn freeIfAllocated(allocator: std.mem.Allocator, token: std.json.Token) void {
+    switch (token) {
+        .allocated_number, .allocated_string => |slice| {
+            allocator.free(slice);
+        },
+        else => {},
+    }
 }
 
 inline fn hasTag(comptime Type: type, comptime tag: type) bool {
@@ -991,12 +1012,16 @@ inline fn hasTag(comptime Type: type, comptime tag: type) bool {
     }
 }
 
-fn freeIfAllocated(allocator: std.mem.Allocator, token: std.json.Token) void {
-    switch (token) {
-        .allocated_number, .allocated_string => |slice| {
-            allocator.free(slice);
-        },
-        else => {},
+inline fn isPointerTo(comptime Expected: type, comptime Actual: type) bool {
+    comptime {
+        return switch (@typeInfo(Actual)) {
+            .optional => |*optional| switch (@typeInfo(optional.child)) {
+                .pointer => |*pointer| pointer.child == Expected,
+                else => false,
+            },
+            .pointer => |*pointer| pointer.child == Expected,
+            else => false,
+        };
     }
 }
 
@@ -1065,7 +1090,7 @@ test "readJsonValue should read the same value that writeJsonValue saved" {
     var writer = std.Io.Writer.fixed(&buffer);
     try writeJsonValue(Value, &write_value, &writer, &.none);
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
-    const read_value = try readJsonValue(Value, &reader, .{});
+    const read_value = try readJsonValue(Value, &reader, &.{});
     try testing.expectEqual(write_value, read_value);
 }
 
@@ -1127,7 +1152,7 @@ test "readJsonValue should use default value when encountering missing value and
         \\  "i": { "i1": 9 }
         \\}
     );
-    const value = try readJsonValue(Value, &reader, .{});
+    const value = try readJsonValue(Value, &reader, &.{});
     try testing.expectEqual(Value{
         .a = 1,
         .b = -2,
@@ -1172,7 +1197,7 @@ test "readJsonValue should use default value when encountering invalid value and
         \\  "l": false
         \\}
     );
-    const value = try readJsonValue(Value, &reader, .{});
+    const value = try readJsonValue(Value, &reader, &.{});
     try testing.expectEqual(Value{
         .a = 1,
         .b = -2,

@@ -148,7 +148,7 @@ pub fn readLargeJsonArray(
         if (token_type == .array_end) {
             break;
         }
-        const element = readValue(Element, &json_reader, allocator, default_element) catch |err| {
+        const element = readValue(Element, &json_reader, buffer_allocator.allocator(), default_element) catch |err| {
             misc.error_context.append("Failed to read element value.", .{});
             return err;
         };

@@ -36,6 +36,7 @@ pub const PlayerRole = @import("player.zig").PlayerRole;
 pub const PlayerName = @import("player.zig").PlayerName;
 pub const Player = @import("player.zig").Player;
 pub const Recording = @import("recording.zig").Recording;
+pub const RecordingFormat = @import("recording.zig").RecordingFormat;
 pub const saveRecording = @import("recording.zig").saveRecording;
 pub const loadRecording = @import("recording.zig").loadRecording;
 pub const Settings = @import("settings.zig").Settings;

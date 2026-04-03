@@ -19,8 +19,7 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
         unsaved_dialog: UnsavedDialog = .{},
         save_dialog: FileDialog = .{ .type = .save },
         open_dialog: FileDialog = .{ .type = .open },
-        file_path_buffer: [sdk.os.max_file_path_length]u8 = undefined,
-        file_path_len: usize = 0,
+        file_path: FilePath = .empty,
 
         const Self = @This();
         const Action = enum {
@@ -50,7 +49,7 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
             if (controller.getTotalFrames() == 0) {
                 // Recording can become empty with File -> New menu and with Clear Recording control.
                 // This makes sure that the empty recording is never linked to a file, no matter the way it becomes empty.
-                self.file_path_len = 0;
+                self.file_path = .empty;
             }
 
             if (action == .idle) {
@@ -70,7 +69,7 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
                     .idle => unreachable,
                     .new, .exit => if (unsaved_changes) .unsaved_dialog else .finnish,
                     .open => if (unsaved_changes) .unsaved_dialog else .open_dialog,
-                    .save => if (self.file_path_len == 0) .save_dialog else .save_in_progress,
+                    .save => if (self.file_path.len == 0) .save_dialog else .save_in_progress,
                     .save_as => .save_dialog,
                 };
             }
@@ -78,7 +77,7 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
             if (progress == .unsaved_dialog) {
                 switch (self.unsaved_dialog.action) {
                     .no_action => {},
-                    .save => progress = if (self.file_path_len == 0) .save_dialog else .save_in_progress,
+                    .save => progress = if (self.file_path.len == 0) .save_dialog else .save_in_progress,
                     .dont_save => switch (action) {
                         .idle, .save, .save_as => unreachable,
                         .new, .exit => progress = .finnish,
@@ -104,7 +103,8 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
 
             if (self.progress != .save_in_progress and progress == .save_in_progress) {
                 const path = self.save_dialog.getLastSelectedPath() orelse self.getFilePath() orelse unreachable;
-                controller.save(path);
+                const format = model.RecordingFormat.fromFilePath(path) orelse .irony;
+                controller.save(path, format);
             }
 
             if (progress == .save_in_progress and controller.mode != .save) {
@@ -114,15 +114,14 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
                         .new, .save, .save_as, .exit => progress = .finnish,
                         .open => progress = .open_dialog,
                     }
-                    if (self.save_dialog.last_selected_path_len > 0) {
-                        self.file_path_buffer = self.save_dialog.last_selected_path_buffer;
-                        self.file_path_len = self.save_dialog.last_selected_path_len;
+                    if (self.save_dialog.last_selected_path.len > 0) {
+                        self.file_path = self.save_dialog.last_selected_path;
                     }
                 } else {
                     action = .idle;
                     progress = .start;
                 }
-                self.save_dialog.last_selected_path_len = 0;
+                self.save_dialog.last_selected_path = .empty;
             }
 
             if (progress == .open_dialog) {
@@ -138,21 +137,21 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
 
             if (self.progress != .open_in_progress and progress == .open_in_progress) {
                 const path = self.open_dialog.getLastSelectedPath() orelse unreachable;
-                controller.load(path);
+                const format = model.RecordingFormat.fromFilePath(path) orelse .irony;
+                controller.load(path, format);
             }
 
             if (progress == .open_in_progress and controller.mode != .load) {
                 if (controller.did_last_save_or_load_succeed) {
                     progress = .finnish;
-                    if (self.open_dialog.last_selected_path_len > 0) {
-                        self.file_path_buffer = self.open_dialog.last_selected_path_buffer;
-                        self.file_path_len = self.open_dialog.last_selected_path_len;
+                    if (self.open_dialog.last_selected_path.len > 0) {
+                        self.file_path = self.open_dialog.last_selected_path;
                     }
                 } else {
                     action = .idle;
                     progress = .start;
                 }
-                self.open_dialog.last_selected_path_len = 0;
+                self.open_dialog.last_selected_path = .empty;
             }
 
             if (progress == .finnish) {
@@ -186,13 +185,15 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
         }
 
         pub fn getFilePath(self: *const Self) ?[:0]const u8 {
-            if (self.file_path_len == 0) {
+            if (self.file_path.len == 0) {
                 return null;
             }
-            return self.file_path_buffer[0..self.file_path_len :0];
+            return self.file_path.asSlice();
         }
     };
 }
+
+const FilePath = sdk.misc.BoundedArray(sdk.os.max_file_path_length, u8, 0, true);
 
 const MenuBar = struct {
     action: Action = .no_action,
@@ -301,15 +302,38 @@ const FileDialog = struct {
     type: Type,
     is_open: bool = false,
     action: Action = .no_action,
-    last_selected_path_buffer: [sdk.os.max_file_path_length]u8 = undefined,
-    last_selected_path_len: usize = 0,
+    last_selected_path: FilePath = .empty,
 
     const Self = @This();
     pub const Action = enum { no_action, proceed, cancel };
     pub const Type = enum { save, open };
 
     const directory_name = "recordings";
-    const file_extension = "." ++ @tagName(build_info.name);
+    const save_filters = block: {
+        var result: [:0]const u8 = "";
+        const tags = std.meta.tags(model.RecordingFormat);
+        for (tags, 0..) |format, index| {
+            result = result ++ getFormatDisplayName(format);
+            result = result ++ " (";
+            result = result ++ format.getFileExtension();
+            result = result ++ "){";
+            result = result ++ format.getFileExtension();
+            result = result ++ "}";
+            if (index < tags.len - 1) {
+                result = result ++ ",";
+            }
+        }
+        break :block result;
+    };
+    const open_filters = save_filters ++ ",All files (.*){.*}";
+
+    fn getFormatDisplayName(format: model.RecordingFormat) [:0]const u8 {
+        return switch (format) {
+            .irony => "Irony recordings",
+            .json => "JSON files",
+            .json_xz => "Compressed JSON files",
+        };
+    }
 
     pub fn draw(
         self: *Self,
@@ -329,12 +353,24 @@ const FileDialog = struct {
             switch (self.type) {
                 .save => {
                     if (current_path) |path| {
-                        config.filePathName = path.ptr;
+                        config.fileName = filePathToFileNameWithoutExtension(&buffer_1, path) catch |err| block: {
+                            sdk.misc.error_context.append("Failed to construct file name from path: {s}", .{path});
+                            sdk.misc.error_context.logError(err);
+                            break :block "untitled";
+                        };
+                        config.path = filePathToDirectoryPath(&buffer_2, path) catch |err| block: {
+                            sdk.misc.error_context.append(
+                                "Failed to construct directory path from file path: {s}",
+                                .{path},
+                            );
+                            sdk.misc.error_context.logError(err);
+                            break :block base_dir.get();
+                        };
                     } else {
                         config.fileName = getTimestampFileName(&buffer_1) catch |err| block: {
                             sdk.misc.error_context.append("Failed to construct a timestamp based file name.", .{});
                             sdk.misc.error_context.logError(err);
-                            break :block "untitled" ++ file_extension;
+                            break :block "untitled";
                         };
                         config.path = createAndGetRecordingsDirectory(&buffer_2, base_dir) catch |err| block: {
                             sdk.misc.error_context.append("Failed to create \"{s}\" directory.", .{directory_name});
@@ -343,6 +379,7 @@ const FileDialog = struct {
                         };
                     }
                     config.flags |= imgui.ImGuiFileDialogFlags_ConfirmOverwrite;
+                    config.flags |= imgui.ImGuiFileDialogFlags_CaseInsensitiveExtentionFiltering;
                 },
                 .open => {
                     config.path = createAndGetRecordingsDirectory(&buffer_1, base_dir) catch |err| block: {
@@ -359,10 +396,13 @@ const FileDialog = struct {
                     .open => "open_dialog",
                 },
                 switch (self.type) {
-                    .save => "Save AS",
+                    .save => "Save As",
                     .open => "Open",
                 },
-                build_info.display_name ++ " recordings (*" ++ file_extension ++ "){" ++ file_extension ++ "}",
+                switch (self.type) {
+                    .save => save_filters,
+                    .open => open_filters,
+                },
                 config,
             );
         }
@@ -394,20 +434,14 @@ const FileDialog = struct {
         defer std.c.free(c_path);
         const path = std.mem.sliceTo(c_path, 0);
 
-        if (path.len + 1 >= self.last_selected_path_buffer.len) {
+        self.last_selected_path = FilePath.fromSlice(path) catch {
             std.log.err(
-                "Selected path exceeded the path buffer size ({}): {s}",
-                .{ self.last_selected_path_buffer.len, path },
+                "Selected path exceeds the maximum allowed file path size ({}): {s}",
+                .{ FilePath.max_len, path },
             );
             self.action = .no_action;
             return;
-        }
-
-        for (0..path.len) |index| {
-            self.last_selected_path_buffer[index] = path[index];
-        }
-        self.last_selected_path_buffer[path.len] = 0;
-        self.last_selected_path_len = path.len;
+        };
 
         self.action = .proceed;
     }
@@ -435,7 +469,7 @@ const FileDialog = struct {
         };
         return std.fmt.bufPrintZ(
             buffer,
-            "{:0>4}-{:0>2}-{:0>2} {:0>2}-{:0>2}-{:0>2}" ++ file_extension,
+            "{:0>4}-{:0>2}-{:0>2} {:0>2}-{:0>2}-{:0>2}",
             .{ @abs(ts.year), ts.month, ts.day, ts.hour, ts.minute, ts.second },
         ) catch |err| {
             sdk.misc.error_context.append("Failed to construct timestamp string for nano time: {}", .{nano});
@@ -443,11 +477,32 @@ const FileDialog = struct {
         };
     }
 
+    fn filePathToDirectoryPath(buffer: []u8, file_path: []const u8) ![:0]const u8 {
+        const directory_path = sdk.os.filePathToDirectoryPath(file_path);
+        return std.fmt.bufPrintZ(buffer, "{s}", .{directory_path}) catch |err| {
+            sdk.misc.error_context.new("Failed to put the result string into buffer: {s}", .{directory_path});
+            return err;
+        };
+    }
+
+    fn filePathToFileNameWithoutExtension(buffer: []u8, file_path: []const u8) ![:0]const u8 {
+        const extension = block: {
+            const format = model.RecordingFormat.fromFilePath(file_path) orelse break :block "";
+            break :block format.getFileExtension();
+        };
+        const file_name = sdk.os.pathToFileName(file_path);
+        const result = file_name[0..(file_name.len - extension.len)];
+        return std.fmt.bufPrintZ(buffer, "{s}", .{result}) catch |err| {
+            sdk.misc.error_context.new("Failed to put the result string into buffer: {s}", .{result});
+            return err;
+        };
+    }
+
     pub fn getLastSelectedPath(self: *const Self) ?[:0]const u8 {
-        if (self.last_selected_path_len == 0) {
+        if (self.last_selected_path.len == 0) {
             return null;
         }
-        return self.last_selected_path_buffer[0..self.last_selected_path_len :0];
+        return self.last_selected_path.asSlice();
     }
 };
 
@@ -461,9 +516,11 @@ const MockController = struct {
     total_frames: usize = 100,
     clear_call_count: usize = 0,
     save_call_count: usize = 0,
-    last_save_path: ?[]const u8 = null,
+    last_save_path: ?FilePath = null,
+    last_save_format: ?model.RecordingFormat = null,
     load_call_count: usize = 0,
-    last_load_path: ?[]const u8 = null,
+    last_load_path: ?FilePath = null,
+    last_load_format: ?model.RecordingFormat = null,
 
     const Self = @This();
     pub const Mode = enum {
@@ -486,15 +543,17 @@ const MockController = struct {
         self.mode = .live;
     }
 
-    pub fn save(self: *Self, path: []const u8) void {
+    pub fn save(self: *Self, path: []const u8, format: model.RecordingFormat) void {
         self.save_call_count += 1;
-        self.last_save_path = path;
+        self.last_save_path = .fromSliceTrimmed(path);
+        self.last_save_format = format;
         self.mode = .save;
     }
 
-    pub fn load(self: *Self, path: []const u8) void {
+    pub fn load(self: *Self, path: []const u8, format: model.RecordingFormat) void {
         self.load_call_count += 1;
-        self.last_load_path = path;
+        self.last_load_path = .fromSliceTrimmed(path);
+        self.last_load_format = format;
         self.mode = .load;
     }
 
@@ -632,7 +691,7 @@ test "should show correctly working unsaved changes dialog when new is clicked w
             ctx.itemInputValueStr("**/##FileName", "test"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.save_call_count);
             try testing.expectEqual(1, controller.clear_call_count);
-            try testing.expectStringEndsWith(controller.last_save_path.?, "test.irony");
+            try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test.irony");
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true;
             ctx.yield(1);
@@ -680,13 +739,13 @@ test "should call load on controller when open is clicked without unsaved change
             ctx.setRef("//$FOCUSED");
             ctx.itemInputValueStr("**/##FileName", "test"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.load_call_count);
-            try testing.expectStringEndsWith(controller.last_load_path.?, "test.irony");
+            try testing.expectStringEndsWith(controller.last_load_path.?.asSlice(), "test.irony");
             try testing.expectEqual(null, file_menu.getFilePath());
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true;
             ctx.yield(1);
             try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, controller.last_load_path.?, file_menu.getFilePath().?);
+            try testing.expectEqualSlices(u8, controller.last_load_path.?.asSlice(), file_menu.getFilePath().?);
         }
     };
     Test.file_dialog_context = imgui.IGFD_Create() orelse @panic("Failed to create file dialog context.");
@@ -751,7 +810,7 @@ test "should show correctly working unsaved changes dialog when open is clicked 
             ctx.itemInputValueStr("**/##FileName", "test"); // Presses enter so no need to click OK.
             try testing.expectEqual(0, controller.save_call_count);
             try testing.expectEqual(1, controller.load_call_count);
-            try testing.expectStringEndsWith(controller.last_load_path.?, "test.irony");
+            try testing.expectStringEndsWith(controller.last_load_path.?.asSlice(), "test.irony");
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = false;
             ctx.yield(1);
@@ -781,7 +840,7 @@ test "should show correctly working unsaved changes dialog when open is clicked 
             ctx.itemInputValueStr("**/##FileName", "test1"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.save_call_count);
             try testing.expectEqual(1, controller.load_call_count);
-            try testing.expectStringEndsWith(controller.last_save_path.?, "test1.irony");
+            try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test1.irony");
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true; // Makes the next save without a file dialog.
             ctx.yield(1);
@@ -809,14 +868,14 @@ test "should show correctly working unsaved changes dialog when open is clicked 
             ctx.itemInputValueStr("**/##FileName", "test2"); // Presses enter so no need to click OK.
             try testing.expectEqual(2, controller.save_call_count);
             try testing.expectEqual(2, controller.load_call_count);
-            try testing.expectStringEndsWith(controller.last_load_path.?, "test2.irony");
+            try testing.expectStringEndsWith(controller.last_load_path.?.asSlice(), "test2.irony");
             try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?);
+            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true;
             ctx.yield(1);
             try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_load_path.?);
+            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_load_path.?.asSlice());
         }
     };
     Test.file_dialog_context = imgui.IGFD_Create() orelse @panic("Failed to create file dialog context.");
@@ -859,13 +918,13 @@ test "should call save on controller when save is clicked and file is selected" 
             ctx.setRef("//$FOCUSED");
             ctx.itemInputValueStr("**/##FileName", "test"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.save_call_count);
-            try testing.expectStringEndsWith(controller.last_save_path.?, "test.irony");
+            try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test.irony");
             try testing.expect(file_menu.getFilePath() == null);
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true; // Makes the next save without a file dialog.
             ctx.yield(1);
             try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?);
+            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
 
             ctx.setRef("Window");
             ctx.menuClick("File/Save");
@@ -873,7 +932,7 @@ test "should call save on controller when save is clicked and file is selected" 
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true;
             ctx.yield(1);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?);
+            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
         }
     };
     Test.file_dialog_context = imgui.IGFD_Create() orelse @panic("Failed to create file dialog context.");
@@ -949,13 +1008,13 @@ test "should call save on controller when save as is clicked and file is selecte
             ctx.setRef("//$FOCUSED");
             ctx.itemInputValueStr("**/##FileName", "test1"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.save_call_count);
-            try testing.expectStringEndsWith(controller.last_save_path.?, "test1.irony");
+            try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test1.irony");
             try testing.expect(file_menu.getFilePath() == null);
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true;
             ctx.yield(1);
             try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?);
+            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
 
             ctx.setRef("Window");
             ctx.menuClick("File/Save As"); // Since its save "as" it has to show file dialog every time.
@@ -963,12 +1022,12 @@ test "should call save on controller when save as is clicked and file is selecte
             ctx.setRef("//$FOCUSED");
             ctx.itemInputValueStr("**/##FileName", "test2"); // Presses enter so no need to click OK.
             try testing.expectEqual(2, controller.save_call_count);
-            try testing.expectStringEndsWith(controller.last_save_path.?, "test2.irony");
+            try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test2.irony");
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true;
             ctx.yield(1);
             try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?);
+            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
         }
     };
     Test.file_dialog_context = imgui.IGFD_Create() orelse @panic("Failed to create file dialog context.");
@@ -1143,7 +1202,7 @@ test "should show correctly working unsaved changes dialog when exit is clicked 
             ctx.itemInputValueStr("**/##FileName", "test"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.save_call_count);
             try testing.expectEqual(1, shutdown_call_count);
-            try testing.expectStringEndsWith(controller.last_save_path.?, "test.irony");
+            try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test.irony");
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true;
             ctx.yield(1);

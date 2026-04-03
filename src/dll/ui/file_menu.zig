@@ -103,8 +103,7 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
 
             if (self.progress != .save_in_progress and progress == .save_in_progress) {
                 const path = self.save_dialog.getLastSelectedPath() orelse self.getFilePath() orelse unreachable;
-                const format = model.RecordingFormat.fromFilePath(path) orelse .irony;
-                controller.save(path, format);
+                controller.save(path);
             }
 
             if (progress == .save_in_progress and controller.mode != .save) {
@@ -137,8 +136,7 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
 
             if (self.progress != .open_in_progress and progress == .open_in_progress) {
                 const path = self.open_dialog.getLastSelectedPath() orelse unreachable;
-                const format = model.RecordingFormat.fromFilePath(path) orelse .irony;
-                controller.load(path, format);
+                controller.load(path);
             }
 
             if (progress == .open_in_progress and controller.mode != .load) {
@@ -517,10 +515,8 @@ const MockController = struct {
     clear_call_count: usize = 0,
     save_call_count: usize = 0,
     last_save_path: ?FilePath = null,
-    last_save_format: ?model.RecordingFormat = null,
     load_call_count: usize = 0,
     last_load_path: ?FilePath = null,
-    last_load_format: ?model.RecordingFormat = null,
 
     const Self = @This();
     pub const Mode = enum {
@@ -543,17 +539,15 @@ const MockController = struct {
         self.mode = .live;
     }
 
-    pub fn save(self: *Self, path: []const u8, format: model.RecordingFormat) void {
+    pub fn save(self: *Self, path: []const u8) void {
         self.save_call_count += 1;
         self.last_save_path = .fromSliceTrimmed(path);
-        self.last_save_format = format;
         self.mode = .save;
     }
 
-    pub fn load(self: *Self, path: []const u8, format: model.RecordingFormat) void {
+    pub fn load(self: *Self, path: []const u8) void {
         self.load_call_count += 1;
         self.last_load_path = .fromSliceTrimmed(path);
-        self.last_load_format = format;
         self.mode = .load;
     }
 

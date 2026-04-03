@@ -388,7 +388,7 @@ pub const Controller = struct {
         self.mode = .{ .live = .{ .frame = .{} } };
     }
 
-    pub fn load(self: *Self, file_path: []const u8, format: model.RecordingFormat) void {
+    pub fn load(self: *Self, file_path: []const u8) void {
         if (self.mode == .load or self.mode == .save) {
             return;
         }
@@ -402,13 +402,9 @@ pub const Controller = struct {
         };
         std.log.debug("Spawning load recording task...", .{});
         const task = LoadTask.spawn(self.allocator, struct {
-            fn call(
-                allocator: std.mem.Allocator,
-                path: BoundedFilePath,
-                recording_format: model.RecordingFormat,
-            ) ?model.Recording {
+            fn call(allocator: std.mem.Allocator, path: BoundedFilePath) ?model.Recording {
                 std.log.debug("Load recording task spawned.", .{});
-                if (model.loadRecording(allocator, path.asSlice(), recording_format)) |frames| {
+                if (model.loadRecording(allocator, path.asSlice())) |frames| {
                     std.log.info("Recording loaded.", .{});
                     sdk.ui.toasts.send(.success, null, "Recording loaded successfully.", .{});
                     return frames;
@@ -418,7 +414,7 @@ pub const Controller = struct {
                     return null;
                 }
             }
-        }.call, .{ self.allocator, file_path_copy, format }) catch |err| {
+        }.call, .{ self.allocator, file_path_copy }) catch |err| {
             sdk.misc.error_context.append("Failed to spawn load recording task.", .{});
             sdk.misc.error_context.append("Failed to load recording: {s}", .{file_path});
             sdk.misc.error_context.logError(err);
@@ -432,7 +428,7 @@ pub const Controller = struct {
         } };
     }
 
-    pub fn save(self: *Self, file_path: []const u8, format: model.RecordingFormat) void {
+    pub fn save(self: *Self, file_path: []const u8) void {
         if (self.mode == .load or self.mode == .save) {
             return;
         }
@@ -447,14 +443,9 @@ pub const Controller = struct {
         std.log.debug("Spawning save recording task...", .{});
         self.cleanUpModeState(); // Called here to ensure the recorded segment gets flushed before spawning the task.
         const task = SaveTask.spawn(self.allocator, struct {
-            fn call(
-                allocator: std.mem.Allocator,
-                frames: []const model.Frame,
-                path: BoundedFilePath,
-                recording_format: model.RecordingFormat,
-            ) ?void {
+            fn call(allocator: std.mem.Allocator, frames: []const model.Frame, path: BoundedFilePath) ?void {
                 std.log.debug("Save recording task spawned.", .{});
-                if (model.saveRecording(allocator, frames, path.asSlice(), recording_format)) {
+                if (model.saveRecording(allocator, frames, path.asSlice())) {
                     std.log.info("Recording saved.", .{});
                     sdk.ui.toasts.send(.success, null, "Recording saved successfully.", .{});
                 } else |err| {
@@ -463,7 +454,7 @@ pub const Controller = struct {
                     return null;
                 }
             }
-        }.call, .{ self.allocator, self.recording.items, file_path_copy, format }) catch |err| {
+        }.call, .{ self.allocator, self.recording.items, file_path_copy }) catch |err| {
             sdk.misc.error_context.append("Failed to spawn save recording task.", .{});
             sdk.misc.error_context.append("Failed to save recording: {s}", .{file_path});
             sdk.misc.error_context.logError(err);
@@ -1693,7 +1684,7 @@ test "should load the same frames that were previously saved" {
     controller.processFrame(&frame_3, {}, Callback.call);
     controller.processFrame(&frame_4, {}, Callback.call);
 
-    controller.save("./test_assets/recording.irony", .irony);
+    controller.save("./test_assets/recording.irony");
     while (controller.mode == .save) {
         controller.update(Controller.frame_time, {}, Callback.call);
         std.Thread.yield() catch {};
@@ -1702,7 +1693,7 @@ test "should load the same frames that were previously saved" {
     defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
 
     controller.clear();
-    controller.load("./test_assets/recording.irony", .irony);
+    controller.load("./test_assets/recording.irony");
     while (controller.mode == .load) {
         controller.update(Controller.frame_time, {}, Callback.call);
         std.Thread.yield() catch {};
@@ -1747,7 +1738,7 @@ test "should pause at the previously current frame after recording save complete
     controller.setCurrentFrameIndex(2);
     controller.play();
 
-    controller.save("./test_assets/recording.irony", .irony);
+    controller.save("./test_assets/recording.irony");
     while (controller.mode == .save) {
         controller.update(Controller.frame_time, {}, Callback.call);
         std.Thread.yield() catch {};
@@ -1786,7 +1777,7 @@ test "should pause at the last frame of the recording after recording load compl
     controller.setCurrentFrameIndex(2);
     controller.play();
 
-    controller.save("./test_assets/recording.irony", .irony);
+    controller.save("./test_assets/recording.irony");
     while (controller.mode == .save) {
         controller.update(Controller.frame_time, {}, Callback.call);
         std.Thread.yield() catch {};
@@ -1795,7 +1786,7 @@ test "should pause at the last frame of the recording after recording load compl
     defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
 
     controller.clear();
-    controller.load("./test_assets/recording.irony", .irony);
+    controller.load("./test_assets/recording.irony");
     while (controller.mode == .load) {
         controller.update(Controller.frame_time, {}, Callback.call);
         std.Thread.yield() catch {};

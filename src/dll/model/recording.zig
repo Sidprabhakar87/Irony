@@ -51,12 +51,7 @@ const irony_format_config = sdk.io.IronyFormatConfig{
 };
 const buffer_size = 4096;
 
-pub fn saveRecording(
-    allocator: std.mem.Allocator,
-    frames: []const model.Frame,
-    file_path: []const u8,
-    format: RecordingFormat,
-) !void {
+pub fn saveRecording(allocator: std.mem.Allocator, frames: []const model.Frame, file_path: []const u8) !void {
     const file = std.fs.cwd().createFile(file_path, .{}) catch |err| {
         sdk.misc.error_context.new("Failed to create or open file: {s}", .{file_path});
         return err;
@@ -65,6 +60,7 @@ pub fn saveRecording(
     var buffer: [buffer_size]u8 = undefined;
     var writer = file.writer(&buffer);
 
+    const format = RecordingFormat.fromFilePath(file_path) orelse .irony;
     switch (format) {
         .irony => {
             sdk.io.writeIronyFormat(
@@ -110,7 +106,7 @@ pub fn saveRecording(
     };
 }
 
-pub fn loadRecording(allocator: std.mem.Allocator, file_path: []const u8, format: RecordingFormat) !Recording {
+pub fn loadRecording(allocator: std.mem.Allocator, file_path: []const u8) !Recording {
     const file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
         sdk.misc.error_context.new("Failed to open file: {s}", .{file_path});
         return err;
@@ -119,6 +115,7 @@ pub fn loadRecording(allocator: std.mem.Allocator, file_path: []const u8, format
     var buffer: [buffer_size]u8 = undefined;
     var reader = file.reader(&buffer);
 
+    const format = RecordingFormat.fromFilePath(file_path) orelse .irony;
     switch (format) {
         .irony => {
             const slice = sdk.io.readIronyFormat(
@@ -176,9 +173,9 @@ test "loadRecording should load the same frames that the saveRecording saved whe
         .{ .frames_since_round_start = 2 },
         .{ .frames_since_round_start = 3 },
     };
-    try saveRecording(testing.allocator, &frames, "./test_assets/recording.irony", .irony);
+    try saveRecording(testing.allocator, &frames, "./test_assets/recording.irony");
     defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
-    var recording = try loadRecording(testing.allocator, "./test_assets/recording.irony", .irony);
+    var recording = try loadRecording(testing.allocator, "./test_assets/recording.irony");
     defer recording.deinit(testing.allocator);
     try testing.expectEqualSlices(model.Frame, &frames, recording.items);
 }
@@ -189,9 +186,9 @@ test "loadRecording should load the same frames that the saveRecording saved whe
         .{ .frames_since_round_start = 2 },
         .{ .frames_since_round_start = 3 },
     };
-    try saveRecording(testing.allocator, &frames, "./test_assets/recording.json", .json);
+    try saveRecording(testing.allocator, &frames, "./test_assets/recording.json");
     defer std.fs.cwd().deleteFile("./test_assets/recording.json") catch @panic("Failed to cleanup test file.");
-    var recording = try loadRecording(testing.allocator, "./test_assets/recording.json", .json);
+    var recording = try loadRecording(testing.allocator, "./test_assets/recording.json");
     defer recording.deinit(testing.allocator);
     try testing.expectEqualSlices(model.Frame, &frames, recording.items);
 }
@@ -203,9 +200,9 @@ test "loadRecording should load the same frames that the saveRecording saved whe
         .{ .frames_since_round_start = 2 },
         .{ .frames_since_round_start = 3 },
     };
-    try saveRecording(testing.allocator, &frames, "./test_assets/recording.json.xz", .json_xz);
+    try saveRecording(testing.allocator, &frames, "./test_assets/recording.json.xz");
     defer std.fs.cwd().deleteFile("./test_assets/recording.json.xz") catch @panic("Failed to cleanup test file.");
-    var recording = try loadRecording(testing.allocator, "./test_assets/recording.json.xz", .json_xz);
+    var recording = try loadRecording(testing.allocator, "./test_assets/recording.json.xz");
     defer recording.deinit(testing.allocator);
     try testing.expectEqualSlices(model.Frame, &frames, recording.items);
 }
@@ -215,14 +212,14 @@ test "saveRecording should overwrite the file if it already exists" {
         .{ .frames_since_round_start = 1 },
         .{ .frames_since_round_start = 2 },
         .{ .frames_since_round_start = 3 },
-    }, "./test_assets/recording.irony", .irony);
+    }, "./test_assets/recording.irony");
     defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
     try saveRecording(testing.allocator, &.{
         .{ .frames_since_round_start = 4 },
         .{ .frames_since_round_start = 5 },
         .{ .frames_since_round_start = 6 },
-    }, "./test_assets/recording.irony", .irony);
-    var recording = try loadRecording(testing.allocator, "./test_assets/recording.irony", .irony);
+    }, "./test_assets/recording.irony");
+    var recording = try loadRecording(testing.allocator, "./test_assets/recording.irony");
     defer recording.deinit(testing.allocator);
     try testing.expectEqualSlices(model.Frame, &.{
         .{ .frames_since_round_start = 4 },

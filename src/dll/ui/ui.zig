@@ -80,10 +80,10 @@ pub const Ui = struct {
             ui.drawMessageWindow("Recording", "⏺ Recording...", .top, false);
         }
         if (controller.mode == .save) {
-            ui.drawMessageWindow("Saving", "Saving the recording...", if (self.is_open) .center else .top, true);
+            ui.drawMessageWindow("Saving", "Saving the recording...", .top, true);
         }
         if (controller.mode == .load) {
-            ui.drawMessageWindow("Loading", "Loading the recording...", if (self.is_open) .center else .top, true);
+            ui.drawMessageWindow("Loading", "Loading the recording...", .top, true);
         }
 
         self.handleFirstDraw();

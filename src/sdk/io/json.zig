@@ -88,6 +88,84 @@ pub fn readJsonValue(comptime Type: type, reader: *std.io.Reader, default: ?*con
     };
 }
 
+pub fn writeLargeJsonArray(
+    comptime Element: type,
+    slice: []const Element,
+    writer: *std.io.Writer,
+) !void {
+    writer.writeAll("[\n") catch |err| {
+        misc.error_context.new("Failed to write array start token.", .{});
+        return err;
+    };
+    for (slice, 0..) |*element, index| {
+        errdefer misc.error_context.append("Failed to write array element at index: {}", .{index});
+        writeValue(writer, element, &.none) catch |err| {
+            misc.error_context.append("Failed to write element value.", .{});
+            return err;
+        };
+        if (index < slice.len - 1) {
+            writer.writeAll(",\n") catch |err| {
+                misc.error_context.new("Failed to write next element separator.", .{});
+                return err;
+            };
+        }
+    }
+    writer.writeByte(']') catch |err| {
+        misc.error_context.new("Failed to write array end token.", .{});
+        return err;
+    };
+}
+
+pub fn readLargeJsonArray(
+    comptime Element: type,
+    allocator: std.mem.Allocator,
+    reader: *std.io.Reader,
+    default_element: ?*const Element,
+) !std.ArrayList(Element) {
+    var buffer: [buffer_size]u8 = undefined;
+    var buffer_allocator = std.heap.FixedBufferAllocator.init(&buffer);
+    var json_reader = std.json.Reader.init(buffer_allocator.allocator(), reader);
+    defer json_reader.deinit();
+
+    const begin_token = json_reader.next() catch |err| {
+        misc.error_context.new("Failed to read array begin token.", .{});
+        return err;
+    };
+    if (begin_token != .array_begin) {
+        misc.error_context.new("Expected array begin token but got: {s}", .{@tagName(begin_token)});
+        return error.UnexpectedToken;
+    }
+
+    var list = std.ArrayList(Element).empty;
+    errdefer list.deinit(allocator);
+    var index: usize = 0;
+    while (true) {
+        errdefer misc.error_context.append("Failed to read array element at index: {}", .{index});
+        const token_type = json_reader.peekNextTokenType() catch |err| {
+            misc.error_context.new("Failed to peek element token type.", .{});
+            return err;
+        };
+        if (token_type == .array_end) {
+            break;
+        }
+        const element = readValue(Element, &json_reader, allocator, default_element) catch |err| {
+            misc.error_context.append("Failed to read element value.", .{});
+            return err;
+        };
+        list.append(allocator, element) catch |err| {
+            misc.error_context.append("Failed to append red element to the result list.", .{});
+            return err;
+        };
+        index += 1;
+    }
+
+    _ = json_reader.next() catch |err| {
+        misc.error_context.new("Failed to read bounded array end token.", .{});
+        return err;
+    };
+    return list;
+}
+
 fn writeValue(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const Type = switch (@typeInfo(@TypeOf(value_pointer))) {
         .pointer => |info| info.child,
@@ -1092,6 +1170,103 @@ test "readJsonValue should read the same value that writeJsonValue saved" {
     var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
     const read_value = try readJsonValue(Value, &reader, &.{});
     try testing.expectEqual(write_value, read_value);
+}
+
+test "readLargeJsonArray should read the same value that writeLargeJsonArray saved" {
+    errdefer |err| misc.error_context.logError(err);
+    const Element = struct {
+        bool: bool = false,
+        u8: u8 = 0,
+        u16: u16 = 0,
+        u32: u32 = 0,
+        u64: u64 = 0,
+        i8: i8 = 0,
+        i16: i16 = 0,
+        i32: i32 = 0,
+        i64: i64 = 0,
+        f32: f32 = 0,
+        f64: f64 = 0,
+        optional: ?i32 = 0,
+        @"enum": enum { a, b } = .a,
+        @"struct": struct { a: f32 = 0, b: f32 = 0 } = .{},
+        packed_struct: packed struct { a: u18 = 0, b: u14 = 0 } = .{},
+        tuple: struct { f32, f32 } = .{ 0, 0 },
+        array: [2]f32 = .{ 0, 0 },
+        tagged_union: union(enum) { i: i32, f: f32 } = .{ .i = 0 },
+        array_of_struct: [2]struct { a: f32 = 0, b: f32 = 0 } = .{ .{}, .{} },
+        struct_of_array: struct { a: [2]f32 = .{ 0, 0 }, b: [2]f32 = .{ 0, 0 } } = .{},
+        bounded_array: misc.BoundedArray(4, f32, 0, false) = .empty,
+        bounded_string: misc.BoundedArray(4, u8, 0, true) = .empty,
+        enum_array: std.EnumArray(enum { a, b }, f32) = .initFill(0),
+        vector: math.Vec2 = .zero,
+        matrix: math.Mat2 = .zero,
+        @"\"escape\"": enum { @"\"", @"\"\"" } = .@"\"",
+    };
+    const array = [2]Element{
+        .{
+            .bool = false,
+            .u8 = 1,
+            .u16 = 2,
+            .u32 = 3,
+            .u64 = 4,
+            .i8 = -1,
+            .i16 = -2,
+            .i32 = -3,
+            .i64 = -4,
+            .f32 = 0.1,
+            .f64 = 0.2,
+            .optional = null,
+            .@"enum" = .a,
+            .@"struct" = .{ .a = 1, .b = 2 },
+            .packed_struct = .{ .a = 3, .b = 4 },
+            .tuple = .{ 5, 6 },
+            .array = .{ 7, 8 },
+            .tagged_union = .{ .i = 9 },
+            .array_of_struct = .{ .{ .a = 10, .b = 11 }, .{ .a = 12, .b = 13 } },
+            .struct_of_array = .{ .a = .{ 14, 15 }, .b = .{ 16, 17 } },
+            .bounded_array = .fromArray(.{ 18, 19 }),
+            .bounded_string = .fromArray("123".*),
+            .enum_array = .init(.{ .a = 20, .b = 21 }),
+            .vector = .fromArray(.{ 22, 23 }),
+            .matrix = .fromArray(.{ .{ 24, 25 }, .{ 26, 27 } }),
+            .@"\"escape\"" = .@"\"",
+        },
+        .{
+            .bool = false,
+            .u8 = 4,
+            .u16 = 3,
+            .u32 = 2,
+            .u64 = 1,
+            .i8 = -4,
+            .i16 = -3,
+            .i32 = -2,
+            .i64 = -1,
+            .f32 = 0.2,
+            .f64 = 0.1,
+            .optional = 1,
+            .@"enum" = .b,
+            .@"struct" = .{ .a = 27, .b = 26 },
+            .packed_struct = .{ .a = 25, .b = 24 },
+            .tuple = .{ 23, 22 },
+            .array = .{ 21, 20 },
+            .tagged_union = .{ .i = 19 },
+            .array_of_struct = .{ .{ .a = 18, .b = 17 }, .{ .a = 16, .b = 15 } },
+            .struct_of_array = .{ .a = .{ 14, 13 }, .b = .{ 12, 11 } },
+            .bounded_array = .fromArray(.{ 10, 9 }),
+            .bounded_string = .fromArray("321".*),
+            .enum_array = .init(.{ .a = 8, .b = 7 }),
+            .vector = .fromArray(.{ 6, 5 }),
+            .matrix = .fromArray(.{ .{ 4, 3 }, .{ 2, 1 } }),
+            .@"\"escape\"" = .@"\"\"",
+        },
+    };
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeLargeJsonArray(Element, &array, &writer);
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    var list = try readLargeJsonArray(Element, testing.allocator, &reader, &.{});
+    defer list.deinit(testing.allocator);
+    try testing.expectEqualSlices(Element, &array, list.items);
 }
 
 test "readJsonValue should succeed when json has more values then expected" {

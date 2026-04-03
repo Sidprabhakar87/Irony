@@ -10,14 +10,19 @@ pub const XzEncoder = struct {
     flushed: bool,
 
     const Self = @This();
+    pub const Preset = enum { default, extreme };
+
     const chunk_size = 4096;
 
-    pub fn init(allocator: std.mem.Allocator, des_writer: *std.io.Writer) !Self {
+    pub fn init(allocator: std.mem.Allocator, des_writer: *std.io.Writer, preset: Preset) !Self {
         var lzma_allocator = LzmaAllocator.init(allocator);
         errdefer lzma_allocator.deinit();
 
         var options = xz.lzma_options_lzma{};
-        const options_result = xz.lzma_lzma_preset(&options, xz.LZMA_PRESET_EXTREME);
+        const options_result = xz.lzma_lzma_preset(&options, switch (preset) {
+            .default => xz.LZMA_PRESET_DEFAULT,
+            .extreme => xz.LZMA_PRESET_EXTREME,
+        });
         if (lzmaResultToError(options_result)) |err| {
             misc.error_context.new("{s}", .{lzmaResultToDescription(options_result)});
             misc.error_context.append("lzma_lzma_preset returned a error result: {}", .{options_result});
@@ -376,7 +381,7 @@ test "XzDecoder should decode the same values that the XzEncoder encoded" {
 
     var dest_writer = std.io.Writer.Allocating.init(testing.allocator);
     defer dest_writer.deinit();
-    var encoder = try XzEncoder.init(testing.allocator, &dest_writer.writer);
+    var encoder = try XzEncoder.init(testing.allocator, &dest_writer.writer, .default);
     defer encoder.deinit();
 
     var writter = encoder.writer(&buffer);

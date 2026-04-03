@@ -61,7 +61,7 @@ pub fn writeIronyFormat(
         return err;
     };
 
-    var encoder = io.XzEncoder.init(allocator, writer) catch |err| {
+    var encoder = io.XzEncoder.init(allocator, writer, .extreme) catch |err| {
         misc.error_context.append("Failed to initialize XZ encoder.", .{});
         return err;
     };

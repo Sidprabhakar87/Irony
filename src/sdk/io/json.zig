@@ -180,6 +180,7 @@ fn writeValue(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const
     } else if (isMatrix(Type)) {
         try writeMatrix(writer, value_pointer, whitespace);
     } else switch (@typeInfo(Type)) {
+        .void => try writeVoid(writer),
         .bool => try writeBool(writer, value_pointer.*),
         .int => try writeInt(writer, value_pointer.*),
         .float => try writeFloat(writer, value_pointer.*),
@@ -210,6 +211,7 @@ fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     } else if (isMatrix(Type)) block: {
         break :block readMatrix(Type, reader, allocator, default);
     } else switch (@typeInfo(Type)) {
+        .void => readVoid(reader),
         .bool => readBool(reader),
         .int => readInt(Type, reader, allocator),
         .float => readFloat(Type, reader, allocator),
@@ -240,6 +242,28 @@ fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
             misc.error_context.append("No default value to fall back to.", .{});
             return err_1;
         }
+    };
+}
+
+fn writeVoid(writer: *std.io.Writer) !void {
+    writer.writeAll("{}") catch |err| {
+        misc.error_context.new("Failed to write void value.", .{});
+        return err;
+    };
+}
+
+fn readVoid(reader: *std.json.Reader) !void {
+    const token_type = reader.peekNextTokenType() catch |err| {
+        misc.error_context.new("Failed to peak void token type.", .{});
+        return err;
+    };
+    if (token_type != .object_begin) {
+        misc.error_context.new("Expected object begin token but got: {s}", .{@tagName(token_type)});
+        return error.UnexpectedToken;
+    }
+    reader.skipValue() catch |err| {
+        misc.error_context.new("Failed to skip void value.", .{});
+        return err;
     };
 }
 
@@ -1107,6 +1131,7 @@ const testing = std.testing;
 
 test "readJsonValue should read the same value that writeJsonValue saved" {
     const Value = struct {
+        void: void = {},
         bool: bool = false,
         u8: u8 = 0,
         u16: u16 = 0,
@@ -1136,6 +1161,7 @@ test "readJsonValue should read the same value that writeJsonValue saved" {
         @"\"escape\"": enum { @"\"", @"\"\"" } = .@"\"",
     };
     const write_value = Value{
+        .void = {},
         .bool = false,
         .u8 = 1,
         .u16 = 2,
@@ -1175,6 +1201,7 @@ test "readJsonValue should read the same value that writeJsonValue saved" {
 test "readLargeJsonArray should read the same value that writeLargeJsonArray saved" {
     errdefer |err| misc.error_context.logError(err);
     const Element = struct {
+        void: void = {},
         bool: bool = false,
         u8: u8 = 0,
         u16: u16 = 0,
@@ -1204,6 +1231,7 @@ test "readLargeJsonArray should read the same value that writeLargeJsonArray sav
     };
     const array = [2]Element{
         .{
+            .void = {},
             .bool = false,
             .u8 = 1,
             .u16 = 2,
@@ -1232,6 +1260,7 @@ test "readLargeJsonArray should read the same value that writeLargeJsonArray sav
             .@"\"escape\"" = .@"\"",
         },
         .{
+            .void = {},
             .bool = false,
             .u8 = 4,
             .u16 = 3,

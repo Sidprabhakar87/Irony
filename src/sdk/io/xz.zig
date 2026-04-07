@@ -20,8 +20,8 @@ pub const XzEncoder = struct {
 
         var options = xz.lzma_options_lzma{};
         const options_result = xz.lzma_lzma_preset(&options, switch (preset) {
-            .default => xz.LZMA_PRESET_DEFAULT,
-            .extreme => xz.LZMA_PRESET_EXTREME,
+            .default => 6 | xz.LZMA_PRESET_DEFAULT,
+            .extreme => 9 | xz.LZMA_PRESET_EXTREME,
         });
         if (lzmaResultToError(options_result)) |err| {
             misc.error_context.new("{s}", .{lzmaResultToDescription(options_result)});

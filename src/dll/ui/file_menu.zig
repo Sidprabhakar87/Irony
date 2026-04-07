@@ -328,6 +328,7 @@ const FileDialog = struct {
     fn getFormatDisplayName(format: model.RecordingFormat) [:0]const u8 {
         return switch (format) {
             .irony => "Irony recordings",
+            .irony2 => "Irony 2 recordings",
             .json => "JSON files",
             .json_xz => "Compressed JSON files",
         };

@@ -6,6 +6,7 @@ pub const Recording = std.ArrayList(model.Frame);
 
 pub const RecordingFormat = enum {
     irony,
+    irony2,
     json,
     json_xz,
 
@@ -14,6 +15,7 @@ pub const RecordingFormat = enum {
     pub fn getFileExtension(self: Self) [:0]const u8 {
         return switch (self) {
             .irony => ".irony",
+            .irony2 => ".irony2",
             .json => ".json",
             .json_xz => ".json.xz",
         };
@@ -74,6 +76,12 @@ pub fn saveRecording(allocator: std.mem.Allocator, frames: []const model.Frame, 
                 return err;
             };
         },
+        .irony2 => {
+            sdk.io.writeIrony2Format(model.Frame, allocator, frames, &writer.interface) catch |err| {
+                sdk.misc.error_context.append("Failed write recording content in Irony 2 format.", .{});
+                return err;
+            };
+        },
         .json => {
             sdk.io.writeLargeJsonArray(model.Frame, frames, &writer.interface) catch |err| {
                 sdk.misc.error_context.append("Failed write recording content in JSON format.", .{});
@@ -125,6 +133,18 @@ pub fn loadRecording(allocator: std.mem.Allocator, file_path: []const u8) !Recor
                 &irony_format_config,
             ) catch |err| {
                 sdk.misc.error_context.append("Failed read recording content from Irony format.", .{});
+                return err;
+            };
+            return .fromOwnedSlice(slice);
+        },
+        .irony2 => {
+            const slice = sdk.io.readIrony2Format(
+                model.Frame,
+                allocator,
+                &reader.interface,
+                &.{},
+            ) catch |err| {
+                sdk.misc.error_context.append("Failed read recording content from Irony 2 format.", .{});
                 return err;
             };
             return .fromOwnedSlice(slice);

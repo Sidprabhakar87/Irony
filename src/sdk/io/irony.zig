@@ -385,6 +385,7 @@ fn readFrames(
         );
         return err;
     };
+    errdefer allocator.free(frames);
     var current_frame = Frame{};
     for (0..number_of_frames) |frame_index| {
         errdefer misc.error_context.append("Failed read frame: {}", .{frame_index});

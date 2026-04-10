@@ -42,7 +42,7 @@ const path_separator = '.';
 const path_separator_str = [1]u8{path_separator};
 const tag_path_component = "tag";
 const payload_path_component = "payload";
-const buffer_size = 4096;
+const compression_level = 17;
 
 pub fn writeIronyFormat(
     comptime Frame: type,
@@ -60,13 +60,12 @@ pub fn writeIronyFormat(
         return err;
     };
 
-    var encoder = io.XzEncoder.init(allocator, writer, .extreme) catch |err| {
+    var encoder = io.ZstdEncoder.init(allocator, writer, compression_level) catch |err| {
         misc.error_context.append("Failed to initialize XZ encoder.", .{});
         return err;
     };
     defer encoder.deinit();
-    var encoded_buffer: [buffer_size]u8 = undefined;
-    var encoder_writer = encoder.writer(&encoded_buffer);
+    var encoder_writer = encoder.writer();
 
     const frame_size = serializedSizeOf(Frame);
     if (frame_size > max_frame_size) {
@@ -128,12 +127,12 @@ pub fn readIronyFormat(
         );
     }
 
-    var decoder = io.XzDecoder.init(allocator, reader) catch |err| {
+    var decoder = io.ZstdDecoder.init(allocator, reader) catch |err| {
         misc.error_context.append("Failed to initialize XZ decoder.", .{});
         return err;
     };
     defer decoder.deinit();
-    var decoder_buffer: [buffer_size]u8 = undefined;
+    var decoder_buffer: [4096]u8 = undefined;
     var decoder_reader = decoder.reader(&decoder_buffer);
 
     const remote_frame_size = decoder_reader.takeInt(FrameSize, endian) catch |err| {

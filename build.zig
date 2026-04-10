@@ -35,6 +35,7 @@ pub fn build(b: *std.Build) void {
     const imgui = imguiDependency(b, target, optimize, false);
     const imgui_te = imguiDependency(b, target, optimize, true);
     const xz = xzDependency(b, target, optimize);
+    const zstd = zstdDependency(b, target, optimize);
 
     const build_info_t7 = b.createModule(.{ .root_source_file = b.path("build_info_t7.zig") });
     const dll_t7 = b.addLibrary(.{
@@ -55,6 +56,8 @@ pub fn build(b: *std.Build) void {
     dll_t7.root_module.addImport("imgui", imgui.module);
     dll_t7.root_module.linkLibrary(xz.library);
     dll_t7.root_module.addImport("xz", xz.module);
+    dll_t7.root_module.linkLibrary(zstd.library);
+    dll_t7.root_module.addImport("zstd", zstd.module);
     if (b.option(bool, "t7", "Whether to build the T7 dll.") orelse true) {
         b.installArtifact(dll_t7);
     }
@@ -78,6 +81,8 @@ pub fn build(b: *std.Build) void {
     dll_t8.root_module.addImport("imgui", imgui.module);
     dll_t8.root_module.linkLibrary(xz.library);
     dll_t8.root_module.addImport("xz", xz.module);
+    dll_t8.root_module.linkLibrary(zstd.library);
+    dll_t8.root_module.addImport("zstd", zstd.module);
     if (b.option(bool, "t8", "Whether to build the T8 dll.") orelse true) {
         b.installArtifact(dll_t8);
     }
@@ -140,6 +145,8 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("imgui", imgui_te.module);
     tests.root_module.linkLibrary(xz.library);
     tests.root_module.addImport("xz", xz.module);
+    tests.root_module.linkLibrary(zstd.library);
+    tests.root_module.addImport("zstd", zstd.module);
 
     // This *creates* a Test step in the build graph, to be executed when another step is evaluated that depends on it.
     // The next line below will establish such a dependency.
@@ -435,6 +442,67 @@ fn xzDependency(
         .target = target,
         .optimize = optimize,
     });
+    const module = translate_c.createModule();
+    return .{ .module = module, .library = library };
+}
+
+// C dependency: zstd
+fn zstdDependency(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) ModuleAndLibrary {
+    const dependency = b.dependency("zstd", .{});
+    const library = b.addLibrary(.{
+        .name = "zstd",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+    const directory = dependency.path("./lib");
+    library.root_module.addIncludePath(directory);
+    library.root_module.addCSourceFiles(.{
+        .root = directory,
+        .files = &.{
+            "./common/debug.c",
+            "./common/entropy_common.c",
+            "./common/error_private.c",
+            "./common/fse_decompress.c",
+            "./common/pool.c",
+            "./common/threading.c",
+            "./common/xxhash.c",
+            "./common/zstd_common.c",
+            "./compress/fse_compress.c",
+            "./compress/hist.c",
+            "./compress/huf_compress.c",
+            "./compress/zstd_compress.c",
+            "./compress/zstd_compress_literals.c",
+            "./compress/zstd_compress_sequences.c",
+            "./compress/zstd_compress_superblock.c",
+            "./compress/zstd_double_fast.c",
+            "./compress/zstd_fast.c",
+            "./compress/zstd_lazy.c",
+            "./compress/zstd_ldm.c",
+            "./compress/zstd_opt.c",
+            "./compress/zstd_preSplit.c",
+            "./compress/zstdmt_compress.c",
+            "./decompress/huf_decompress.c",
+            "./decompress/zstd_ddict.c",
+            "./decompress/zstd_decompress.c",
+            "./decompress/zstd_decompress_block.c",
+        },
+    });
+    library.root_module.addAssemblyFile(directory.path(b, "./decompress/huf_decompress_amd64.S"));
+    library.root_module.addCMacro("ZSTD_STATIC_LINKING_ONLY", "1");
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = directory.path(b, "zstd.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    translate_c.defineCMacro("ZSTD_STATIC_LINKING_ONLY", "1");
     const module = translate_c.createModule();
     return .{ .module = module, .library = library };
 }

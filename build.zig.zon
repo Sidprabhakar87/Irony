@@ -129,6 +129,10 @@
             .url = "https://github.com/tukaani-project/xz/archive/refs/tags/v5.8.1.tar.gz",
             .hash = "N-V-__8AAC2UXgAIp8JDVDigmv1aBXc9kCnoOQji9MYxzz2K",
         },
+        .zstd = .{
+            .url = "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+            .hash = "N-V-__8AAPZ7fwBg4JoCzM_0o2A8wxH2hsUUeiU1iuZv53L5",
+        },
     },
 
     // Specifies the set of files and directories that are included in this package.

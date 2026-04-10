@@ -862,139 +862,151 @@ fn serializedSizeOf(comptime Type: type) comptime_int {
     };
 }
 
-const GetLocalFieldsState = struct {
-    fields_buffer: []LocalField,
-    fields_len: *usize,
-};
-
 inline fn getLocalFields(comptime Frame: type) []const LocalField {
-    @setEvalBranchQuota(1000000);
+    @setEvalBranchQuota(100000);
     comptime {
-        var fields_buffer: [max_number_of_fields]LocalField = undefined;
-        var fields_len: usize = 0;
-
-        const state = GetLocalFieldsState{
-            .fields_buffer = &fields_buffer,
-            .fields_len = &fields_len,
-        };
-        const field = LocalField{
-            .path = "",
-            .access = &.{},
-            .Type = Frame,
-            .offset = 0,
-        };
-        getLocalFieldsRecursive(&state, &field);
-
-        const fields = fields_buffer[0..fields_len].*;
-        return &fields;
+        var state = GetLocalFieldsState{};
+        getLocalFieldsRecursive(&state, Frame);
+        const final_fields = state.fields_buffer[0..state.fields_len].*;
+        return &final_fields;
     }
 }
 
-fn getLocalFieldsRecursive(state: *const GetLocalFieldsState, field: *const LocalField) void {
-    switch (@typeInfo(field.Type)) {
+fn getLocalFieldsRecursive(state: *GetLocalFieldsState, Type: type) void {
+    switch (@typeInfo(Type)) {
         .void => {},
         .bool, .int, .float, .@"enum" => {
-            addLocalField(state, field);
+            state.addField(Type);
         },
         .@"struct" => |*info| if (info.layout == .@"packed") {
-            addLocalField(state, field);
+            state.addField(Type);
         } else {
-            var offset = field.offset;
-            for (info.fields) |*struct_field| {
-                const sub_field = LocalField{
-                    .path = switch (field.path.len) {
-                        0 => struct_field.name,
-                        else => field.path ++ path_separator_str ++ struct_field.name,
-                    },
-                    .access = field.access ++ &[1]AccessElement{.{ .struct_field = struct_field.name }},
-                    .Type = struct_field.type,
-                    .offset = offset,
-                };
-                getLocalFieldsRecursive(state, &sub_field);
-                offset += serializedSizeOf(struct_field.type);
+            for (info.fields) |*field_info| {
+                state.push(.{ .struct_field = field_info.name });
+                getLocalFieldsRecursive(state, field_info.type);
+                state.pop();
             }
         },
         .array => |*info| {
-            const element_size = serializedSizeOf(info.child);
             inline for (0..info.len) |index| {
-                const sub_field = LocalField{
-                    .path = switch (field.path.len) {
-                        0 => std.fmt.comptimePrint("{}", .{index}),
-                        else => std.fmt.comptimePrint("{s}{s}{}", .{ field.path, path_separator_str, index }),
-                    },
-                    .access = field.access ++ &[1]AccessElement{.{ .array_index = index }},
-                    .Type = info.child,
-                    .offset = field.offset + (index * element_size),
-                };
-                getLocalFieldsRecursive(state, &sub_field);
+                state.push(.{ .array_index = index });
+                getLocalFieldsRecursive(state, info.child);
+                state.pop();
             }
         },
         .optional => |*info| {
-            const tag_field = LocalField{
-                .path = switch (field.path.len) {
-                    0 => tag_path_component,
-                    else => field.path ++ path_separator_str ++ tag_path_component,
-                },
-                .access = field.access ++ &[1]AccessElement{.optional_tag},
-                .Type = bool,
-                .offset = field.offset,
-            };
-            addLocalField(state, &tag_field);
-            const payload_field = LocalField{
-                .path = switch (field.path.len) {
-                    0 => payload_path_component,
-                    else => field.path ++ path_separator_str ++ payload_path_component,
-                },
-                .access = field.access ++ &[1]AccessElement{.optional_payload},
-                .Type = info.child,
-                .offset = field.offset + serializedSizeOf(bool),
-            };
-            getLocalFieldsRecursive(state, &payload_field);
+            state.push(.optional_tag);
+            state.addField(bool);
+            state.pop();
+            state.push(.optional_payload);
+            getLocalFieldsRecursive(state, info.child);
+            state.pop();
         },
         .@"union" => |*info| if (info.layout == .@"packed") {
-            addLocalField(state, field);
+            state.addField(Type);
         } else {
             const Tag = info.tag_type orelse @compileError(
-                "Union " ++ @typeName(field.Type) ++ " is not serializable. (Not tagged and not packed.)",
+                "Union " ++ @typeName(Type) ++ " is not serializable. (Not tagged and not packed.)",
             );
-            const tag_field = LocalField{
-                .path = switch (field.path.len) {
-                    0 => tag_path_component,
-                    else => field.path ++ path_separator_str ++ tag_path_component,
-                },
-                .access = field.access ++ &[1]AccessElement{.union_tag},
-                .Type = Tag,
-                .offset = field.offset,
-            };
-            addLocalField(state, &tag_field);
-            const payload_offset = field.offset + serializedSizeOf(Tag);
-            for (info.fields) |*union_field| {
-                const sub_field = LocalField{
-                    .path = switch (field.path.len) {
-                        0 => union_field.name,
-                        else => field.path ++ path_separator_str ++ union_field.name,
-                    },
-                    .access = field.access ++ &[1]AccessElement{.{ .union_field = union_field.name }},
-                    .Type = union_field.type,
-                    .offset = payload_offset,
-                };
-                getLocalFieldsRecursive(state, &sub_field);
+            state.push(.union_tag);
+            state.addField(Tag);
+            state.pop();
+            const payload_start_offset = state.offset;
+            var max_payload_end_offset = state.offset;
+            for (info.fields) |*field_info| {
+                state.offset = payload_start_offset;
+                state.push(.{ .union_field = field_info.name });
+                getLocalFieldsRecursive(state, field_info.type);
+                state.pop();
+                max_payload_end_offset = @max(max_payload_end_offset, state.offset);
             }
+            state.offset = max_payload_end_offset;
         },
-        else => @compileError("Unsupported type: " ++ @typeName(field.Type)),
+        else => @compileError("Unsupported type: " ++ @typeName(Type)),
     }
 }
 
-fn addLocalField(state: *const GetLocalFieldsState, field: *const LocalField) void {
-    if (state.fields_len.* >= state.fields_buffer.len) {
-        @compileError("Maximum number of fields exceeded.");
+const GetLocalFieldsState = struct {
+    fields_buffer: [max_number_of_fields]LocalField = undefined,
+    fields_len: usize = 0,
+    access_buffer: [max_field_path_len]AccessElement = undefined,
+    access_len: usize = 0,
+    offset: usize = 0,
+
+    const Self = @This();
+
+    pub fn push(self: *Self, access_element: AccessElement) void {
+        if (self.access_len >= self.access_buffer.len) {
+            @compileError("Maximum access length exceeded.");
+        }
+        self.access_buffer[self.access_len] = access_element;
+        self.access_len += 1;
     }
-    if (field.path.len > max_field_path_len) {
-        @compileError("Maximum size of field path exceeded.");
+
+    pub fn pop(self: *Self) void {
+        if (self.access_len == 0) {
+            @compileError("Unable to pop empty access element buffer.");
+        }
+        self.access_len -= 1;
     }
-    state.fields_buffer[state.fields_len.*] = field.*;
-    state.fields_len.* += 1;
-}
+
+    pub fn addField(self: *Self, Type: type) void {
+        if (self.fields_len >= self.fields_buffer.len) {
+            @compileError("Maximum number of fields exceeded.");
+        }
+        var path_buffer: [max_field_path_len]u8 = undefined;
+        var path_len: usize = 0;
+
+        for (self.access_buffer[0..self.access_len]) |access| {
+            switch (access) {
+                .struct_field => |name| appendPathName(&path_buffer, &path_len, name),
+                .array_index => |index| appendPathIndex(&path_buffer, &path_len, index),
+                .optional_tag => appendPathName(&path_buffer, &path_len, tag_path_component),
+                .optional_payload => appendPathName(&path_buffer, &path_len, payload_path_component),
+                .union_tag => appendPathName(&path_buffer, &path_len, tag_path_component),
+                .union_field => |name| appendPathName(&path_buffer, &path_len, name),
+            }
+        }
+        const final_path = path_buffer[0..path_len].*;
+        const final_access = self.access_buffer[0..self.access_len].*;
+        self.fields_buffer[self.fields_len] = .{
+            .path = &final_path,
+            .access = &final_access,
+            .Type = Type,
+            .offset = self.offset,
+        };
+        self.fields_len += 1;
+
+        self.offset += serializedSizeOf(Type);
+    }
+
+    fn appendPathName(buffer: []u8, len: *usize, name: []const u8) void {
+        if (len.* > 0) {
+            if (len.* >= buffer.len) {
+                @compileError("Maximum field path length exceeded.");
+            }
+            buffer[len.*] = path_separator;
+            len.* += 1;
+        }
+        if (len.* + name.len > buffer.len) {
+            @compileError("Maximum field path length exceeded.");
+        }
+        @memcpy(buffer[len.*..(len.* + name.len)], name);
+        len.* += name.len;
+    }
+
+    fn appendPathIndex(buffer: []u8, len: *usize, index: usize) void {
+        if (len.* > 0) {
+            if (len.* >= buffer.len) {
+                @compileError("Maximum field path length exceeded.");
+            }
+            buffer[len.*] = path_separator;
+            len.* += 1;
+        }
+        const size = std.fmt.printInt(buffer[len.*..], index, 10, .lower, .{});
+        len.* += size;
+    }
+};
 
 const testing = std.testing;
 

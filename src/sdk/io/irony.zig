@@ -1,6 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const build_info = @import("build_info");
 const misc = @import("../misc/root.zig");
 const io = @import("root.zig");
 
@@ -15,7 +14,7 @@ const LocalField = struct {
     path: []const u8,
     access: []const AccessElement,
     Type: type,
-    offset: FieldSize,
+    offset: FieldOffset,
 };
 const AccessElement = union(enum) {
     struct_field: []const u8,
@@ -31,15 +30,14 @@ const RemoteField = struct {
 };
 
 const endian = std.builtin.Endian.little;
-const magic_number = @tagName(build_info.name);
-const earliest_supported_version_number = 3; // TODO adjust before release
-const current_version_number = build_info.recording_format_version;
+const magic_number = "irony";
+const earliest_supported_version_number = 3;
+const current_version_number = 3;
 const max_frame_size = std.math.maxInt(FrameSize);
 const max_number_of_fields = std.math.maxInt(NumberOfFields);
 const max_field_path_len = std.math.maxInt(FieldPathLength);
 const max_number_of_frames = std.math.maxInt(NumberOfFrames);
 const path_separator = '.';
-const path_separator_str = [1]u8{path_separator};
 const tag_path_component = "tag";
 const payload_path_component = "payload";
 const compression_level = 17;
@@ -217,7 +215,7 @@ fn readFieldList(
             misc.error_context.new("Failed to read the field size. Field path is: {s}", .{path});
             return err;
         };
-        const total = std.math.add(FieldSize, remote_offset, remote_size) catch |err| {
+        const total = std.math.add(FrameSize, remote_offset, remote_size) catch |err| {
             misc.error_context.new("Field exceeded exceeded frame size limits: {s}", .{path});
             return err;
         };

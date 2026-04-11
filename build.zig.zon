@@ -24,10 +24,6 @@
     // Not a standard build.zig.zon field.
     .t8_version = "3.00.00",
 
-    // Version number to put inside the .irony recording files to more easily maintain backwards compatibility.
-    // Not a standard build.zig.zon field.
-    .recording_format_version = 3,
-
     // Indicates the version of Zig that the project is meant to be compiled with.
     // Not a standard build.zig.zon field.
     .zig_version = "0.15.2",

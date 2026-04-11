@@ -1,6 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const build_info = @import("build_info");
 const misc = @import("../misc/root.zig");
 const io = @import("root.zig");
 
@@ -29,7 +28,7 @@ const RemoteField = struct {
 };
 
 const endian = std.builtin.Endian.little;
-const magic_number = @tagName(build_info.name);
+const magic_number = "irony";
 const version_number = 2;
 const max_number_of_fields = std.math.maxInt(FieldIndexV2);
 const max_field_path_len = std.math.maxInt(FieldPathLength);

@@ -7,7 +7,7 @@ pub const Recording = std.ArrayList(model.Frame);
 pub const RecordingFormat = enum {
     irony,
     json,
-    json_xz,
+    json_zstd,
 
     const Self = @This();
 
@@ -15,7 +15,7 @@ pub const RecordingFormat = enum {
         return switch (self) {
             .irony => ".irony",
             .json => ".json",
-            .json_xz => ".json.xz",
+            .json_zstd => ".json.zstd",
         };
     }
 
@@ -74,21 +74,20 @@ pub fn saveRecording(allocator: std.mem.Allocator, frames: []const model.Frame, 
                 return err;
             };
         },
-        .json_xz => {
-            errdefer sdk.misc.error_context.append("Failed write recording content in JSON XZ format.", .{});
-            var encoder = sdk.io.XzEncoder.init(allocator, &writer.interface, .default) catch |err| {
-                sdk.misc.error_context.append("Failed to initialize XZ encoder.", .{});
+        .json_zstd => {
+            errdefer sdk.misc.error_context.append("Failed write recording content in JSON zstd format.", .{});
+            var encoder = sdk.io.ZstdEncoder.init(allocator, &writer.interface, 0) catch |err| {
+                sdk.misc.error_context.append("Failed to initialize zstd encoder.", .{});
                 return err;
             };
             defer encoder.deinit();
-            var encoded_buffer: [buffer_size]u8 = undefined;
-            var encoder_writer = encoder.writer(&encoded_buffer);
+            var encoder_writer = encoder.writer();
             sdk.io.writeLargeJsonArray(model.Frame, frames, &encoder_writer) catch |err| {
                 sdk.misc.error_context.append("Failed write recording content in JSON format.", .{});
                 return err;
             };
             encoder_writer.flush() catch |err| {
-                sdk.misc.error_context.append("Failed to flush XZ encoder.", .{});
+                sdk.misc.error_context.append("Failed to flush zstd encoder.", .{});
                 return err;
             };
         },
@@ -142,10 +141,10 @@ pub fn loadRecording(allocator: std.mem.Allocator, file_path: []const u8) !Recor
                 return err;
             };
         },
-        .json_xz => {
-            errdefer sdk.misc.error_context.append("Failed read recording content from JSON XZ format.", .{});
-            var decoder = sdk.io.XzDecoder.init(allocator, &reader.interface) catch |err| {
-                sdk.misc.error_context.append("Failed to initialize XZ decoder.", .{});
+        .json_zstd => {
+            errdefer sdk.misc.error_context.append("Failed read recording content from JSON zstd format.", .{});
+            var decoder = sdk.io.ZstdDecoder.init(allocator, &reader.interface) catch |err| {
+                sdk.misc.error_context.append("Failed to initialize zstd decoder.", .{});
                 return err;
             };
             defer decoder.deinit();
@@ -164,13 +163,13 @@ const testing = std.testing;
 test "RecordingFormat.getFileExtension should return correct value" {
     try testing.expectEqualStrings(".irony", RecordingFormat.irony.getFileExtension());
     try testing.expectEqualStrings(".json", RecordingFormat.json.getFileExtension());
-    try testing.expectEqualStrings(".json.xz", RecordingFormat.json_xz.getFileExtension());
+    try testing.expectEqualStrings(".json.zstd", RecordingFormat.json_zstd.getFileExtension());
 }
 
 test "RecordingFormat.fromFilePath should return correct value" {
     try testing.expectEqual(RecordingFormat.irony, RecordingFormat.fromFilePath("test.iRoNy"));
     try testing.expectEqual(RecordingFormat.json, RecordingFormat.fromFilePath("test.JsOn"));
-    try testing.expectEqual(RecordingFormat.json_xz, RecordingFormat.fromFilePath("test.jSoN.xZ"));
+    try testing.expectEqual(RecordingFormat.json_zstd, RecordingFormat.fromFilePath("test.jSoN.zStD"));
     try testing.expectEqual(null, RecordingFormat.fromFilePath("test.txt"));
 }
 
@@ -200,16 +199,16 @@ test "loadRecording should load the same frames that the saveRecording saved whe
     try testing.expectEqualSlices(model.Frame, &frames, recording.items);
 }
 
-test "loadRecording should load the same frames that the saveRecording saved when format is json xz" {
+test "loadRecording should load the same frames that the saveRecording saved when format is json zstd" {
     errdefer |err| sdk.misc.error_context.logError(err);
     const frames = [_]model.Frame{
         .{ .frames_since_round_start = 1 },
         .{ .frames_since_round_start = 2 },
         .{ .frames_since_round_start = 3 },
     };
-    try saveRecording(testing.allocator, &frames, "./test_assets/recording.json.xz");
-    defer std.fs.cwd().deleteFile("./test_assets/recording.json.xz") catch @panic("Failed to cleanup test file.");
-    var recording = try loadRecording(testing.allocator, "./test_assets/recording.json.xz");
+    try saveRecording(testing.allocator, &frames, "./test_assets/recording.json.zstd");
+    defer std.fs.cwd().deleteFile("./test_assets/recording.json.zstd") catch @panic("Failed to cleanup test file.");
+    var recording = try loadRecording(testing.allocator, "./test_assets/recording.json.zstd");
     defer recording.deinit(testing.allocator);
     try testing.expectEqualSlices(model.Frame, &frames, recording.items);
 }

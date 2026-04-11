@@ -329,7 +329,7 @@ const FileDialog = struct {
         return switch (format) {
             .irony => "Irony recordings",
             .json => "JSON files",
-            .json_xz => "Compressed JSON files",
+            .json_zstd => "Compressed JSON files",
         };
     }
 

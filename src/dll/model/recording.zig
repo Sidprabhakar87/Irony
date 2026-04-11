@@ -6,7 +6,6 @@ pub const Recording = std.ArrayList(model.Frame);
 
 pub const RecordingFormat = enum {
     irony,
-    irony2,
     json,
     json_xz,
 
@@ -15,7 +14,6 @@ pub const RecordingFormat = enum {
     pub fn getFileExtension(self: Self) [:0]const u8 {
         return switch (self) {
             .irony => ".irony",
-            .irony2 => ".irony2",
             .json => ".json",
             .json_xz => ".json.xz",
         };
@@ -32,7 +30,7 @@ pub const RecordingFormat = enum {
     }
 };
 
-const irony_format_config = sdk.io.IronyFormatConfig{
+const old_irony_format_config = sdk.io.OldIronyFormatConfig{
     .atomic_types = &.{
         ?bool,
         ?u32,
@@ -65,20 +63,8 @@ pub fn saveRecording(allocator: std.mem.Allocator, frames: []const model.Frame, 
     const format = RecordingFormat.fromFilePath(file_path) orelse .irony;
     switch (format) {
         .irony => {
-            sdk.io.writeIronyFormat(
-                model.Frame,
-                allocator,
-                frames,
-                &writer.interface,
-                &irony_format_config,
-            ) catch |err| {
+            sdk.io.writeIronyFormat(model.Frame, allocator, frames, &writer.interface) catch |err| {
                 sdk.misc.error_context.append("Failed write recording content in Irony format.", .{});
-                return err;
-            };
-        },
-        .irony2 => {
-            sdk.io.writeIrony2Format(model.Frame, allocator, frames, &writer.interface) catch |err| {
-                sdk.misc.error_context.append("Failed write recording content in Irony 2 format.", .{});
                 return err;
             };
         },
@@ -126,25 +112,26 @@ pub fn loadRecording(allocator: std.mem.Allocator, file_path: []const u8) !Recor
     const format = RecordingFormat.fromFilePath(file_path) orelse .irony;
     switch (format) {
         .irony => {
-            const slice = sdk.io.readIronyFormat(
-                model.Frame,
-                allocator,
-                &reader.interface,
-                &irony_format_config,
-            ) catch |err| {
-                sdk.misc.error_context.append("Failed read recording content from Irony format.", .{});
+            const version_peek = reader.interface.peekArray("irony".len + @sizeOf(u16)) catch |err| {
+                sdk.misc.error_context.new("Failed to peek irony file version.", .{});
                 return err;
             };
-            return .fromOwnedSlice(slice);
-        },
-        .irony2 => {
-            const slice = sdk.io.readIrony2Format(
-                model.Frame,
-                allocator,
-                &reader.interface,
-                &.{},
-            ) catch |err| {
-                sdk.misc.error_context.append("Failed read recording content from Irony 2 format.", .{});
+            const version = std.mem.readInt(u16, version_peek["irony".len..], .little);
+            const slice = switch (version) {
+                0, 1, 2 => sdk.io.readOldIronyFormat(
+                    model.Frame,
+                    allocator,
+                    &reader.interface,
+                    &old_irony_format_config,
+                ),
+                else => sdk.io.readIronyFormat(
+                    model.Frame,
+                    allocator,
+                    &reader.interface,
+                    &.{},
+                ),
+            } catch |err| {
+                sdk.misc.error_context.append("Failed read recording content from Irony format.", .{});
                 return err;
             };
             return .fromOwnedSlice(slice);

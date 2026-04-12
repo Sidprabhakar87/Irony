@@ -3,6 +3,12 @@ on:
     push:
         tags:
             - "*"
+    workflow_dispatch:
+        inputs:
+            skip_tests:
+                description: "Whether to skip setting up test environment and running tests."
+                required: false
+                default: "false"
 jobs:
     release:
         runs-on: ubuntu-latest
@@ -37,6 +43,7 @@ jobs:
                   echo "/opt/zig" >> $GITHUB_PATH
             - name: Setup Test Environment
               id: setup_test_environment
+              if: ${{ github.event.inputs.skip_tests != 'true' }}
               run: |
                   sudo mkdir -pm755 /etc/apt/keyrings
                   wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key -
@@ -61,6 +68,7 @@ jobs:
                   winetricks dxvk vkd3d
             - name: Run Tests
               id: run_tests
+              if: ${{ github.event.inputs.skip_tests != 'true' }}
               run: |
                   export WINEARCH=win64
                   export WINEPREFIX=$HOME/.wineprefix

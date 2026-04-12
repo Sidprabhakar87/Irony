@@ -1,5 +1,3 @@
-pub const ByteWriter = @import("byte.zig").ByteWriter;
-pub const ByteReader = @import("byte.zig").ByteReader;
 pub const writeIronyFormat = @import("irony.zig").writeIronyFormat;
 pub const readIronyFormat = @import("irony.zig").readIronyFormat;
 pub const JsonWhitespace = @import("json.zig").JsonWhitespace;

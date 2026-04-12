@@ -57,6 +57,9 @@ const testing = std.testing;
 const w = std.unicode.utf8ToUtf16LeStringLiteral;
 
 test "should capture window events" {
+    if (@import("config").skip_display) {
+        return error.SkipZigTest;
+    }
     const module = try os.Module.getMain();
 
     const window_class = w32.WNDCLASSEXW{

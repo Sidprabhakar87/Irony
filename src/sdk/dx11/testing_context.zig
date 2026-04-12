@@ -152,11 +152,17 @@ pub const TestingContext = struct {
 const testing = std.testing;
 
 test "should init without errors" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try TestingContext.init();
     defer context.deinit();
 }
 
 test "getHostContext should return correct value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try TestingContext.init();
     defer context.deinit();
     try testing.expectEqual(dx11.HostContext{

@@ -38,18 +38,27 @@ pub fn getDeviceContextFromDevice(device: *const w32.ID3D11Device) !(*const w32.
 const testing = std.testing;
 
 test "getWindowFromSwapChain should return correct value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try dx11.TestingContext.init();
     defer context.deinit();
     try testing.expectEqual(context.window, getWindowFromSwapChain(context.swap_chain));
 }
 
 test "getDeviceFromSwapChain should return correct value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try dx11.TestingContext.init();
     defer context.deinit();
     try testing.expectEqual(context.device, getDeviceFromSwapChain(context.swap_chain));
 }
 
 test "getDeviceContextFromDevice should return correct value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try dx11.TestingContext.init();
     defer context.deinit();
     const device_context = try getDeviceContextFromDevice(context.device);

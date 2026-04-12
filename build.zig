@@ -148,6 +148,19 @@ pub fn build(b: *std.Build) void {
     tests.root_module.linkLibrary(zstd.library);
     tests.root_module.addImport("zstd", zstd.module);
 
+    const tests_config = b.addOptions();
+    tests_config.addOption(
+        bool,
+        "skip_gpu",
+        b.option(bool, "skip_gpu", "Whether to skip tests that require a GPU to succeed.") orelse false,
+    );
+    tests_config.addOption(
+        bool,
+        "skip_display",
+        b.option(bool, "skip_display", "Whether to skip tests that require a display to succeed.") orelse false,
+    );
+    tests.root_module.addOptions("config", tests_config);
+
     // This *creates* a Test step in the build graph, to be executed when another step is evaluated that depends on it.
     // The next line below will establish such a dependency.
     const test_command = b.addRunArtifact(tests);

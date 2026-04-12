@@ -54,18 +54,27 @@ pub fn getGpuDescriptorHandleForHeapStart(heap: *const w32.ID3D12DescriptorHeap)
 const testing = std.testing;
 
 test "getWindowFromSwapChain should return correct value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try dx12.TestingContext.init();
     defer context.deinit();
     try testing.expectEqual(context.window, getWindowFromSwapChain(context.swap_chain));
 }
 
 test "getDeviceFromSwapChain should return correct value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try dx12.TestingContext.init();
     defer context.deinit();
     try testing.expectEqual(context.device, getDeviceFromSwapChain(context.swap_chain));
 }
 
 test "getCpuDescriptorHandleForHeapStart should return non 0 value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try dx12.TestingContext.init();
     defer context.deinit();
 
@@ -86,6 +95,9 @@ test "getCpuDescriptorHandleForHeapStart should return non 0 value" {
 }
 
 test "getGpuDescriptorHandleForHeapStart should return non 0 value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try dx12.TestingContext.init();
     defer context.deinit();
 

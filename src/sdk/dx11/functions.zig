@@ -150,6 +150,9 @@ pub const Functions = struct {
 const testing = std.testing;
 
 test "find should return correct values" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const context = try dx11.TestingContext.init();
     defer context.deinit();
     const functions = try Functions.find();

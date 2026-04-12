@@ -126,6 +126,9 @@ pub const Context = struct {
 const testing = std.testing;
 
 test "ManagedContext init and deinit should succeed" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const testing_context = try dx11.TestingContext.init();
     defer testing_context.deinit();
     const host_context = testing_context.getHostContext();
@@ -134,6 +137,9 @@ test "ManagedContext init and deinit should succeed" {
 }
 
 test "Context beforeRender and afterRender should succeed" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const testing_context = try dx11.TestingContext.init();
     defer testing_context.deinit();
     const host_context = testing_context.getHostContext();
@@ -147,6 +153,9 @@ test "Context beforeRender and afterRender should succeed" {
 }
 
 test "ManagedContext deinitBufferContexts and reinitBufferContexts should succeed" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const testing_context = try dx11.TestingContext.init();
     defer testing_context.deinit();
     const host_context = testing_context.getHostContext();

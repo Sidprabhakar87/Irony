@@ -228,6 +228,9 @@ pub fn Context(comptime rendering_api: build_info.RenderingApi) type {
 const testing = std.testing;
 
 test "should render hello world successfully when rendering api is dx11" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const testing_context = try dx11.TestingContext.init();
     defer testing_context.deinit();
     const host_context = testing_context.getHostContext();
@@ -251,6 +254,9 @@ test "should render hello world successfully when rendering api is dx11" {
 }
 
 test "should render hello world successfully when rendering api is dx12" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const testing_context = try dx12.TestingContext.init();
     defer testing_context.deinit();
     const host_context = testing_context.getHostContext();

@@ -212,6 +212,9 @@ pub fn Hooks(onPresent: *const OnHookEvent, beforeResize: *const OnHookEvent, af
 const testing = std.testing;
 
 test "should call correct callbacks at correct times" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const dx11_context = try dx11.TestingContext.init();
     defer dx11_context.deinit();
 
@@ -277,6 +280,9 @@ test "should call correct callbacks at correct times" {
 }
 
 test "init should error when hooking is not initialized" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
     const dx11_context = try dx11.TestingContext.init();
     defer dx11_context.deinit();
 

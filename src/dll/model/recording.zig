@@ -30,25 +30,6 @@ pub const RecordingFormat = enum {
     }
 };
 
-const old_irony_format_config = sdk.io.OldIronyFormatConfig{
-    .atomic_types = &.{
-        ?bool,
-        ?u32,
-        ?f32,
-        ?model.MovePhase,
-        ?model.AttackType,
-        ?model.HitOutcome,
-        ?model.Posture,
-        ?model.Blocking,
-        ?model.Crushing,
-        ?model.Input,
-        ?model.Rage,
-        sdk.math.Vec3,
-        model.HitLine,
-        model.Wall,
-        model.FloorGimmick,
-    },
-};
 const buffer_size = 4096;
 
 pub fn saveRecording(allocator: std.mem.Allocator, frames: []const model.Frame, file_path: []const u8) !void {
@@ -111,25 +92,7 @@ pub fn loadRecording(allocator: std.mem.Allocator, file_path: []const u8) !Recor
     const format = RecordingFormat.fromFilePath(file_path) orelse .irony;
     switch (format) {
         .irony => {
-            const version_peek = reader.interface.peekArray("irony".len + @sizeOf(u16)) catch |err| {
-                sdk.misc.error_context.new("Failed to peek irony file version.", .{});
-                return err;
-            };
-            const version = std.mem.readInt(u16, version_peek["irony".len..], .little);
-            const slice = switch (version) {
-                0, 1, 2 => sdk.io.readOldIronyFormat(
-                    model.Frame,
-                    allocator,
-                    &reader.interface,
-                    &old_irony_format_config,
-                ),
-                else => sdk.io.readIronyFormat(
-                    model.Frame,
-                    allocator,
-                    &reader.interface,
-                    &.{},
-                ),
-            } catch |err| {
+            const slice = sdk.io.readIronyFormat(model.Frame, allocator, &reader.interface, &.{}) catch |err| {
                 sdk.misc.error_context.append("Failed read recording content from Irony format.", .{});
                 return err;
             };

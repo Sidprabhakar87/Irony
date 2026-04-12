@@ -1,5 +1,3 @@
-pub const BitWriter = @import("bit.zig").BitWriter;
-pub const BitReader = @import("bit.zig").BitReader;
 pub const ByteWriter = @import("byte.zig").ByteWriter;
 pub const ByteReader = @import("byte.zig").ByteReader;
 pub const writeIronyFormat = @import("irony.zig").writeIronyFormat;

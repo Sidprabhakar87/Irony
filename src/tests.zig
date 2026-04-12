@@ -14,7 +14,6 @@ test {
     _ = @import("sdk/dx12/misc.zig");
     _ = @import("sdk/dx12/testing_context.zig");
 
-    _ = @import("sdk/io/bit.zig");
     _ = @import("sdk/io/byte.zig");
     _ = @import("sdk/io/irony.zig");
     _ = @import("sdk/io/json.zig");

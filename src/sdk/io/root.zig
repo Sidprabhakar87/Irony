@@ -5,7 +5,5 @@ pub const writeJsonValue = @import("json.zig").writeJsonValue;
 pub const readJsonValue = @import("json.zig").readJsonValue;
 pub const writeLargeJsonArray = @import("json.zig").writeLargeJsonArray;
 pub const readLargeJsonArray = @import("json.zig").readLargeJsonArray;
-pub const XzEncoder = @import("xz.zig").XzEncoder;
-pub const XzDecoder = @import("xz.zig").XzDecoder;
 pub const ZstdEncoder = @import("zstd.zig").ZstdEncoder;
 pub const ZstdDecoder = @import("zstd.zig").ZstdDecoder;

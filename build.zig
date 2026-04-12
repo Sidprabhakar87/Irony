@@ -34,7 +34,6 @@ pub fn build(b: *std.Build) void {
     const minhook = minhookDependency(b, target, optimize);
     const imgui = imguiDependency(b, target, optimize, false);
     const imgui_te = imguiDependency(b, target, optimize, true);
-    const xz = xzDependency(b, target, optimize);
     const zstd = zstdDependency(b, target, optimize);
 
     const build_info_t7 = b.createModule(.{ .root_source_file = b.path("build_info_t7.zig") });
@@ -54,8 +53,6 @@ pub fn build(b: *std.Build) void {
     dll_t7.root_module.addImport("minhook", minhook);
     dll_t7.root_module.linkLibrary(imgui.library);
     dll_t7.root_module.addImport("imgui", imgui.module);
-    dll_t7.root_module.linkLibrary(xz.library);
-    dll_t7.root_module.addImport("xz", xz.module);
     dll_t7.root_module.linkLibrary(zstd.library);
     dll_t7.root_module.addImport("zstd", zstd.module);
     if (b.option(bool, "t7", "Whether to build the T7 dll.") orelse true) {
@@ -79,8 +76,6 @@ pub fn build(b: *std.Build) void {
     dll_t8.root_module.addImport("minhook", minhook);
     dll_t8.root_module.linkLibrary(imgui.library);
     dll_t8.root_module.addImport("imgui", imgui.module);
-    dll_t8.root_module.linkLibrary(xz.library);
-    dll_t8.root_module.addImport("xz", xz.module);
     dll_t8.root_module.linkLibrary(zstd.library);
     dll_t8.root_module.addImport("zstd", zstd.module);
     if (b.option(bool, "t8", "Whether to build the T8 dll.") orelse true) {
@@ -143,8 +138,6 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("minhook", minhook);
     tests.root_module.linkLibrary(imgui_te.library);
     tests.root_module.addImport("imgui", imgui_te.module);
-    tests.root_module.linkLibrary(xz.library);
-    tests.root_module.addImport("xz", xz.module);
     tests.root_module.linkLibrary(zstd.library);
     tests.root_module.addImport("zstd", zstd.module);
 
@@ -345,116 +338,6 @@ fn imguiDependency(
     });
     translate_c.defineCMacro("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", "1");
     translate_c.defineCMacro("IMGUI_USE_WCHAR32", "1");
-    const module = translate_c.createModule();
-    return .{ .module = module, .library = library };
-}
-
-// C dependency: xz utils
-fn xzDependency(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-) ModuleAndLibrary {
-    const dependency = b.dependency("xz", .{});
-    const library = b.addLibrary(.{
-        .name = "xz",
-        .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        }),
-    });
-    const directory = dependency.path("./src");
-    library.root_module.addIncludePath(directory.path(b, "./common"));
-    library.root_module.addIncludePath(directory.path(b, "./liblzma/api"));
-    library.root_module.addIncludePath(directory.path(b, "./liblzma/check"));
-    library.root_module.addIncludePath(directory.path(b, "./liblzma/common"));
-    library.root_module.addIncludePath(directory.path(b, "./liblzma/delta"));
-    library.root_module.addIncludePath(directory.path(b, "./liblzma/lz"));
-    library.root_module.addIncludePath(directory.path(b, "./liblzma/lzma"));
-    library.root_module.addIncludePath(directory.path(b, "./liblzma/simple"));
-    library.root_module.addIncludePath(directory.path(b, "./liblzma/rangecoder"));
-    library.root_module.addCSourceFiles(.{
-        .root = directory.path(b, "./liblzma"),
-        .files = &.{
-            "./common/common.c",
-            "./common/block_util.c",
-            "./common/easy_preset.c",
-            "./common/filter_common.c",
-            "./common/filter_common.c",
-            "./common/hardware_physmem.c",
-            "./common/hardware_physmem.c",
-            "./common/index.c",
-            "./common/stream_flags_common.c",
-            "./common/string_conversion.c",
-            "./common/vli_size.c",
-            "./common/alone_encoder.c",
-            "./common/block_buffer_encoder.c",
-            "./common/block_encoder.c",
-            "./common/block_header_encoder.c",
-            "./common/easy_buffer_encoder.c",
-            "./common/easy_encoder.c",
-            "./common/easy_encoder_memusage.c",
-            "./common/filter_buffer_encoder.c",
-            "./common/filter_encoder.c",
-            "./common/filter_flags_encoder.c",
-            "./common/index_encoder.c",
-            "./common/stream_buffer_encoder.c",
-            "./common/stream_encoder.c",
-            "./common/stream_flags_encoder.c",
-            "./common/vli_encoder.c",
-            "./common/alone_decoder.c",
-            "./common/auto_decoder.c",
-            "./common/block_buffer_decoder.c",
-            "./common/block_decoder.c",
-            "./common/block_header_decoder.c",
-            "./common/easy_decoder_memusage.c",
-            "./common/file_info.c",
-            "./common/filter_buffer_decoder.c",
-            "./common/filter_decoder.c",
-            "./common/filter_flags_decoder.c",
-            "./common/index_decoder.c",
-            "./common/index_hash.c",
-            "./common/stream_buffer_decoder.c",
-            "./common/stream_decoder.c",
-            "./common/stream_flags_decoder.c",
-            "./common/vli_decoder.c",
-            "./check/crc_clmul_consts_gen.c",
-            "./check/crc32_tablegen.c",
-            "./check/crc64_tablegen.c",
-            "./check/check.c",
-            "./check/crc32_fast.c",
-            "./check/crc64_fast.c",
-            "./lz/lz_encoder.c",
-            "./lz/lz_encoder_mf.c",
-            "./lz/lz_decoder.c",
-            "./lzma/fastpos_tablegen.c",
-            "./lzma/lzma_encoder_presets.c",
-            "./lzma/lzma_encoder.c",
-            "./lzma/lzma_encoder_optimum_fast.c",
-            "./lzma/lzma_encoder_optimum_normal.c",
-            "./lzma/fastpos_table.c",
-            "./lzma/lzma_decoder.c",
-            "./lzma/lzma2_encoder.c",
-            "./lzma/lzma2_decoder.c",
-            "./rangecoder/price_tablegen.c",
-            "./rangecoder/price_table.c",
-        },
-    });
-    library.root_module.addCMacro("ASSUME_RAM", "32");
-    library.root_module.addCMacro("HAVE_CHECK_CRC64", "1");
-    library.root_module.addCMacro("HAVE_DECODERS", "1");
-    library.root_module.addCMacro("HAVE_DECODER_LZMA2", "1");
-    library.root_module.addCMacro("HAVE_ENCODERS", "1");
-    library.root_module.addCMacro("HAVE_ENCODER_LZMA2", "1");
-    library.root_module.addCMacro("HAVE_MF_BT4", "1");
-    library.root_module.addCMacro("HAVE_STDBOOL_H", "1");
-    const translate_c = b.addTranslateC(.{
-        .root_source_file = directory.path(b, "./liblzma/api/lzma.h"),
-        .target = target,
-        .optimize = optimize,
-    });
     const module = translate_c.createModule();
     return .{ .module = module, .library = library };
 }

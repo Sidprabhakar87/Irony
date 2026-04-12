@@ -13,8 +13,8 @@ const NumberOfFrames = u32;
 const LocalField = struct {
     path: []const u8,
     access: []const AccessElement,
-    Type: type,
     offset: FieldOffset,
+    size: FieldSize,
 };
 const AccessElement = union(enum) {
     struct_field: []const u8,
@@ -163,7 +163,7 @@ fn writeFieldList(writer: *std.io.Writer, comptime fields: []const LocalField) !
         misc.error_context.new("Failed to write number of fields: {}", .{fields.len});
         return err;
     };
-    inline for (fields) |*field| {
+    for (fields) |*field| {
         errdefer misc.error_context.append("Failed to write field: {s}", .{field.path});
         writer.writeInt(FieldPathLength, @intCast(field.path.len), endian) catch |err| {
             misc.error_context.new("Failed to write the size of field path: {}", .{field.path.len});
@@ -177,9 +177,8 @@ fn writeFieldList(writer: *std.io.Writer, comptime fields: []const LocalField) !
             misc.error_context.new("Failed to write the field offset: {}", .{field.offset});
             return err;
         };
-        const size: FieldSize = serializedSizeOf(field.Type);
-        writer.writeInt(FieldSize, size, endian) catch |err| {
-            misc.error_context.new("Failed to write the field size: {}", .{size});
+        writer.writeInt(FieldSize, field.size, endian) catch |err| {
+            misc.error_context.new("Failed to write the field size: {}", .{field.size});
             return err;
         };
     }
@@ -223,7 +222,7 @@ fn readFieldList(
             misc.error_context.new("Field exceeded exceeded frame size limits: {s}", .{path});
             return error.InvalidRemoteField;
         }
-        inline for (local_fields, 0..) |*local_field, local_index| {
+        for (local_fields, 0..) |*local_field, local_index| {
             if (std.mem.eql(u8, local_field.path, path)) {
                 result[local_index] = .{
                     .offset = remote_offset,
@@ -341,10 +340,11 @@ fn readFrames(
         inline for (local_fields, remote_fields, &fields_to_default) |*local_field, *remote_field_maybe, *to_default| {
             if (remote_field_maybe.*) |*remote_field| {
                 if (isFieldAccessible(frame, local_field.access)) {
+                    const Type = getFieldType(Frame, local_field.access);
                     const data_start = (frame_index * remote_frame_size) + remote_field.offset;
                     const data_end = data_start + remote_field.size;
                     const data = array_of_structs[data_start..data_end];
-                    if (readValue(local_field.Type, data)) |value| {
+                    if (readValue(Type, data)) |value| {
                         setFieldValue(frame, local_field.access, &value) catch |err| {
                             misc.error_context.append(
                                 "Failed to set field with path {s} on frame {} to it's new value. " ++
@@ -645,6 +645,21 @@ fn readValue(comptime Type: type, data: []const u8) !Type {
         },
         else => @compileError("Unsupported type: " ++ @typeName(Type)),
     }
+}
+
+fn getFieldType(comptime Type: type, comptime access: []const AccessElement) type {
+    var Result = Type;
+    for (access) |element| {
+        Result = switch (element) {
+            .struct_field => |name| @FieldType(Result, name),
+            .array_index => @typeInfo(Result).array.child,
+            .optional_tag => bool,
+            .optional_payload => @typeInfo(Result).optional.child,
+            .union_tag => @typeInfo(Result).@"union".tag_type.?,
+            .union_field => |name| @FieldType(Result, name),
+        };
+    }
+    return Result;
 }
 
 fn isFieldAccessible(lhs_pointer: anytype, comptime access: []const AccessElement) bool {
@@ -965,17 +980,19 @@ const GetLocalFieldsState = struct {
                 .union_field => |name| appendPathName(&path_buffer, &path_len, name),
             }
         }
+
         const final_path = path_buffer[0..path_len].*;
         const final_access = self.access_buffer[0..self.access_len].*;
+        const size = serializedSizeOf(Type);
         self.fields_buffer[self.fields_len] = .{
             .path = &final_path,
             .access = &final_access,
-            .Type = Type,
             .offset = self.offset,
+            .size = size,
         };
         self.fields_len += 1;
 
-        self.offset += serializedSizeOf(Type);
+        self.offset += size;
     }
 
     fn appendPathName(buffer: []u8, len: *usize, name: []const u8) void {

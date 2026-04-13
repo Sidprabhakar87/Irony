@@ -8,100 +8,83 @@ pub const StructWithOffsetsMember = struct {
 };
 
 pub fn StructWithOffsets(size: ?usize, comptime members: []const StructWithOffsetsMember) type {
-    const ResolvedMember = struct {
-        name: [:0]const u8,
-        type: type,
-        offset: usize,
-        default_value_ptr: ?*const anyopaque = null,
-    };
-    var resolved_members: [members.len]ResolvedMember = undefined;
-    for (members, 0..) |*member, index| {
-        resolved_members[index] = .{
-            .name = member.name,
-            .type = member.type,
-            .offset = member.offset orelse switch (index) {
-                0 => 0,
-                else => resolved_members[index - 1].offset + @sizeOf(resolved_members[index - 1].type),
-            },
-            .default_value_ptr = member.default_value_ptr,
-        };
-    }
-
-    var sorted_members: [resolved_members.len](*const ResolvedMember) = undefined;
-    for (&resolved_members, 0..) |*member, index| {
-        sorted_members[index] = member;
-    }
-    std.sort.pdq(*const ResolvedMember, &sorted_members, {}, struct {
-        fn isLessThen(_: void, lhs: *const ResolvedMember, rhs: *const ResolvedMember) bool {
-            return lhs.offset < rhs.offset;
-        }
-    }.isLessThen);
-
-    var fields_buffer: [2 * sorted_members.len + 1]std.builtin.Type.StructField = undefined;
-    var fields_size = 0;
+    var fields_buffer: [2 * members.len + 1]std.builtin.Type.StructField = undefined;
+    var fields_len = 0;
     var current_offset: usize = 0;
     var padding_index: usize = 0;
-    for (sorted_members) |member| {
-        if (member.offset < current_offset) {
+    var padding_field_name_buffer: [8]u8 = undefined;
+    padding_field_name_buffer[0] = '_';
+
+    for (members) |*member| {
+        const member_offset = member.offset orelse current_offset;
+        if (member_offset < current_offset) {
             @compileError(std.fmt.comptimePrint(
-                "Unable to create struct with offsets. Struct member \"{s}\" overlaps with other members of the struct.",
+                "Unable to create struct with offsets. " ++
+                    "Struct member \"{s}\" is out of order or overlaps with other members of the struct.",
                 .{member.name},
             ));
         }
-        if (member.offset > current_offset) {
-            const padding_size = member.offset - current_offset;
-            fields_buffer[fields_size] = .{
-                .name = std.fmt.comptimePrint("_{}", .{padding_index}),
+        if (member_offset > current_offset) {
+            const int_len = std.fmt.printInt(padding_field_name_buffer[1..], padding_index, 10, .lower, .{});
+            padding_field_name_buffer[int_len + 1] = 0;
+            const name_final = padding_field_name_buffer[0..(int_len + 1) :0].*;
+            const padding_size = member_offset - current_offset;
+            fields_buffer[fields_len] = .{
+                .name = &name_final,
                 .type = [padding_size]u8,
                 .default_value_ptr = &([_]u8{0} ** padding_size),
                 .is_comptime = false,
                 .alignment = 1,
             };
             padding_index += 1;
-            fields_size += 1;
+            fields_len += 1;
         }
-        if (member.offset % @alignOf(member.type) != 0) {
+        if (member_offset % @alignOf(member.type) != 0) {
             @compileError(std.fmt.comptimePrint(
-                "Unable to create struct with offsets. Struct member \"{s}\" is misaligned on offset 0x{X} while type alignment is: {}",
-                .{ member.name, member.offset, @alignOf(member.type) },
+                "Unable to create struct with offsets. " ++
+                    "Struct member \"{s}\" is misaligned on offset 0x{X} while type alignment is: {}",
+                .{ member.name, member_offset, @alignOf(member.type) },
             ));
         }
-        fields_buffer[fields_size] = .{
+        fields_buffer[fields_len] = .{
             .name = member.name,
             .type = member.type,
             .default_value_ptr = member.default_value_ptr,
             .is_comptime = false,
             .alignment = @alignOf(member.type),
         };
-        fields_size += 1;
-        current_offset = member.offset + @sizeOf(member.type);
+        fields_len += 1;
+        current_offset = member_offset + @sizeOf(member.type);
     }
 
     if (size) |struct_size| {
         if (struct_size < current_offset) {
             @compileError(std.fmt.comptimePrint(
                 "Unable to create struct with offsets. Member \"{s}\" exceeds the size boundary of the struct.",
-                .{sorted_members[sorted_members.len - 1].name},
+                .{members[members.len - 1].name},
             ));
         }
         if (struct_size > current_offset) {
+            const int_len = std.fmt.printInt(padding_field_name_buffer[1..], padding_index, 10, .lower, .{});
+            padding_field_name_buffer[int_len + 1] = 0;
+            const name_final = padding_field_name_buffer[0..(int_len + 1) :0].*;
             const padding_size = struct_size - current_offset;
-            fields_buffer[fields_size] = .{
-                .name = std.fmt.comptimePrint("_{}", .{padding_index}),
+            fields_buffer[fields_len] = .{
+                .name = &name_final,
                 .type = [padding_size]u8,
                 .default_value_ptr = &([_]u8{0} ** padding_size),
                 .is_comptime = false,
                 .alignment = 1,
             };
             padding_index += 1;
-            fields_size += 1;
+            fields_len += 1;
         }
     }
 
     return @Type(.{ .@"struct" = .{
         .layout = .@"extern",
         .backing_integer = null,
-        .fields = fields_buffer[0..fields_size],
+        .fields = fields_buffer[0..fields_len],
         .decls = &.{},
         .is_tuple = false,
     } });
@@ -192,27 +175,6 @@ test "should create no padding between members with specified and unspecified of
     try testing.expectEqual(12, @sizeOf(Struct));
     try testing.expectEqual(4, field_1_address - struct_address);
     try testing.expectEqual(8, field_2_address - struct_address);
-}
-
-test "should have correct offsets and size when members are not specified in order" {
-    const Struct = StructWithOffsets(null, &.{
-        .{ .name = "field_1", .type = i32, .offset = 12 },
-        .{ .name = "field_2", .type = f32, .offset = 20 },
-        .{ .name = "field_3", .type = u32, .offset = 4 },
-    });
-    const s = Struct{
-        .field_1 = 1,
-        .field_2 = 2.0,
-        .field_3 = 3,
-    };
-    const struct_address = @intFromPtr(&s);
-    const field_1_address = @intFromPtr(&s.field_1);
-    const field_2_address = @intFromPtr(&s.field_2);
-    const field_3_address = @intFromPtr(&s.field_3);
-    try testing.expectEqual(24, @sizeOf(Struct));
-    try testing.expectEqual(12, field_1_address - struct_address);
-    try testing.expectEqual(20, field_2_address - struct_address);
-    try testing.expectEqual(4, field_3_address - struct_address);
 }
 
 test "should have correct size when no members and specified size" {

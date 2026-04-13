@@ -303,7 +303,6 @@ pub fn Player(comptime game_id: build_info.Game) type {
     const HeatGauge = Converted(u32, f32, game.decryptHeatGauge, game.encryptHeatGauge);
     const HealthValue = Converted(Health, Health, game.decryptHealth, game.encryptHealth);
     const T7MaxHealth = Converted(u32, u32, game.bitShiftRight(u32, 16), game.bitShiftLeft(u32, 16));
-    @setEvalBranchQuota(40000);
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
             field(0x00D8, "character_id", u32, &0),
@@ -577,9 +576,9 @@ pub fn Wall(comptime game_id: build_info.Game) type {
             field(0x000, "actor", Actor(.t8), &.{}), // parent
             field(0x2B0, "state", StageGimmickState, &.init), // T8: State
             field(0x2B4, "set_number", u32, &0), // T8: SetNo
+            field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
             field(0x2CC, "is_hard", Bool, &.false), //T8: IsDurable
             field(0x2D0, "destruction_level", u32, &0), //T8: DestructLevel
-            field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
             field(0x5A0, "wall_attribute", WallAttribute, &.{}), // T8: WallAttribute
         }),
     };
@@ -597,9 +596,9 @@ pub fn Floor(comptime game_id: build_info.Game) type {
             field(0x000, "actor", Actor(.t8), &.{}), // parent
             field(0x2B0, "state", StageGimmickState, &.init), // T8: State
             field(0x2B4, "set_number", u32, &0), // T8: SetNo
+            field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
             field(0x2CC, "is_hard", Bool, &.false), //T8: IsDurable
             field(0x2D0, "destruction_level", u32, &0), //T8: DestructLevel
-            field(0x2B8, "floor_number", u32, &0), // T8: FloorNo
             field(0x5A0, "is_breakable", Bool, &.false), // T8: IsFloorBreakable
             field(0x5A3, "is_floor_blast", Bool, &.false), // T8: IsFloorBlast
         }),
@@ -639,8 +638,8 @@ pub fn PlayerStart(comptime game_id: build_info.Game) type {
         .t8 => sdk.memory.StructWithOffsets(null, &.{
             field(0x000, "actor", Actor(.t8), &.{}), // parent
             field(0x2CC, "stage_broken_history", u32, &0), // T8: StageBrokenHistory
-            field(0x2D4, "floor_number", u32, &0), // T8: FloorId
             field(0x2D0, "type", PlayerStartType(.t8), &.drama_start), // T8: StagePositionTypeId
+            field(0x2D4, "floor_number", u32, &0), // T8: FloorId
         }),
     };
 }

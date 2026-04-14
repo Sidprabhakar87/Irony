@@ -14,52 +14,52 @@ pub const Controller = struct {
 
     const Self = @This();
     pub const Mode = union(enum) {
-        live: LiveState,
-        record: RecordState,
-        pause: PauseState,
-        playback: PlaybackState,
-        scrub: ScrubState,
-        load: LoadState,
-        save: SaveState,
+        live: Live,
+        record: Record,
+        pause: Pause,
+        playback: Playback,
+        scrub: Scrub,
+        load: Load,
+        save: Save,
+
+        pub const Live = struct {
+            frame: model.Frame,
+        };
+        pub const Record = struct {
+            segment_start_index: usize,
+            segment: model.Recording,
+        };
+        pub const Pause = struct {
+            frame_index: usize,
+            unprocessed_frames_start: ?usize,
+        };
+        pub const Playback = struct {
+            frame_index: usize,
+            frame_progress: f32,
+            unprocessed_frames_start: ?usize,
+        };
+        pub const Scrub = struct {
+            direction: Direction,
+            frame_index: usize,
+            frame_progress: f32,
+            scrubbing_time: f32,
+            unprocessed_frames_start: ?usize,
+
+            pub const Direction = enum { forward, backward, neutral };
+        };
+        pub const Load = struct {
+            task: Task,
+            frame_index: ?usize,
+
+            pub const Task = sdk.misc.Task(?model.Recording);
+        };
+        pub const Save = struct {
+            task: Task,
+            frame_index: ?usize,
+
+            pub const Task = sdk.misc.Task(?void);
+        };
     };
-    pub const LiveState = struct {
-        frame: model.Frame,
-    };
-    pub const RecordState = struct {
-        segment_start_index: usize,
-        segment: model.Recording,
-    };
-    pub const PauseState = struct {
-        frame_index: usize,
-        unprocessed_frames_start: ?usize,
-    };
-    pub const PlaybackState = struct {
-        frame_index: usize,
-        frame_progress: f32,
-        unprocessed_frames_start: ?usize,
-    };
-    pub const ScrubState = struct {
-        direction: ScrubDirection,
-        frame_index: usize,
-        frame_progress: f32,
-        scrubbing_time: f32,
-        unprocessed_frames_start: ?usize,
-    };
-    pub const ScrubDirection = enum {
-        forward,
-        backward,
-        neutral,
-    };
-    pub const LoadState = struct {
-        task: LoadTask,
-        frame_index: ?usize,
-    };
-    pub const LoadTask = sdk.misc.Task(?model.Recording);
-    pub const SaveState = struct {
-        task: SaveTask,
-        frame_index: ?usize,
-    };
-    pub const SaveTask = sdk.misc.Task(?void);
 
     pub const frame_time = 1.0 / 60.0;
     pub const min_scrub_speed = 1.0;
@@ -338,7 +338,7 @@ pub const Controller = struct {
         } };
     }
 
-    pub fn scrub(self: *Self, direction: ScrubDirection) void {
+    pub fn scrub(self: *Self, direction: Mode.Scrub.Direction) void {
         const total_frames = self.getTotalFrames();
         if (total_frames == 0) {
             return;
@@ -401,7 +401,7 @@ pub const Controller = struct {
             return;
         };
         std.log.debug("Spawning load recording task...", .{});
-        const task = LoadTask.spawn(self.allocator, struct {
+        const task = Mode.Load.Task.spawn(self.allocator, struct {
             fn call(allocator: std.mem.Allocator, path: BoundedFilePath) ?model.Recording {
                 std.log.debug("Load recording task spawned.", .{});
                 if (model.loadRecording(allocator, path.asSlice())) |frames| {
@@ -442,7 +442,7 @@ pub const Controller = struct {
         };
         std.log.debug("Spawning save recording task...", .{});
         self.cleanUpModeState(); // Called here to ensure the recorded segment gets flushed before spawning the task.
-        const task = SaveTask.spawn(self.allocator, struct {
+        const task = Mode.Save.Task.spawn(self.allocator, struct {
             fn call(allocator: std.mem.Allocator, frames: []const model.Frame, path: BoundedFilePath) ?void {
                 std.log.debug("Save recording task spawned.", .{});
                 if (model.saveRecording(allocator, frames, path.asSlice())) {
@@ -623,7 +623,7 @@ pub const Controller = struct {
         }
     }
 
-    pub fn getScrubDirection(self: *const Self) ?ScrubDirection {
+    pub fn getScrubDirection(self: *const Self) ?Mode.Scrub.Direction {
         return switch (self.mode) {
             .scrub => |*state| state.direction,
             else => null,

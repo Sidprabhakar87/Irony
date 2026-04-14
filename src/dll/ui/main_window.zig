@@ -61,7 +61,7 @@ pub const MainWindow = struct {
 
         var title_buffer: [260]u8 = undefined;
         const asterisk = if (controller.contains_unsaved_changes) "*" else "";
-        const file_name = if (self.file_menu.getFilePath()) |path| sdk.os.pathToFileName(path) else "Untitled";
+        const file_name = if (controller.getFilePath()) |path| sdk.os.pathToFileName(path) else "Untitled";
         const title = std.fmt.bufPrintZ(
             &title_buffer,
             build_info.display_name ++ " - {s}{s}###main_window",

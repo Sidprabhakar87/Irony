@@ -19,7 +19,6 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
         unsaved_dialog: UnsavedDialog = .{},
         save_dialog: FileDialog = .{ .type = .save },
         open_dialog: FileDialog = .{ .type = .open },
-        file_path: FilePath = .empty,
 
         const Self = @This();
         const Action = enum {
@@ -46,12 +45,6 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
             var progress = self.progress;
             defer self.progress = progress;
 
-            if (controller.getTotalFrames() == 0) {
-                // Recording can become empty with File -> New menu and with Clear Recording control.
-                // This makes sure that the empty recording is never linked to a file, no matter the way it becomes empty.
-                self.file_path = .empty;
-            }
-
             if (action == .idle) {
                 switch (self.menu_bar.action) {
                     .no_action, .close_ui => {},
@@ -64,12 +57,13 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
             }
 
             const unsaved_changes = controller.contains_unsaved_changes;
+            const file_path = controller.getFilePath();
             if (action != .idle and progress == .start) {
                 progress = switch (action) {
                     .idle => unreachable,
                     .new, .exit => if (unsaved_changes) .unsaved_dialog else .finnish,
                     .open => if (unsaved_changes) .unsaved_dialog else .open_dialog,
-                    .save => if (self.file_path.len == 0) .save_dialog else .save_in_progress,
+                    .save => if (file_path == null) .save_dialog else .save_in_progress,
                     .save_as => .save_dialog,
                 };
             }
@@ -77,7 +71,7 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
             if (progress == .unsaved_dialog) {
                 switch (self.unsaved_dialog.action) {
                     .no_action => {},
-                    .save => progress = if (self.file_path.len == 0) .save_dialog else .save_in_progress,
+                    .save => progress = if (file_path == null) .save_dialog else .save_in_progress,
                     .dont_save => switch (action) {
                         .idle, .save, .save_as => unreachable,
                         .new, .exit => progress = .finnish,
@@ -102,7 +96,7 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
             }
 
             if (self.progress != .save_in_progress and progress == .save_in_progress) {
-                const path = self.save_dialog.getLastSelectedPath() orelse self.getFilePath() orelse unreachable;
+                const path = self.save_dialog.getLastSelectedPath() orelse file_path orelse unreachable;
                 controller.save(path);
             }
 
@@ -112,9 +106,6 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
                         .idle => unreachable,
                         .new, .save, .save_as, .exit => progress = .finnish,
                         .open => progress = .open_dialog,
-                    }
-                    if (self.save_dialog.last_selected_path.len > 0) {
-                        self.file_path = self.save_dialog.last_selected_path;
                     }
                 } else {
                     action = .idle;
@@ -142,9 +133,6 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
             if (progress == .open_in_progress and controller.mode != .load) {
                 if (controller.did_last_save_or_load_succeed) {
                     progress = .finnish;
-                    if (self.open_dialog.last_selected_path.len > 0) {
-                        self.file_path = self.open_dialog.last_selected_path;
-                    }
                 } else {
                     action = .idle;
                     progress = .start;
@@ -173,25 +161,16 @@ pub fn FileMenu(comptime config: FileMenuConfig) type {
         ) void {
             self.menu_bar.draw(self.action == .idle, controller.getTotalFrames() == 0);
             self.unsaved_dialog.draw(self.progress == .unsaved_dialog);
-            self.save_dialog.draw(file_dialog_context, base_dir, self.getFilePath(), self.progress == .save_dialog);
-            self.open_dialog.draw(file_dialog_context, base_dir, self.getFilePath(), self.progress == .open_dialog);
+            self.save_dialog.draw(file_dialog_context, base_dir, controller.getFilePath(), self.progress == .save_dialog);
+            self.open_dialog.draw(file_dialog_context, base_dir, controller.getFilePath(), self.progress == .open_dialog);
 
             if (self.menu_bar.action == .close_ui and is_ui_open.*) {
                 is_ui_open.* = false;
                 sdk.ui.toasts.send(.default, null, "UI closed. Press [Tab] to open it again.", .{});
             }
         }
-
-        pub fn getFilePath(self: *const Self) ?[:0]const u8 {
-            if (self.file_path.len == 0) {
-                return null;
-            }
-            return self.file_path.asSlice();
-        }
     };
 }
-
-const FilePath = sdk.misc.BoundedArray(sdk.os.max_file_path_length, u8, 0, true);
 
 const MenuBar = struct {
     action: Action = .no_action,
@@ -303,8 +282,9 @@ const FileDialog = struct {
     last_selected_path: FilePath = .empty,
 
     const Self = @This();
-    pub const Action = enum { no_action, proceed, cancel };
     pub const Type = enum { save, open };
+    pub const Action = enum { no_action, proceed, cancel };
+    const FilePath = sdk.misc.BoundedArray(sdk.os.max_file_path_length, u8, 0, true);
 
     const directory_name = "recordings";
     const save_filters = block: {
@@ -523,6 +503,7 @@ const testing_base_dir = sdk.misc.BaseDir.fromStr("test_assets") catch unreachab
 
 const MockController = struct {
     mode: Mode = .live,
+    file_path: FilePath = .empty,
     contains_unsaved_changes: bool = false,
     did_last_save_or_load_succeed: bool = false,
     total_frames: usize = 100,
@@ -542,11 +523,7 @@ const MockController = struct {
         load,
         save,
     };
-    pub const ScrubDirection = enum {
-        forward,
-        backward,
-        neutral,
-    };
+    pub const FilePath = sdk.misc.BoundedArray(sdk.os.max_file_path_length, u8, 0, true);
 
     pub fn clear(self: *Self) void {
         self.clear_call_count += 1;
@@ -568,12 +545,22 @@ const MockController = struct {
     pub fn getTotalFrames(self: *const Self) usize {
         return self.total_frames;
     }
+
+    pub fn getFilePath(self: *const Self) ?[:0]const u8 {
+        if (self.file_path.len == 0) {
+            return null;
+        }
+        return self.file_path.asSlice();
+    }
 };
 
 test "should call clear on controller when new is clicked without unsaved changes" {
     const Test = struct {
         var file_dialog_context: *imgui.ImGuiFileDialog = undefined;
-        var controller: MockController = .{ .contains_unsaved_changes = false };
+        var controller: MockController = .{
+            .contains_unsaved_changes = false,
+            .file_path = .fromArray("./test.irony".*),
+        };
         var is_ui_open: bool = true;
         var file_menu: FileMenu(.{ .Controller = MockController, .selfShutDown = selfShutdown }) = .{};
 
@@ -637,7 +624,10 @@ test "new should be disabled when total frames is zero" {
 test "should show correctly working unsaved changes dialog when new is clicked with unsaved changes" {
     const Test = struct {
         var file_dialog_context: *imgui.ImGuiFileDialog = undefined;
-        var controller: MockController = .{ .contains_unsaved_changes = true };
+        var controller: MockController = .{
+            .contains_unsaved_changes = true,
+            .file_path = .empty,
+        };
         var is_ui_open: bool = true;
         var file_menu: FileMenu(.{ .Controller = MockController, .selfShutDown = selfShutdown }) = .{};
 
@@ -716,7 +706,10 @@ test "should show correctly working unsaved changes dialog when new is clicked w
 test "should call load on controller when open is clicked without unsaved changes and file is selected" {
     const Test = struct {
         var file_dialog_context: *imgui.ImGuiFileDialog = undefined;
-        var controller: MockController = .{ .contains_unsaved_changes = false };
+        var controller: MockController = .{
+            .contains_unsaved_changes = false,
+            .file_path = .fromArray("./test.irony".*),
+        };
         var is_ui_open: bool = true;
         var file_menu: FileMenu(.{ .Controller = MockController, .selfShutDown = selfShutdown }) = .{};
 
@@ -748,12 +741,6 @@ test "should call load on controller when open is clicked without unsaved change
             ctx.itemInputValueStr("**/##FileName", "test"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.load_call_count);
             try testing.expectStringEndsWith(controller.last_load_path.?.asSlice(), "test.irony");
-            try testing.expectEqual(null, file_menu.getFilePath());
-            controller.mode = .live;
-            controller.did_last_save_or_load_succeed = true;
-            ctx.yield(1);
-            try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, controller.last_load_path.?.asSlice(), file_menu.getFilePath().?);
         }
     };
     Test.file_dialog_context = imgui.IGFD_Create() orelse @panic("Failed to create file dialog context.");
@@ -765,7 +752,10 @@ test "should call load on controller when open is clicked without unsaved change
 test "should show correctly working unsaved changes dialog when open is clicked with unsaved changes" {
     const Test = struct {
         var file_dialog_context: *imgui.ImGuiFileDialog = undefined;
-        var controller: MockController = .{ .contains_unsaved_changes = true };
+        var controller: MockController = .{
+            .contains_unsaved_changes = true,
+            .file_path = .empty,
+        };
         var is_ui_open: bool = true;
         var file_menu: FileMenu(.{ .Controller = MockController, .selfShutDown = selfShutdown }) = .{};
 
@@ -850,7 +840,8 @@ test "should show correctly working unsaved changes dialog when open is clicked 
             try testing.expectEqual(1, controller.load_call_count);
             try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test1.irony");
             controller.mode = .live;
-            controller.did_last_save_or_load_succeed = true; // Makes the next save without a file dialog.
+            controller.did_last_save_or_load_succeed = true;
+            controller.file_path = .fromArray("./test.irony".*); // Makes the next save without a file dialog.
             ctx.yield(1);
             try testing.expectEqual(1, controller.save_call_count);
             try testing.expectEqual(1, controller.load_call_count);
@@ -877,13 +868,6 @@ test "should show correctly working unsaved changes dialog when open is clicked 
             try testing.expectEqual(2, controller.save_call_count);
             try testing.expectEqual(2, controller.load_call_count);
             try testing.expectStringEndsWith(controller.last_load_path.?.asSlice(), "test2.irony");
-            try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
-            controller.mode = .live;
-            controller.did_last_save_or_load_succeed = true;
-            ctx.yield(1);
-            try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_load_path.?.asSlice());
         }
     };
     Test.file_dialog_context = imgui.IGFD_Create() orelse @panic("Failed to create file dialog context.");
@@ -895,7 +879,9 @@ test "should show correctly working unsaved changes dialog when open is clicked 
 test "should call save on controller when save is clicked and file is selected" {
     const Test = struct {
         var file_dialog_context: *imgui.ImGuiFileDialog = undefined;
-        var controller: MockController = .{};
+        var controller: MockController = .{
+            .file_path = .empty,
+        };
         var is_ui_open: bool = true;
         var file_menu: FileMenu(.{ .Controller = MockController, .selfShutDown = selfShutdown }) = .{};
 
@@ -927,20 +913,14 @@ test "should call save on controller when save is clicked and file is selected" 
             ctx.itemInputValueStr("**/##FileName", "test"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.save_call_count);
             try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test.irony");
-            try testing.expect(file_menu.getFilePath() == null);
             controller.mode = .live;
-            controller.did_last_save_or_load_succeed = true; // Makes the next save without a file dialog.
+            controller.did_last_save_or_load_succeed = true;
+            controller.file_path = .fromArray("./test.irony".*); // Makes the next save without a file dialog.
             ctx.yield(1);
-            try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
 
             ctx.setRef("Window");
             ctx.menuClick("File/Save");
             try testing.expectEqual(2, controller.save_call_count);
-            controller.mode = .live;
-            controller.did_last_save_or_load_succeed = true;
-            ctx.yield(1);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
         }
     };
     Test.file_dialog_context = imgui.IGFD_Create() orelse @panic("Failed to create file dialog context.");
@@ -1017,12 +997,10 @@ test "should call save on controller when save as is clicked and file is selecte
             ctx.itemInputValueStr("**/##FileName", "test1"); // Presses enter so no need to click OK.
             try testing.expectEqual(1, controller.save_call_count);
             try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test1.irony");
-            try testing.expect(file_menu.getFilePath() == null);
             controller.mode = .live;
             controller.did_last_save_or_load_succeed = true;
+            controller.file_path = .fromArray("./test.irony".*); // Would make the next save without a file dialog.
             ctx.yield(1);
-            try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
 
             ctx.setRef("Window");
             ctx.menuClick("File/Save As"); // Since its save "as" it has to show file dialog every time.
@@ -1031,11 +1009,6 @@ test "should call save on controller when save as is clicked and file is selecte
             ctx.itemInputValueStr("**/##FileName", "test2"); // Presses enter so no need to click OK.
             try testing.expectEqual(2, controller.save_call_count);
             try testing.expectStringEndsWith(controller.last_save_path.?.asSlice(), "test2.irony");
-            controller.mode = .live;
-            controller.did_last_save_or_load_succeed = true;
-            ctx.yield(1);
-            try testing.expect(file_menu.getFilePath() != null);
-            try testing.expectEqualSlices(u8, file_menu.getFilePath().?, controller.last_save_path.?.asSlice());
         }
     };
     Test.file_dialog_context = imgui.IGFD_Create() orelse @panic("Failed to create file dialog context.");
@@ -1111,7 +1084,10 @@ test "should set is_ui_open to false when close ui button is clicked" {
 test "should call self shutdown when exit is clicked without unsaved changes" {
     const Test = struct {
         var file_dialog_context: *imgui.ImGuiFileDialog = undefined;
-        var controller: MockController = .{ .contains_unsaved_changes = false };
+        var controller: MockController = .{
+            .contains_unsaved_changes = false,
+            .file_path = .fromArray("./test.irony".*),
+        };
         var is_ui_open: bool = true;
         var file_menu: FileMenu(.{ .Controller = MockController, .selfShutDown = selfShutdown }) = .{};
         var shutdown_call_count: usize = 0;
@@ -1145,7 +1121,10 @@ test "should call self shutdown when exit is clicked without unsaved changes" {
 test "should show correctly working unsaved changes dialog when exit is clicked with unsaved changes" {
     const Test = struct {
         var file_dialog_context: *imgui.ImGuiFileDialog = undefined;
-        var controller: MockController = .{ .contains_unsaved_changes = true };
+        var controller: MockController = .{
+            .contains_unsaved_changes = true,
+            .file_path = .empty,
+        };
         var is_ui_open: bool = true;
         var file_menu: FileMenu(.{ .Controller = MockController, .selfShutDown = selfShutdown }) = .{};
         var shutdown_call_count: usize = 0;

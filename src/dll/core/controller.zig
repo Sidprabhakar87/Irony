@@ -9,10 +9,12 @@ pub const Controller = struct {
     recording: model.Recording,
     mode: Mode,
     playback_speed: f32,
+    file_path: FilePath,
     contains_unsaved_changes: bool,
     did_last_save_or_load_succeed: bool,
 
     const Self = @This();
+    pub const FilePath = sdk.misc.BoundedArray(sdk.os.max_file_path_length, u8, 0, true);
     pub const Mode = union(enum) {
         live: Live,
         record: Record,
@@ -49,12 +51,14 @@ pub const Controller = struct {
         };
         pub const Load = struct {
             task: Task,
+            file_path: FilePath,
             frame_index: ?usize,
 
             pub const Task = sdk.misc.Task(?model.Recording);
         };
         pub const Save = struct {
             task: Task,
+            file_path: FilePath,
             frame_index: ?usize,
 
             pub const Task = sdk.misc.Task(?void);
@@ -73,6 +77,7 @@ pub const Controller = struct {
             .recording = .empty,
             .mode = .{ .live = .{ .frame = .{} } },
             .playback_speed = 1.0,
+            .file_path = .empty,
             .contains_unsaved_changes = false,
             .did_last_save_or_load_succeed = false,
         };
@@ -384,6 +389,7 @@ pub const Controller = struct {
         }
         self.cleanUpModeState();
         self.recording.clearAndFree(self.allocator);
+        self.file_path = .empty;
         self.contains_unsaved_changes = false;
         self.mode = .{ .live = .{ .frame = .{} } };
     }
@@ -393,8 +399,7 @@ pub const Controller = struct {
             return;
         }
         std.log.info("Loading recording... {s}", .{file_path});
-        const BoundedFilePath = sdk.misc.BoundedArray(sdk.os.max_file_path_length, u8, 0, false);
-        const file_path_copy = BoundedFilePath.fromSlice(file_path) catch |err| {
+        const bounded_path = FilePath.fromSlice(file_path) catch |err| {
             sdk.misc.error_context.new("Failed to make a copy of file path: {s}", .{file_path});
             sdk.misc.error_context.append("Failed to load recording: {s}", .{file_path});
             sdk.misc.error_context.logError(err);
@@ -402,7 +407,7 @@ pub const Controller = struct {
         };
         std.log.debug("Spawning load recording task...", .{});
         const task = Mode.Load.Task.spawn(self.allocator, struct {
-            fn call(allocator: std.mem.Allocator, path: BoundedFilePath) ?model.Recording {
+            fn call(allocator: std.mem.Allocator, path: FilePath) ?model.Recording {
                 std.log.debug("Load recording task spawned.", .{});
                 if (model.loadRecording(allocator, path.asSlice())) |frames| {
                     std.log.info("Recording loaded.", .{});
@@ -414,7 +419,7 @@ pub const Controller = struct {
                     return null;
                 }
             }
-        }.call, .{ self.allocator, file_path_copy }) catch |err| {
+        }.call, .{ self.allocator, bounded_path }) catch |err| {
             sdk.misc.error_context.append("Failed to spawn load recording task.", .{});
             sdk.misc.error_context.append("Failed to load recording: {s}", .{file_path});
             sdk.misc.error_context.logError(err);
@@ -424,6 +429,7 @@ pub const Controller = struct {
         self.cleanUpModeState();
         self.mode = .{ .load = .{
             .task = task,
+            .file_path = bounded_path,
             .frame_index = frame_index,
         } };
     }
@@ -433,8 +439,7 @@ pub const Controller = struct {
             return;
         }
         std.log.info("Saving recording... {s}", .{file_path});
-        const BoundedFilePath = sdk.misc.BoundedArray(sdk.os.max_file_path_length, u8, 0, false);
-        const file_path_copy = BoundedFilePath.fromSlice(file_path) catch |err| {
+        const bounded_path = FilePath.fromSlice(file_path) catch |err| {
             sdk.misc.error_context.new("Failed to make a copy of file path: {s}", .{file_path});
             sdk.misc.error_context.append("Failed to load recording: {s}", .{file_path});
             sdk.misc.error_context.logError(err);
@@ -443,7 +448,7 @@ pub const Controller = struct {
         std.log.debug("Spawning save recording task...", .{});
         self.cleanUpModeState(); // Called here to ensure the recorded segment gets flushed before spawning the task.
         const task = Mode.Save.Task.spawn(self.allocator, struct {
-            fn call(allocator: std.mem.Allocator, frames: []const model.Frame, path: BoundedFilePath) ?void {
+            fn call(allocator: std.mem.Allocator, frames: []const model.Frame, path: FilePath) ?void {
                 std.log.debug("Save recording task spawned.", .{});
                 if (model.saveRecording(allocator, frames, path.asSlice())) {
                     std.log.info("Recording saved.", .{});
@@ -454,7 +459,7 @@ pub const Controller = struct {
                     return null;
                 }
             }
-        }.call, .{ self.allocator, self.recording.items, file_path_copy }) catch |err| {
+        }.call, .{ self.allocator, self.recording.items, bounded_path }) catch |err| {
             sdk.misc.error_context.append("Failed to spawn save recording task.", .{});
             sdk.misc.error_context.append("Failed to save recording: {s}", .{file_path});
             sdk.misc.error_context.logError(err);
@@ -463,6 +468,7 @@ pub const Controller = struct {
         const frame_index = self.getCurrentFrameIndex();
         self.mode = .{ .save = .{
             .task = task,
+            .file_path = bounded_path,
             .frame_index = frame_index,
         } };
     }
@@ -481,6 +487,7 @@ pub const Controller = struct {
                 if (state.task.join().*) |recording| {
                     self.recording.clearAndFree(self.allocator);
                     self.recording = recording;
+                    self.file_path = state.file_path;
                     self.contains_unsaved_changes = false;
                     self.did_last_save_or_load_succeed = true;
                 } else {
@@ -489,6 +496,7 @@ pub const Controller = struct {
             },
             .save => |*state| {
                 if (state.task.join().* != null) {
+                    self.file_path = state.file_path;
                     self.contains_unsaved_changes = false;
                     self.did_last_save_or_load_succeed = true;
                 } else {
@@ -628,6 +636,13 @@ pub const Controller = struct {
             .scrub => |*state| state.direction,
             else => null,
         };
+    }
+
+    pub fn getFilePath(self: *const Self) ?[:0]const u8 {
+        if (self.file_path.len == 0) {
+            return null;
+        }
+        return self.file_path.asSlice();
     }
 };
 
@@ -1795,4 +1810,60 @@ test "should pause at the last frame of the recording after recording load compl
 
     try testing.expect(controller.mode == .pause);
     try testing.expectEqual(3, controller.getCurrentFrameIndex());
+}
+
+test "should keep track of file path and unsaved changes correctly while recording, saving, clearing and loading" {
+    const Callback = struct {
+        var times_called: usize = 0;
+        var last_frame: ?model.Frame = null;
+
+        fn call(_: void, frame: *const model.Frame) void {
+            times_called += 1;
+            last_frame = frame.*;
+        }
+    };
+
+    var controller = Controller.init(testing.allocator);
+    defer controller.deinit();
+
+    try testing.expectEqual(null, controller.getFilePath());
+    try testing.expectEqual(false, controller.contains_unsaved_changes);
+
+    controller.record();
+
+    try testing.expectEqual(null, controller.getFilePath());
+    try testing.expectEqual(false, controller.contains_unsaved_changes);
+
+    controller.processFrame(&.{ .frames_since_round_start = 1 }, {}, Callback.call);
+
+    try testing.expectEqual(null, controller.getFilePath());
+    try testing.expectEqual(true, controller.contains_unsaved_changes);
+
+    controller.save("./test_assets/recording.irony");
+    while (controller.mode == .save) {
+        controller.update(Controller.frame_time, {}, Callback.call);
+        std.Thread.yield() catch {};
+    }
+    try testing.expectEqual(true, controller.did_last_save_or_load_succeed);
+    defer std.fs.cwd().deleteFile("./test_assets/recording.irony") catch @panic("Failed to cleanup test file.");
+
+    try testing.expect(controller.getFilePath() != null);
+    try testing.expectEqualStrings("./test_assets/recording.irony", controller.getFilePath().?);
+    try testing.expectEqual(false, controller.contains_unsaved_changes);
+
+    controller.clear();
+
+    try testing.expectEqual(null, controller.getFilePath());
+    try testing.expectEqual(false, controller.contains_unsaved_changes);
+
+    controller.load("./test_assets/recording.irony");
+    while (controller.mode == .load) {
+        controller.update(Controller.frame_time, {}, Callback.call);
+        std.Thread.yield() catch {};
+    }
+    try testing.expectEqual(true, controller.did_last_save_or_load_succeed);
+
+    try testing.expect(controller.getFilePath() != null);
+    try testing.expectEqualStrings("./test_assets/recording.irony", controller.getFilePath().?);
+    try testing.expectEqual(false, controller.contains_unsaved_changes);
 }

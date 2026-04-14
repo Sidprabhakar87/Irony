@@ -38,6 +38,8 @@ fn drawAny(ctx: *const Context, pointer: anytype) void {
         drawProxy(ctx, pointer);
     } else if (hasTag(Type, sdk.math.vector_tag)) {
         drawVector(ctx, pointer);
+    } else if (hasTag(Type, sdk.misc.bounded_array_tag)) {
+        drawBoundedArray(ctx, pointer);
     } else switch (@typeInfo(Type)) {
         .void => drawVoid(ctx),
         .null => drawNull(ctx),
@@ -543,6 +545,37 @@ fn drawVector(ctx: *const Context, pointer: anytype) void {
         const Vector = @typeInfo(@TypeOf(pointer)).pointer.child;
         const aligned: *const Vector = @alignCast(pointer);
         drawAny(ctx, aligned.asCoords());
+    }
+}
+
+fn drawBoundedArray(ctx: *const Context, pointer: anytype) void {
+    const node_open = beginNode(ctx.label);
+    defer if (node_open) endNode();
+    useDefaultMenu(ctx);
+    if (!node_open) return;
+
+    const len_pointer = &pointer.len;
+    const len_ctx = Context{
+        .label = "len",
+        .type_name = @typeName(@TypeOf(len_pointer.*)),
+        .address = @intFromPtr(len_pointer),
+        .bit_offset = std.mem.byte_size_in_bits * @offsetOf(@TypeOf(pointer.*), "len"),
+        .bit_size = @bitSizeOf(@TypeOf(len_pointer.*)),
+        .parent = ctx,
+    };
+    drawAny(&len_ctx, len_pointer);
+
+    for (pointer.asSlice(), 0..) |*element_pointer, index| {
+        var buffer: [string_buffer_size]u8 = undefined;
+        const element_ctx = Context{
+            .label = std.fmt.bufPrintZ(&buffer, "{}", .{index}) catch error_string,
+            .type_name = @typeName(@TypeOf(element_pointer.*)),
+            .address = @intFromPtr(element_pointer),
+            .bit_offset = std.mem.byte_size_in_bits * (@intFromPtr(element_pointer) - @intFromPtr(pointer)),
+            .bit_size = @bitSizeOf(@TypeOf(element_pointer.*)),
+            .parent = ctx,
+        };
+        drawAny(&element_ctx, element_pointer);
     }
 }
 
@@ -1906,6 +1939,71 @@ test "should draw vector correctly" {
             try ctx.expectItemExists("test_2/2: 7");
             try ctx.expectItemExists("test_2/3: 8");
             try ctx.expectItemExists("test_2/4: 9");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw bounded array correctly" {
+    const Test = struct {
+        var value: sdk.misc.BoundedArray(4, f32, 0, false) = .fromArray(.{ 123, 456 });
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            drawData("test", &value);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            const address = @intFromPtr(&value);
+            const size = @sizeOf(@TypeOf(value));
+            const len_address = @intFromPtr(&value.len);
+            const len_offset = @offsetOf(@TypeOf(value), "len");
+            const len_size = @sizeOf(@TypeOf(value.len));
+            const element_1_address = @intFromPtr(&value.buffer[1]);
+            const element_1_offset = element_1_address - address;
+            const element_1_size = @sizeOf(@TypeOf(value.buffer[1]));
+
+            ctx.setRef("Window");
+            try ctx.expectItemExists("test");
+            ctx.itemClick("test", imgui.ImGuiMouseButton_Right, imgui.ImGuiTestOpFlags_NoCheckHoveredId);
+
+            ctx.setRef("//$FOCUSED");
+            try ctx.expectItemExists("label: test");
+            try ctx.expectItemExists("path: test");
+            try ctx.expectItemExists("type");
+            try ctx.expectItemExistsFmt("address: {} (0x{X})", .{ address, address });
+            try ctx.expectItemExistsFmt("size: {} (0x{X}) bytes", .{ size, size });
+            ctx.mouseClickOnVoid(imgui.ImGuiMouseButton_Left, null);
+
+            ctx.setRef("Window");
+            ctx.itemClick("test", imgui.ImGuiMouseButton_Left, 0);
+            try ctx.expectItemExists("test/len: 2 (0x2)");
+            try ctx.expectItemExists("test/0: 123");
+            try ctx.expectItemExists("test/1: 456");
+            ctx.itemClick("test/len", imgui.ImGuiMouseButton_Right, imgui.ImGuiTestOpFlags_NoCheckHoveredId);
+
+            ctx.setRef("//$FOCUSED");
+            try ctx.expectItemExists("label: len");
+            try ctx.expectItemExists("path: test.len");
+            try ctx.expectItemExistsFmt("type: {s}", .{@typeName(@TypeOf(value.len))});
+            try ctx.expectItemExistsFmt("address: {} (0x{X})", .{ len_address, len_address });
+            try ctx.expectItemExistsFmt("offset: {} (0x{X}) bytes", .{ len_offset, len_offset });
+            try ctx.expectItemExistsFmt("size: {} (0x{X}) bytes", .{ len_size, len_size });
+            ctx.mouseClickOnVoid(imgui.ImGuiMouseButton_Left, null);
+
+            ctx.setRef("Window");
+            ctx.itemClick("test/1", imgui.ImGuiMouseButton_Right, imgui.ImGuiTestOpFlags_NoCheckHoveredId);
+
+            ctx.setRef("//$FOCUSED");
+            try ctx.expectItemExists("label: 1");
+            try ctx.expectItemExists("path: test.1");
+            try ctx.expectItemExists("type: f32");
+            try ctx.expectItemExistsFmt("address: {} (0x{X})", .{ element_1_address, element_1_address });
+            try ctx.expectItemExistsFmt("offset: {} (0x{X}) bytes", .{ element_1_offset, element_1_offset });
+            try ctx.expectItemExistsFmt("size: {} (0x{X}) bytes", .{ element_1_size, element_1_size });
+            ctx.mouseClickOnVoid(imgui.ImGuiMouseButton_Left, null);
         }
     };
     const context = try sdk.ui.getTestingContext();

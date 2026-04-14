@@ -308,20 +308,34 @@ const FileDialog = struct {
 
     const directory_name = "recordings";
     const save_filters = block: {
-        var result: [:0]const u8 = "";
+        var buffer = [1]u8{0} ** 128;
+        var len = 0;
+        const filler_1 = " (";
+        const filler_2 = "){";
+        const filler_3 = "}";
         const tags = std.meta.tags(model.RecordingFormat);
         for (tags, 0..) |format, index| {
-            result = result ++ getFormatDisplayName(format);
-            result = result ++ " (";
-            result = result ++ format.getFileExtension();
-            result = result ++ "){";
-            result = result ++ format.getFileExtension();
-            result = result ++ "}";
+            const name = getFormatDisplayName(format);
+            const extension = format.getFileExtension();
+            @memcpy(buffer[len..(len + name.len)], name);
+            len += name.len;
+            @memcpy(buffer[len..(len + filler_1.len)], filler_1);
+            len += filler_1.len;
+            @memcpy(buffer[len..(len + extension.len)], extension);
+            len += extension.len;
+            @memcpy(buffer[len..(len + filler_2.len)], filler_2);
+            len += filler_2.len;
+            @memcpy(buffer[len..(len + extension.len)], extension);
+            len += extension.len;
+            @memcpy(buffer[len..(len + filler_3.len)], filler_3);
+            len += filler_3.len;
             if (index < tags.len - 1) {
-                result = result ++ ",";
+                buffer[len] = ',';
+                len += 1;
             }
         }
-        break :block result;
+        const result = buffer[0..len :0].*;
+        break :block &result;
     };
     const open_filters = save_filters ++ ",All files (.*){.*}";
 

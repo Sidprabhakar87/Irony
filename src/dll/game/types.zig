@@ -112,29 +112,33 @@ pub const SimpleState = enum(u32) {
 };
 
 pub fn Input(comptime game_id: build_info.Game) type {
-    const extra_members = switch (game_id) {
-        .t7 => [_]sdk.memory.BitfieldMember(u32){},
-        .t8 => [_]sdk.memory.BitfieldMember(u32){.{ .name = "heat", .backing_value = 512 }},
+    return switch (game_id) {
+        .t7 => sdk.memory.Bitfield(u32, &.{
+            .{ .name = "up", .backing_value = 1 },
+            .{ .name = "down", .backing_value = 2 },
+            .{ .name = "left", .backing_value = 4 },
+            .{ .name = "right", .backing_value = 8 },
+            .{ .name = "special_style", .backing_value = 256 },
+            .{ .name = "rage", .backing_value = 512 },
+            .{ .name = "button_3", .backing_value = 4096 },
+            .{ .name = "button_4", .backing_value = 8192 },
+            .{ .name = "button_1", .backing_value = 16384 },
+            .{ .name = "button_2", .backing_value = 32768 },
+        }),
+        .t8 => sdk.memory.Bitfield(u32, &.{
+            .{ .name = "up", .backing_value = 1 },
+            .{ .name = "down", .backing_value = 2 },
+            .{ .name = "left", .backing_value = 4 },
+            .{ .name = "right", .backing_value = 8 },
+            .{ .name = "special_style", .backing_value = 256 },
+            .{ .name = "heat", .backing_value = 512 },
+            .{ .name = "rage", .backing_value = 2048 },
+            .{ .name = "button_3", .backing_value = 4096 },
+            .{ .name = "button_4", .backing_value = 8192 },
+            .{ .name = "button_1", .backing_value = 16384 },
+            .{ .name = "button_2", .backing_value = 32768 },
+        }),
     };
-    const members = [_]sdk.memory.BitfieldMember(u32){
-        .{ .name = "up", .backing_value = 1 },
-        .{ .name = "down", .backing_value = 2 },
-        .{ .name = "left", .backing_value = 4 },
-        .{ .name = "right", .backing_value = 8 },
-        .{ .name = "button_1", .backing_value = 16384 },
-        .{ .name = "button_2", .backing_value = 32768 },
-        .{ .name = "button_3", .backing_value = 4096 },
-        .{ .name = "button_4", .backing_value = 8192 },
-        .{ .name = "special_style", .backing_value = 256 },
-        .{
-            .name = "rage",
-            .backing_value = switch (game_id) {
-                .t7 => 512,
-                .t8 => 2048,
-            },
-        },
-    } ++ extra_members;
-    return sdk.memory.Bitfield(u32, &members);
 }
 
 pub const HitLinePoint = extern struct {

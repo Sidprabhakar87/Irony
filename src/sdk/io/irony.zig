@@ -876,7 +876,7 @@ fn serializedSizeOf(comptime Type: type) comptime_int {
 }
 
 inline fn getLocalFields(comptime Frame: type) []const LocalField {
-    @setEvalBranchQuota(100000);
+    @setEvalBranchQuota(40000);
     comptime {
         var state = GetLocalFieldsState{};
         getLocalFieldsRecursive(&state, Frame);

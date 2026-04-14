@@ -533,8 +533,8 @@ pub fn Controls(comptime config: ControlsConfig) type {
             if (imgui.igBeginPopup("speed_popup", 0)) {
                 defer imgui.igEndPopup();
                 _ = imgui.igSliderFloat("###speed_slider", &controller.playback_speed, 0.1, 4.0, "%.2fx", 0);
-                inline for ([_]f32{ 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0 }) |option| {
-                    const text = std.fmt.comptimePrint("{d:.2}x", .{option});
+                for ([_]f32{ 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0 }) |option| {
+                    const text = std.fmt.bufPrintZ(&buffer, "{d:.2}x", .{option}) catch "error";
                     if (imgui.igSelectable_Bool(text, controller.playback_speed == option, 0, .{})) {
                         controller.playback_speed = option;
                     }

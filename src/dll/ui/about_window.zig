@@ -78,7 +78,7 @@ pub fn AboutWindow(comptime config: AboutWindowConfig) type {
             drawText("Contributors:");
             imgui.igPushID_Str("Contributors:");
             imgui.igIndent(0);
-            inline for (build_info.contributors) |contributor| {
+            for (build_info.contributors) |contributor| {
                 imgui.igBullet();
                 drawText(contributor);
             }
@@ -195,8 +195,8 @@ test "should draw everything when window is open" {
             try ctx.expectItemExists("Author:");
             try ctx.expectItemExists("Author:/" ++ build_info.author);
             try ctx.expectItemExists("Contributors:");
-            inline for (build_info.contributors) |contributor| {
-                try ctx.expectItemExists("Contributors:/" ++ contributor);
+            for (build_info.contributors) |contributor| {
+                try ctx.expectItemExistsFmt("Contributors:/{s}", .{contributor});
             }
             try ctx.expectItemExists("Donate:");
             try ctx.expectItemExists("Donate:/One Time Donation");

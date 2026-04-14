@@ -12,4 +12,4 @@ pub const author = build.author;
 pub const home_page = build.home_page;
 pub const latest_version_download_page = build.latest_version_download_page;
 pub const donation_links = build.donation_links;
-pub const contributors = build.contributors;
+pub const contributors: []const [:0]const u8 = &build.contributors;

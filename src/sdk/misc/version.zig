@@ -166,10 +166,7 @@ pub const Version = struct {
     }
 
     pub inline fn comptimeParse(comptime string: []const u8) Self {
-        comptime {
-            @setEvalBranchQuota(2000);
-            return parse(string) catch unreachable;
-        }
+        comptime return parse(string) catch unreachable;
     }
 
     pub fn order(lhs: Self, rhs: Self) std.math.Order {
@@ -221,16 +218,16 @@ test "parse should return error when parsing invalid version strings" {
 }
 
 test "order should compare two versions correctly" {
-    try testing.expectEqual(.lt, Version.order(.comptimeParse("9.9.9"), .comptimeParse("10.0.0")));
-    try testing.expectEqual(.gt, Version.order(.comptimeParse("10.0.0"), .comptimeParse("9.9.9")));
-    try testing.expectEqual(.lt, Version.order(.comptimeParse("1.9.9"), .comptimeParse("1.10.0")));
-    try testing.expectEqual(.gt, Version.order(.comptimeParse("1.10.0"), .comptimeParse("1.9.9")));
-    try testing.expectEqual(.lt, Version.order(.comptimeParse("1.2.9"), .comptimeParse("1.2.10")));
-    try testing.expectEqual(.gt, Version.order(.comptimeParse("1.2.10"), .comptimeParse("1.2.9")));
-    try testing.expectEqual(.lt, Version.order(.comptimeParse("1.2.3-SNAPSHOT"), .comptimeParse("1.2.3")));
-    try testing.expectEqual(.gt, Version.order(.comptimeParse("1.2.3"), .comptimeParse("1.2.3-SNAPSHOT")));
-    try testing.expectEqual(.eq, Version.order(.comptimeParse("1.2.3"), .comptimeParse("1.2.3")));
-    try testing.expectEqual(.eq, Version.order(.comptimeParse("1.2.3-SNAPSHOT"), .comptimeParse("1.2.3-SNAPSHOT")));
+    try testing.expectEqual(.lt, Version.order(try .parse("9.9.9"), try .parse("10.0.0")));
+    try testing.expectEqual(.gt, Version.order(try .parse("10.0.0"), try .parse("9.9.9")));
+    try testing.expectEqual(.lt, Version.order(try .parse("1.9.9"), try .parse("1.10.0")));
+    try testing.expectEqual(.gt, Version.order(try .parse("1.10.0"), try .parse("1.9.9")));
+    try testing.expectEqual(.lt, Version.order(try .parse("1.2.9"), try .parse("1.2.10")));
+    try testing.expectEqual(.gt, Version.order(try .parse("1.2.10"), try .parse("1.2.9")));
+    try testing.expectEqual(.lt, Version.order(try .parse("1.2.3-SNAPSHOT"), try .parse("1.2.3")));
+    try testing.expectEqual(.gt, Version.order(try .parse("1.2.3"), try .parse("1.2.3-SNAPSHOT")));
+    try testing.expectEqual(.eq, Version.order(try .parse("1.2.3"), try .parse("1.2.3")));
+    try testing.expectEqual(.eq, Version.order(try .parse("1.2.3-SNAPSHOT"), try .parse("1.2.3-SNAPSHOT")));
 }
 
 test "should format correctly" {
@@ -239,8 +236,8 @@ test "should format correctly" {
         "123.456.789",
         "987.654.321-SNAPSHOT",
     };
-    inline for (test_cases) |expected| {
-        const pattern = Version.comptimeParse(expected);
+    for (test_cases) |expected| {
+        const pattern = try Version.parse(expected);
         const string = try std.fmt.allocPrint(testing.allocator, "{f}", .{pattern});
         defer testing.allocator.free(string);
         try testing.expectEqualStrings(expected, string);

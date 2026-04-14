@@ -13,18 +13,16 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         match: Pointer(game.Match(game_id)),
         ruleset: Pointer(game.Ruleset(game_id)),
         camera_manager: Pointer(game.CameraManager(game_id)) = .fromPointer(null),
-        walls: [max_walls]Pointer(game.Wall(game_id)) =
-            [1]Pointer(game.Wall(game_id)){.fromPointer(null)} ** max_walls,
-        floors: [max_floors]Pointer(game.Floor(game_id)) =
-            [1]Pointer(game.Floor(game_id)){.fromPointer(null)} ** max_floors,
-        player_starts: [max_player_starts]Pointer(game.PlayerStart(game_id)) =
-            [1]Pointer(game.PlayerStart(game_id)){.fromPointer(null)} ** max_player_starts,
+        walls: Array(max_walls, Pointer(game.Wall(game_id)), .fromPointer(null), false) = .empty,
+        floors: Array(max_floors, Pointer(game.Floor(game_id)), .fromPointer(null), false) = .empty,
+        player_starts: Array(max_player_starts, Pointer(game.PlayerStart(game_id)), .fromPointer(null), false) = .empty,
         functions: Functions,
         unreal_classes: UnrealClasses = .{},
 
         const Self = @This();
         const Proxy = sdk.memory.Proxy;
         const Pointer = sdk.memory.Pointer;
+        const Array = sdk.misc.BoundedArray;
         pub const Functions = switch (game_id) {
             .t7 => struct {
                 tick: ?*const game.TickFunction(.t7) = null,
@@ -89,17 +87,14 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             const makePointerArray = struct {
                 fn call(
                     comptime Element: type,
-                    comptime array_len: usize,
+                    comptime capacity: usize,
                     slice: []const Element,
-                ) [array_len]Pointer(Element) {
-                    var array = [1]Pointer(Element){.fromPointer(null)} ** array_len;
-                    if (slice.len > array.len) {
-                        @panic("Slice does not fit into the array.");
+                ) Array(capacity, Pointer(Element), .fromPointer(null), false) {
+                    var result: Array(capacity, Pointer(Element), .fromPointer(null), false) = .empty;
+                    for (slice) |*element| {
+                        result.append(.fromPointer(element)) catch @panic("Slice does not fit into the array.");
                     }
-                    for (slice, 0..) |*element, index| {
-                        array[index] = .fromPointer(element);
-                    }
-                    return array;
+                    return result;
                 }
             }.call;
             return .{
@@ -265,7 +260,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub fn updateAddresses(self: *Self) void {
             self.updateGlobalAddresses();
             self.updateUnrealClasses();
-            self.updateUnrealObjectAddresses((&self.camera_manager)[0..1], self.unreal_classes.camera_manager);
+            self.updateUnrealObjectAddress((&self.camera_manager), self.unreal_classes.camera_manager);
             self.updateUnrealObjectAddresses(&self.walls, self.unreal_classes.wall);
             self.updateUnrealObjectAddresses(&self.floors, self.unreal_classes.floor);
             self.updateUnrealObjectAddresses(&self.player_starts, self.unreal_classes.player_start);
@@ -316,15 +311,14 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             }
         }
 
-        fn updateUnrealObjectAddresses(
+        fn updateUnrealObjectAddress(
             self: *const Self,
-            pointers: anytype,
+            address: anytype,
             class_maybe: ?*const game.UnrealClass,
         ) void {
-            if (@typeInfo(@TypeOf(pointers)) != .pointer) {
+            if (@typeInfo(@TypeOf(address)) != .pointer) {
                 @compileError(
-                    "Expecting pointers array to be passed by reference but the passed type is: " ++
-                        @typeName(@TypeOf(pointers)),
+                    "Expecting the address to be passed by reference but got type: " ++ @typeName(@TypeOf(address)),
                 );
             }
             const findUnrealObjectsOfClass = self.functions.findUnrealObjectsOfClass orelse return;
@@ -336,12 +330,35 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             defer list.free(unrealFree);
 
             const slice = list.asSlice();
-            for (0..pointers.len) |index| {
-                if (index < slice.len) {
-                    pointers[index].address = @intFromPtr(slice[index]);
-                } else {
-                    pointers[index].address = 0;
-                }
+            if (slice.len > 0) {
+                address.address = @intFromPtr(slice[0]);
+            } else {
+                address.address = 0;
+            }
+        }
+
+        fn updateUnrealObjectAddresses(
+            self: *const Self,
+            addresses: anytype,
+            class_maybe: ?*const game.UnrealClass,
+        ) void {
+            if (@typeInfo(@TypeOf(addresses)) != .pointer) {
+                @compileError(
+                    "Expecting the pointers to be passed by reference but got type: " ++ @typeName(@TypeOf(addresses)),
+                );
+            }
+            const findUnrealObjectsOfClass = self.functions.findUnrealObjectsOfClass orelse return;
+            const unrealFree = self.functions.unrealFree orelse return;
+            const class = class_maybe orelse return;
+
+            var list = game.UnrealArrayList(*game.UnrealObject).empty;
+            findUnrealObjectsOfClass(class, &list, true, .default_exclude, .{});
+            defer list.free(unrealFree);
+
+            const slice = list.asSlice();
+            addresses.* = .empty;
+            for (slice) |element| {
+                addresses.append(.{ .address = @intFromPtr(element) }) catch {};
             }
         }
 

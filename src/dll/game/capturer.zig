@@ -55,11 +55,16 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             const walls = captureWalls(
                 floor_number,
                 set_number,
-                &game_memory.walls,
-                &game_memory.player_starts,
+                game_memory.walls.asSlice(),
+                game_memory.player_starts.asSlice(),
                 game_memory.unreal_classes.photo_mode_wall,
             );
-            const floor_gimmicks = captureFloorGimmicks(floor_number, set_number, &game_memory.floors, walls.asSlice());
+            const floor_gimmicks = captureFloorGimmicks(
+                floor_number,
+                set_number,
+                game_memory.floors.asSlice(),
+                walls.asSlice(),
+            );
             return .{
                 .rounds_needed_to_win = if (ruleset) |r| r.rounds_needed_to_win else null,
                 .frames_since_round_start = captureFramesSinceRoundStart(player_1, player_2),

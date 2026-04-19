@@ -596,13 +596,13 @@ const Context = struct {
     const Self = @This();
 
     pub fn getPath(self: *const Self, buffer: []u8) ![:0]u8 {
-        var stream = std.io.fixedBufferStream(buffer);
-        try self.writePath(stream.writer());
-        try stream.writer().writeByte(0);
-        return buffer[0..(stream.pos - 1) :0];
+        var writer = std.io.Writer.fixed(buffer);
+        try self.writePath(&writer);
+        try writer.writeByte(0);
+        return buffer[0..(writer.end - 1) :0];
     }
 
-    fn writePath(self: *const Self, writer: anytype) !void {
+    fn writePath(self: *const Self, writer: *std.io.Writer) !void {
         if (self.parent) |parent| {
             try parent.writePath(writer);
             try writer.writeByte('.');

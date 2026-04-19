@@ -64,38 +64,38 @@ pub fn BufferLogger(comptime config: BufferLoggerConfig) type {
             comptime format: []const u8,
             args: anytype,
         ) !void {
-            var stream = std.io.fixedBufferStream(write_region);
+            var writer = std.io.Writer.fixed(write_region);
 
             const timestamp = config.nanoTimestamp();
             if (misc.Timestamp.fromNano(timestamp, config.time_zone) catch null) |timestamp_struct| {
-                stream.writer().print("{f} ", .{timestamp_struct}) catch |err| {
+                writer.print("{f} ", .{timestamp_struct}) catch |err| {
                     clearBufferRegion(write_region);
                     return err;
                 };
             }
-            const timestamp_str = write_region[0..(stream.pos - 1)];
+            const timestamp_str = write_region[0..(writer.end - 1)];
 
-            stream.writer().writeAll("[" ++ comptime level.asText() ++ "] ") catch |err| {
+            writer.writeAll("[" ++ comptime level.asText() ++ "] ") catch |err| {
                 clearBufferRegion(write_region);
                 return err;
             };
 
             const scope_str = if (scope != std.log.default_log_scope) block: {
-                const start_pos = stream.pos + 1;
-                stream.writer().writeAll("(" ++ @tagName(scope) ++ ") ") catch |err| {
+                const start_pos = writer.end + 1;
+                writer.writeAll("(" ++ @tagName(scope) ++ ") ") catch |err| {
                     clearBufferRegion(write_region);
                     return err;
                 };
-                const end_pos = stream.pos - 2;
+                const end_pos = writer.end - 2;
                 break :block write_region[start_pos..end_pos];
             } else null;
 
-            const message_start_pos = stream.pos;
-            stream.writer().print(format ++ .{0}, args) catch |err| {
+            const message_start_pos = writer.end;
+            writer.print(format ++ .{0}, args) catch |err| {
                 clearBufferRegion(write_region);
                 return err;
             };
-            const end_pos = stream.pos;
+            const end_pos = writer.end;
 
             const entry = LogEntry{
                 .timestamp = timestamp,

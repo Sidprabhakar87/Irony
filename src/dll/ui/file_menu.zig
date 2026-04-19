@@ -288,33 +288,24 @@ const FileDialog = struct {
 
     const directory_name = "recordings";
     const save_filters = block: {
-        var buffer = [1]u8{0} ** 128;
-        var len = 0;
-        const filler_1 = " (";
-        const filler_2 = "){";
-        const filler_3 = "}";
+        var buffer: [128]u8 = undefined;
+        var writer = std.io.Writer.fixed(&buffer);
         const tags = std.meta.tags(model.RecordingFormat);
         for (tags, 0..) |format, index| {
             const name = getFormatDisplayName(format);
             const extension = format.getFileExtension();
-            @memcpy(buffer[len..(len + name.len)], name);
-            len += name.len;
-            @memcpy(buffer[len..(len + filler_1.len)], filler_1);
-            len += filler_1.len;
-            @memcpy(buffer[len..(len + extension.len)], extension);
-            len += extension.len;
-            @memcpy(buffer[len..(len + filler_2.len)], filler_2);
-            len += filler_2.len;
-            @memcpy(buffer[len..(len + extension.len)], extension);
-            len += extension.len;
-            @memcpy(buffer[len..(len + filler_3.len)], filler_3);
-            len += filler_3.len;
+            writer.writeAll(name) catch unreachable;
+            writer.writeAll(" (") catch unreachable;
+            writer.writeAll(extension) catch unreachable;
+            writer.writeAll("){") catch unreachable;
+            writer.writeAll(extension) catch unreachable;
+            writer.writeByte('}') catch unreachable;
             if (index < tags.len - 1) {
-                buffer[len] = ',';
-                len += 1;
+                writer.writeByte(',') catch unreachable;
             }
         }
-        const result = buffer[0..len :0].*;
+        writer.writeByte(0) catch unreachable;
+        const result = buffer[0..(writer.end - 1) :0].*;
         break :block &result;
     };
     const open_filters = save_filters ++ ",All files (.*){.*}";

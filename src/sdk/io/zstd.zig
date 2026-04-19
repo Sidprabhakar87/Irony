@@ -415,11 +415,11 @@ test "ZstdDecoder should decode the same values that the ZstdEncoder encoded" {
     var encoder = try ZstdEncoder.init(testing.allocator, &dest_writer.writer, 0);
     defer encoder.deinit();
 
-    var writter = encoder.writer();
+    var writer = encoder.writer();
     for (0..100) |i| {
-        try writter.writeInt(usize, i, .little);
+        try writer.writeInt(usize, i, .little);
     }
-    try writter.flush();
+    try writer.flush();
 
     const encoded = try dest_writer.toOwnedSlice();
     defer testing.allocator.free(encoded);

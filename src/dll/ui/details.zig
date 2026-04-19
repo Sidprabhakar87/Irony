@@ -672,110 +672,110 @@ fn drawPlayerName(value: model.PlayerName, alpha: f32) void {
 
 fn drawU32ActualMax(value: model.U32ActualMax, alpha: f32) void {
     var buffer: [string_buffer_size]u8 = [1]u8{0} ** string_buffer_size;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
     if (value.actual) |actual| {
-        stream.writer().print("{}", .{actual}) catch {};
+        writer.print("{}", .{actual}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(" (") catch {};
+    writer.writeAll(" (") catch {};
     if (value.max) |max| {
-        stream.writer().print("{}", .{max}) catch {};
+        writer.print("{}", .{max}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(")") catch {};
-    if (stream.pos >= buffer.len - 1) {
+    writer.writeByte(')') catch {};
+    if (writer.end >= buffer.len - 1) {
         drawText(error_string, alpha);
         return;
     }
-    drawText(buffer[0..stream.pos :0], alpha);
+    drawText(buffer[0..writer.end :0], alpha);
 }
 
 fn drawU32ActualMinMax(value: model.U32ActualMinMax, alpha: f32) void {
     var buffer: [string_buffer_size]u8 = [1]u8{0} ** string_buffer_size;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
     if (value.actual) |actual| {
-        stream.writer().print("{}", .{actual}) catch {};
+        writer.print("{}", .{actual}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(" (") catch {};
+    writer.writeAll(" (") catch {};
     if (value.min) |min| {
-        stream.writer().print("{}", .{min}) catch {};
+        writer.print("{}", .{min}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(" - ") catch {};
+    writer.writeAll(" - ") catch {};
     if (value.max) |max| {
-        stream.writer().print("{}", .{max}) catch {};
+        writer.print("{}", .{max}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(")") catch {};
-    if (stream.pos >= buffer.len - 1) {
+    writer.writeByte(')') catch {};
+    if (writer.end >= buffer.len - 1) {
         drawText(error_string, alpha);
         return;
     }
-    drawText(buffer[0..stream.pos :0], alpha);
+    drawText(buffer[0..writer.end :0], alpha);
 }
 
 fn drawI32ActualMinMax(value: model.I32ActualMinMax, alpha: f32) void {
     var buffer: [string_buffer_size]u8 = [1]u8{0} ** string_buffer_size;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
     if (value.actual) |actual| {
         if (actual > 0) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        stream.writer().print("{}", .{actual}) catch {};
+        writer.print("{}", .{actual}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(" (") catch {};
+    writer.writeAll(" (") catch {};
     if (value.min) |min| {
         if (min > 0) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        stream.writer().print("{}", .{min}) catch {};
+        writer.print("{}", .{min}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(", ") catch {};
+    writer.writeAll(", ") catch {};
     if (value.max) |max| {
         if (max > 0) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        stream.writer().print("{}", .{max}) catch {};
+        writer.print("{}", .{max}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(")") catch {};
-    if (stream.pos >= buffer.len - 1) {
+    writer.writeByte(')') catch {};
+    if (writer.end >= buffer.len - 1) {
         drawText(error_string, alpha);
         return;
     }
-    drawText(buffer[0..stream.pos :0], alpha);
+    drawText(buffer[0..writer.end :0], alpha);
 }
 
 fn drawF32MinMax(value: model.F32MinMax, alpha: f32) void {
     var buffer: [string_buffer_size]u8 = [1]u8{0} ** string_buffer_size;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
     if (value.min) |min| {
-        stream.writer().print("{d:.2}", .{min}) catch {};
+        writer.print("{d:.2}", .{min}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    _ = stream.write(" - ") catch {};
+    writer.writeAll(" - ") catch {};
     if (value.max) |max| {
-        stream.writer().print("{d:.2}", .{max}) catch {};
+        writer.print("{d:.2}", .{max}) catch {};
     } else {
-        _ = stream.write(empty_value_string) catch {};
+        writer.writeAll(empty_value_string) catch {};
     }
-    if (stream.pos >= buffer.len - 1) {
+    if (writer.end >= buffer.len - 1) {
         drawText(error_string, alpha);
         return;
     }
-    drawText(buffer[0..stream.pos :0], alpha);
+    drawText(buffer[0..writer.end :0], alpha);
 }
 
 fn drawMovePhase(value: model.MovePhase, alpha: f32) void {
@@ -853,124 +853,124 @@ fn drawBlocking(value: model.Blocking, alpha: f32) void {
 
 fn drawCrushing(value: model.Crushing, alpha: f32) void {
     var buffer: [string_buffer_size]u8 = [1]u8{0} ** string_buffer_size;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
     var is_first = true;
     if (value.invincibility) {
         if (!is_first) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        _ = stream.write("Everything") catch {};
+        writer.writeAll("Everything") catch {};
         is_first = false;
     } else {
         if (value.high_crushing) {
             if (!is_first) {
-                _ = stream.write(", ") catch {};
+                writer.writeAll(", ") catch {};
             }
-            _ = stream.write("Highs") catch {};
+            writer.writeAll("Highs") catch {};
             is_first = false;
         }
         if (value.low_crushing) {
             if (!is_first) {
-                _ = stream.write(", ") catch {};
+                writer.writeAll(", ") catch {};
             }
-            _ = stream.write("Lows") catch {};
+            writer.writeAll("Lows") catch {};
             is_first = false;
         }
         if (value.anti_air_only_crushing) {
             if (!is_first) {
-                _ = stream.write(", ") catch {};
+                writer.writeAll(", ") catch {};
             }
-            _ = stream.write("Anti-Airs") catch {};
+            writer.writeAll("Anti-Airs") catch {};
             is_first = false;
         }
     }
     if (value.power_crushing) {
         if (!is_first) {
-            _ = stream.write(", ") catch {};
+            writer.writeAll(", ") catch {};
         }
-        _ = stream.write("Power-Crushing") catch {};
+        writer.writeAll("Power-Crushing") catch {};
         is_first = false;
     }
-    if (stream.pos == 0) {
+    if (writer.end == 0) {
         drawText(empty_value_string, alpha);
-    } else if (stream.pos >= buffer.len - 1) {
+    } else if (writer.end >= buffer.len - 1) {
         drawText(error_string, alpha);
     } else {
-        drawText(buffer[0..stream.pos :0], alpha);
+        drawText(buffer[0..writer.end :0], alpha);
     }
 }
 
 fn drawInput(value: model.Input, alpha: f32) void {
     var buffer: [string_buffer_size]u8 = [1]u8{0} ** string_buffer_size;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
     if (value.up and !value.down) {
-        _ = stream.write("u") catch {};
+        writer.writeByte('u') catch {};
     }
     if (value.down and !value.up) {
-        _ = stream.write("d") catch {};
+        writer.writeByte('d') catch {};
     }
     if (value.forward and !value.back) {
-        _ = stream.write("f") catch {};
+        writer.writeByte('f') catch {};
     }
     if (value.back and !value.forward) {
-        _ = stream.write("b") catch {};
+        writer.writeByte('b') catch {};
     }
     var is_first = true;
     if (value.button_1) {
         if (!is_first) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        _ = stream.write("1") catch {};
+        writer.writeByte('1') catch {};
         is_first = false;
     }
     if (value.button_2) {
         if (!is_first) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        _ = stream.write("2") catch {};
+        writer.writeByte('2') catch {};
         is_first = false;
     }
     if (value.button_3) {
         if (!is_first) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        _ = stream.write("3") catch {};
+        writer.writeByte('3') catch {};
         is_first = false;
     }
     if (value.button_4) {
         if (!is_first) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        _ = stream.write("4") catch {};
+        writer.writeByte('4') catch {};
         is_first = false;
     }
     if (value.special_style) {
         if (!is_first) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        _ = stream.write("SS") catch {};
+        writer.writeAll("SS") catch {};
         is_first = false;
     }
     if (value.rage) {
         if (!is_first) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        _ = stream.write("R") catch {};
+        writer.writeByte('R') catch {};
         is_first = false;
     }
     if (value.heat) {
         if (!is_first) {
-            _ = stream.write("+") catch {};
+            writer.writeByte('+') catch {};
         }
-        _ = stream.write("H") catch {};
+        writer.writeByte('H') catch {};
         is_first = false;
     }
-    if (stream.pos == 0) {
+    if (writer.end == 0) {
         drawText(empty_value_string, alpha);
-    } else if (stream.pos >= buffer.len - 1) {
+    } else if (writer.end >= buffer.len - 1) {
         drawText(error_string, alpha);
     } else {
-        drawText(buffer[0..stream.pos :0], alpha);
+        drawText(buffer[0..writer.end :0], alpha);
     }
 }
 

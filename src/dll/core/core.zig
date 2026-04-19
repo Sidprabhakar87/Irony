@@ -7,7 +7,6 @@ const model = @import("../model/root.zig");
 pub const Core = struct {
     frame_detector: game.FrameDetector,
     capturer: game.Capturer(build_info.game),
-    pause_detector: core.PauseDetector(.{}),
     hit_detector: core.HitDetector,
     move_detector: core.MoveDetector,
     move_measurer: core.MoveMeasurer,
@@ -19,7 +18,6 @@ pub const Core = struct {
         return .{
             .frame_detector = .{},
             .capturer = .{},
-            .pause_detector = .{},
             .hit_detector = .{},
             .move_detector = .{},
             .move_measurer = .{},
@@ -41,7 +39,6 @@ pub const Core = struct {
             return;
         }
         var frame = self.capturer.captureFrame(game_memory);
-        self.pause_detector.update();
         self.hit_detector.detect(&frame);
         self.move_detector.detect(&frame);
         self.move_measurer.measure(&frame);

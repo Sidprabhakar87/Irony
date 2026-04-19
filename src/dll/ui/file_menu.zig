@@ -289,7 +289,7 @@ const FileDialog = struct {
     const directory_name = "recordings";
     const save_filters = block: {
         var buffer: [128]u8 = undefined;
-        var writer = std.io.Writer.fixed(&buffer);
+        var writer = std.Io.Writer.fixed(&buffer);
         const tags = std.meta.tags(model.RecordingFormat);
         for (tags, 0..) |format, index| {
             const name = getFormatDisplayName(format);

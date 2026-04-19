@@ -28,7 +28,7 @@ pub const JsonWhitespace = union(enum) {
         }
     }
 
-    pub fn write(self: *const Self, writer: *std.io.Writer) !void {
+    pub fn write(self: *const Self, writer: *std.Io.Writer) !void {
         switch (self.*) {
             .none => {},
             .space => {
@@ -52,7 +52,7 @@ pub const JsonWhitespace = union(enum) {
         }
     }
 
-    pub fn writeSpace(self: *const Self, writer: *std.io.Writer) !void {
+    pub fn writeSpace(self: *const Self, writer: *std.Io.Writer) !void {
         switch (self.*) {
             .none => {},
             .space, .new_line => {
@@ -68,7 +68,7 @@ pub const JsonWhitespace = union(enum) {
 pub fn writeJsonValue(
     comptime Type: type,
     value: *const Type,
-    writer: *std.io.Writer,
+    writer: *std.Io.Writer,
     whitespace: *const JsonWhitespace,
 ) !void {
     return writeValue(writer, value, whitespace) catch |err| {
@@ -77,7 +77,7 @@ pub fn writeJsonValue(
     };
 }
 
-pub fn readJsonValue(comptime Type: type, reader: *std.io.Reader, default: ?*const Type) !Type {
+pub fn readJsonValue(comptime Type: type, reader: *std.Io.Reader, default: ?*const Type) !Type {
     var buffer: [buffer_size]u8 = undefined;
     var allocator = std.heap.FixedBufferAllocator.init(&buffer);
     var json_reader = std.json.Reader.init(allocator.allocator(), reader);
@@ -91,7 +91,7 @@ pub fn readJsonValue(comptime Type: type, reader: *std.io.Reader, default: ?*con
 pub fn writeLargeJsonArray(
     comptime Element: type,
     slice: []const Element,
-    writer: *std.io.Writer,
+    writer: *std.Io.Writer,
 ) !void {
     writer.writeAll("[\n") catch |err| {
         misc.error_context.new("Failed to write array start token.", .{});
@@ -119,7 +119,7 @@ pub fn writeLargeJsonArray(
 pub fn readLargeJsonArray(
     comptime Element: type,
     allocator: std.mem.Allocator,
-    reader: *std.io.Reader,
+    reader: *std.Io.Reader,
     default_element: ?*const Element,
 ) !std.ArrayList(Element) {
     var buffer: [buffer_size]u8 = undefined;
@@ -166,7 +166,7 @@ pub fn readLargeJsonArray(
     return list;
 }
 
-fn writeValue(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeValue(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const Type = switch (@typeInfo(@TypeOf(value_pointer))) {
         .pointer => |info| info.child,
         else => @compileError("Expected value_pointer to be a pointer but got: " ++ @typeName(@TypeOf(value_pointer))),
@@ -245,7 +245,7 @@ fn readValue(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     };
 }
 
-fn writeVoid(writer: *std.io.Writer) !void {
+fn writeVoid(writer: *std.Io.Writer) !void {
     writer.writeAll("{}") catch |err| {
         misc.error_context.new("Failed to write void value.", .{});
         return err;
@@ -267,7 +267,7 @@ fn readVoid(reader: *std.json.Reader) !void {
     };
 }
 
-fn writeBool(writer: *std.io.Writer, value: bool) !void {
+fn writeBool(writer: *std.Io.Writer, value: bool) !void {
     const string = if (value) "true" else "false";
     writer.writeAll(string) catch |err| {
         misc.error_context.new("Failed to write boolean value: {s}", .{string});
@@ -290,7 +290,7 @@ fn readBool(reader: *std.json.Reader) !bool {
     }
 }
 
-fn writeInt(writer: *std.io.Writer, value: anytype) !void {
+fn writeInt(writer: *std.Io.Writer, value: anytype) !void {
     writer.print("{}", .{value}) catch |err| {
         misc.error_context.new("Failed to write int value: {}", .{value});
         return err;
@@ -316,7 +316,7 @@ fn readInt(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.All
     };
 }
 
-fn writeFloat(writer: *std.io.Writer, value: anytype) !void {
+fn writeFloat(writer: *std.Io.Writer, value: anytype) !void {
     writer.print("{}", .{value}) catch |err| {
         misc.error_context.new("Failed to write float value: {}", .{value});
         return err;
@@ -342,7 +342,7 @@ fn readFloat(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     };
 }
 
-fn writeEnum(writer: *std.io.Writer, value: anytype) !void {
+fn writeEnum(writer: *std.Io.Writer, value: anytype) !void {
     const Type = @TypeOf(value);
     const info = &@typeInfo(Type).@"enum";
     if (!info.is_exhaustive) {
@@ -381,7 +381,7 @@ fn readEnum(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.Al
     return error.InvalidEnumValue;
 }
 
-fn writeOptional(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeOptional(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     if (value_pointer.*) |*child_pointer| {
         writeValue(writer, child_pointer, whitespace) catch |err| {
             misc.error_context.append("Failed to write optional's payload.", .{});
@@ -422,7 +422,7 @@ fn readOptional(comptime Type: type, reader: *std.json.Reader, allocator: std.me
     }
 }
 
-fn writeArray(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeArray(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const indented_whitespace = whitespace.indented();
     writer.writeByte('[') catch |err| {
         misc.error_context.new("Failed to write array begin token.", .{});
@@ -506,7 +506,7 @@ fn readArray(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     return array;
 }
 
-fn writeTuple(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeTuple(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const indented_whitespace = whitespace.indented();
     const info = @typeInfo(@TypeOf(value_pointer.*)).@"struct";
     writer.writeByte('[') catch |err| {
@@ -600,7 +600,7 @@ fn readTuple(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.A
     return tuple;
 }
 
-fn writeStruct(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeStruct(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const indented_whitespace = whitespace.indented();
     const info = @typeInfo(@TypeOf(value_pointer.*)).@"struct";
     writer.writeByte('{') catch |err| {
@@ -715,7 +715,7 @@ fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.
     return structure;
 }
 
-fn writeUnion(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeUnion(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const Type = @TypeOf(value_pointer.*);
     const info = @typeInfo(Type).@"union";
     if (info.tag_type == null) {
@@ -802,7 +802,7 @@ inline fn isBoundedArray(comptime Type: type) bool {
     comptime return hasTag(Type, misc.bounded_array_tag);
 }
 
-fn writeBoundedArray(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeBoundedArray(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const indented_whitespace = whitespace.indented();
     const slice = value_pointer.asSlice();
     const Element = @TypeOf(value_pointer.*).Child;
@@ -924,7 +924,7 @@ inline fn isEnumArray(comptime Type: type) bool {
     }
 }
 
-fn writeEnumArray(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeEnumArray(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const indented_whitespace = whitespace.indented();
     const Type = @TypeOf(value_pointer.*);
     const Key = Type.Key;
@@ -1050,7 +1050,7 @@ inline fn isVector(comptime Type: type) bool {
     comptime return hasTag(Type, math.vector_tag);
 }
 
-fn writeVector(writer: *std.io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
+fn writeVector(writer: *std.Io.Writer, value_pointer: anytype, whitespace: *const JsonWhitespace) !void {
     const inner_whitespace: JsonWhitespace = switch (whitespace.*) {
         .none => .none,
         .space => .space,
@@ -1075,7 +1075,7 @@ inline fn isMatrix(comptime Type: type) bool {
     comptime return hasTag(Type, math.vector_tag);
 }
 
-fn writeMatrix(writer: *std.io.Writer, value_pointer: anytype, whitespace: JsonWhitespace) !void {
+fn writeMatrix(writer: *std.Io.Writer, value_pointer: anytype, whitespace: JsonWhitespace) !void {
     const inner_whitespace: JsonWhitespace = switch (whitespace) {
         .none => .none,
         .space => .space,

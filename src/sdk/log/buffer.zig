@@ -64,7 +64,7 @@ pub fn BufferLogger(comptime config: BufferLoggerConfig) type {
             comptime format: []const u8,
             args: anytype,
         ) !void {
-            var writer = std.io.Writer.fixed(write_region);
+            var writer = std.Io.Writer.fixed(write_region);
 
             const timestamp = config.nanoTimestamp();
             if (misc.Timestamp.fromNano(timestamp, config.time_zone) catch null) |timestamp_struct| {

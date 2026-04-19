@@ -46,7 +46,7 @@ pub fn writeIronyFormat(
     comptime Frame: type,
     allocator: std.mem.Allocator,
     frames: []const Frame,
-    writer: *std.io.Writer,
+    writer: *std.Io.Writer,
 ) !void {
     writer.writeAll(magic_number) catch |err| {
         misc.error_context.new("Failed to write magic number.", .{});
@@ -94,7 +94,7 @@ pub fn writeIronyFormat(
 pub fn readIronyFormat(
     comptime Frame: type,
     allocator: std.mem.Allocator,
-    reader: *std.io.Reader,
+    reader: *std.Io.Reader,
     default_frame: *const Frame,
 ) ![]Frame {
     var magic_buffer: [magic_number.len]u8 = undefined;
@@ -158,7 +158,7 @@ pub fn readIronyFormat(
     };
 }
 
-fn writeFieldList(writer: *std.io.Writer, comptime fields: []const LocalField) !void {
+fn writeFieldList(writer: *std.Io.Writer, comptime fields: []const LocalField) !void {
     writer.writeInt(NumberOfFields, @intCast(fields.len), endian) catch |err| {
         misc.error_context.new("Failed to write number of fields: {}", .{fields.len});
         return err;
@@ -185,7 +185,7 @@ fn writeFieldList(writer: *std.io.Writer, comptime fields: []const LocalField) !
 }
 
 fn readFieldList(
-    reader: *std.io.Reader,
+    reader: *std.Io.Reader,
     remote_frame_size: FrameSize,
     comptime local_fields: []const LocalField,
 ) ![local_fields.len]?RemoteField {
@@ -238,7 +238,7 @@ fn readFieldList(
 fn writeFrames(
     comptime Frame: type,
     allocator: std.mem.Allocator,
-    writer: *std.io.Writer,
+    writer: *std.Io.Writer,
     frames: []const Frame,
 ) !void {
     if (frames.len > max_number_of_frames) {
@@ -259,7 +259,7 @@ fn writeFrames(
         return err;
     };
     defer allocator.free(array_of_structs);
-    var array_of_structs_writer = std.io.Writer.fixed(array_of_structs);
+    var array_of_structs_writer = std.Io.Writer.fixed(array_of_structs);
 
     for (frames, 0..) |*frame, index| {
         writeValue(&array_of_structs_writer, frame) catch |err| {
@@ -286,7 +286,7 @@ fn writeFrames(
 fn readFrames(
     comptime Frame: type,
     allocator: std.mem.Allocator,
-    reader: *std.io.Reader,
+    reader: *std.Io.Reader,
     remote_frame_size: FrameSize,
     comptime local_fields: []const LocalField,
     remote_fields: *const [local_fields.len]?RemoteField,
@@ -381,7 +381,7 @@ fn readFrames(
     return frames;
 }
 
-fn writeValue(writer: *std.io.Writer, value_pointer: anytype) !void {
+fn writeValue(writer: *std.Io.Writer, value_pointer: anytype) !void {
     const Type = switch (@typeInfo(@TypeOf(value_pointer))) {
         .pointer => |info| info.child,
         else => @compileError("Expected value_pointer to be a pointer but got: " ++ @typeName(@TypeOf(value_pointer))),

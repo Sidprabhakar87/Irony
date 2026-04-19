@@ -13,7 +13,7 @@ pub const ConsoleLoggerConfig = struct {
 
 pub fn ConsoleLogger(comptime config: ConsoleLoggerConfig) type {
     return struct {
-        var log_writer: if (config.testing_buffer == null) ?std.fs.File.Writer else ?std.io.Writer = null;
+        var log_writer: if (config.testing_buffer == null) ?std.fs.File.Writer else ?std.Io.Writer = null;
         var buffer: [config.buffer_size]u8 = [1]u8{0} ** config.buffer_size;
 
         pub fn logFn(
@@ -32,12 +32,12 @@ pub fn ConsoleLogger(comptime config: ConsoleLoggerConfig) type {
                 config.lockStdErr();
                 defer config.unlockStdErr();
                 if (config.testing_buffer) |testing_buffer| {
-                    log_writer = std.io.Writer.fixed(testing_buffer);
+                    log_writer = std.Io.Writer.fixed(testing_buffer);
                 } else {
                     log_writer = std.fs.File.stderr().writer(&buffer);
                 }
             }
-            const writer: *std.io.Writer = if (config.testing_buffer == null) &log_writer.?.interface else &log_writer.?;
+            const writer: *std.Io.Writer = if (config.testing_buffer == null) &log_writer.?.interface else &log_writer.?;
             config.lockStdErr();
             defer config.unlockStdErr();
             if (timestamp) |t| {

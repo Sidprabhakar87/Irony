@@ -3,8 +3,8 @@ const zstd = @import("zstd");
 const misc = @import("../misc/root.zig");
 
 pub const ZstdEncoder = struct {
-    vtable: std.io.Writer.VTable,
-    des_writer: *std.io.Writer,
+    vtable: std.Io.Writer.VTable,
+    des_writer: *std.Io.Writer,
     allocator: std.mem.Allocator,
     zstd_allocator: *ZstdAllocator,
     ctx: *zstd.ZSTD_CCtx,
@@ -15,7 +15,7 @@ pub const ZstdEncoder = struct {
 
     pub fn init(
         allocator: std.mem.Allocator,
-        des_writer: *std.io.Writer,
+        des_writer: *std.Io.Writer,
         compression_level: c_int,
     ) !Self {
         const zstd_allocator = allocator.create(ZstdAllocator) catch |err| {
@@ -97,14 +97,14 @@ pub const ZstdEncoder = struct {
         self.allocator.destroy(self.zstd_allocator);
     }
 
-    pub fn writer(self: *Self) std.io.Writer {
+    pub fn writer(self: *Self) std.Io.Writer {
         return .{
             .vtable = &self.vtable,
             .buffer = self.input_buffer,
         };
     }
 
-    fn drain(w: *std.io.Writer, data: []const []const u8, splat: usize) std.io.Writer.Error!usize {
+    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
         const self: *Self = @constCast(@fieldParentPtr("vtable", w.vtable));
         var consumed: usize = 0;
         consumed += try self.consume(w.buffer[0..w.end]);
@@ -122,7 +122,7 @@ pub const ZstdEncoder = struct {
         return consumed;
     }
 
-    fn flush(w: *std.io.Writer) std.io.Writer.Error!void {
+    fn flush(w: *std.Io.Writer) std.Io.Writer.Error!void {
         const self: *Self = @constCast(@fieldParentPtr("vtable", w.vtable));
         var input = zstd.ZSTD_inBuffer{
             .src = w.buffer.ptr,
@@ -152,7 +152,7 @@ pub const ZstdEncoder = struct {
         try self.des_writer.flush();
     }
 
-    fn consume(self: *Self, data: []const u8) std.io.Writer.Error!usize {
+    fn consume(self: *Self, data: []const u8) std.Io.Writer.Error!usize {
         var input = zstd.ZSTD_inBuffer{
             .src = data.ptr,
             .pos = 0,
@@ -180,8 +180,8 @@ pub const ZstdEncoder = struct {
 };
 
 pub const ZstdDecoder = struct {
-    vtable: std.io.Reader.VTable,
-    src_reader: *std.io.Reader,
+    vtable: std.Io.Reader.VTable,
+    src_reader: *std.Io.Reader,
     allocator: std.mem.Allocator,
     zstd_allocator: *ZstdAllocator,
     ctx: *zstd.ZSTD_DCtx,
@@ -194,7 +194,7 @@ pub const ZstdDecoder = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, src_reader: *std.io.Reader) !Self {
+    pub fn init(allocator: std.mem.Allocator, src_reader: *std.Io.Reader) !Self {
         const zstd_allocator = allocator.create(ZstdAllocator) catch |err| {
             misc.error_context.new("Failed to allocate zstd allocator.", .{});
             return err;
@@ -257,7 +257,7 @@ pub const ZstdDecoder = struct {
         self.allocator.destroy(self.zstd_allocator);
     }
 
-    pub fn reader(self: *Self, buffer: []u8) std.io.Reader {
+    pub fn reader(self: *Self, buffer: []u8) std.Io.Reader {
         return .{
             .vtable = &self.vtable,
             .buffer = buffer,
@@ -266,7 +266,7 @@ pub const ZstdDecoder = struct {
         };
     }
 
-    fn stream(r: *std.io.Reader, w: *std.io.Writer, limit: std.io.Limit) std.io.Reader.StreamError!usize {
+    fn stream(r: *std.Io.Reader, w: *std.Io.Writer, limit: std.Io.Limit) std.Io.Reader.StreamError!usize {
         const self: *Self = @constCast(@fieldParentPtr("vtable", r.vtable));
 
         if (self.in_error_state) {
@@ -410,7 +410,7 @@ const testing = std.testing;
 test "ZstdDecoder should decode the same values that the ZstdEncoder encoded" {
     var buffer: [64]u8 = undefined;
 
-    var dest_writer = std.io.Writer.Allocating.init(testing.allocator);
+    var dest_writer = std.Io.Writer.Allocating.init(testing.allocator);
     defer dest_writer.deinit();
     var encoder = try ZstdEncoder.init(testing.allocator, &dest_writer.writer, 0);
     defer encoder.deinit();
@@ -424,7 +424,7 @@ test "ZstdDecoder should decode the same values that the ZstdEncoder encoded" {
     const encoded = try dest_writer.toOwnedSlice();
     defer testing.allocator.free(encoded);
 
-    var src_reader = std.io.Reader.fixed(encoded);
+    var src_reader = std.Io.Reader.fixed(encoded);
     var decoder = try ZstdDecoder.init(testing.allocator, &src_reader);
     defer decoder.deinit();
     var reader = decoder.reader(&buffer);

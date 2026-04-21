@@ -410,6 +410,7 @@ pub fn Animation(comptime game_id: build_info.Game) type {
 pub const GlobalKey = enum(u32) {
     match = 0x472D4C0B,
     ruleset = 0xEDFEC9B0,
+    replay = 0xEC52DADE,
     _,
 };
 
@@ -469,6 +470,12 @@ pub fn Ruleset(comptime game_id: build_info.Game) type {
         }),
     };
 }
+
+pub const ReplayMode = enum(u8) {
+    playback = 0,
+    loading = 1,
+    _,
+};
 
 // UE: APlayerCameraManager
 pub fn CameraManager(comptime game_id: build_info.Game) type {

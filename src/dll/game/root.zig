@@ -53,6 +53,7 @@ pub const MatchPhase = @import("types.zig").MatchPhase;
 pub const Match = @import("types.zig").Match;
 pub const MatchPlayer = @import("types.zig").MatchPlayer;
 pub const Ruleset = @import("types.zig").Ruleset;
+pub const ReplayMode = @import("types.zig").ReplayMode;
 pub const CameraManager = @import("types.zig").CameraManager;
 pub const Actor = @import("types.zig").Actor;
 pub const SceneComponent = @import("types.zig").SceneComponent;

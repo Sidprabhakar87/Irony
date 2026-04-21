@@ -12,6 +12,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         secondary_player_info: Proxy(game.PlayerInfo(game_id)),
         match: Pointer(game.Match(game_id)),
         ruleset: Pointer(game.Ruleset(game_id)),
+        replay_mode: Proxy(game.ReplayMode),
         camera_manager: Pointer(game.CameraManager(game_id)) = .fromPointer(null),
         walls: Array(max_walls, Pointer(game.Wall(game_id)), .fromPointer(null), false) = .empty,
         floors: Array(max_floors, Pointer(game.Floor(game_id)), .fromPointer(null), false) = .empty,
@@ -74,6 +75,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             secondary_player_info: ?*const game.PlayerInfo(game_id) = null,
             match: ?*const game.Match(game_id) = null,
             ruleset: ?*const game.Ruleset(game_id) = null,
+            replay_mode: ?*const game.ReplayMode = null,
             camera_manager: ?*const game.CameraManager(game_id) = null,
             walls: []const game.Wall(game_id) = &.{},
             floors: []const game.Floor(game_id) = &.{},
@@ -104,6 +106,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 .secondary_player_info = .fromPointer(params.secondary_player_info),
                 .match = .fromPointer(params.match),
                 .ruleset = .fromPointer(params.ruleset),
+                .replay_mode = .fromPointer(params.replay_mode),
                 .camera_manager = .fromPointer(params.camera_manager),
                 .walls = makePointerArray(game.Wall(game_id), max_walls, params.walls),
                 .floors = makePointerArray(game.Floor(game_id), max_floors, params.floors),
@@ -154,6 +157,14 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     game.Ruleset(.t7),
                     relativeOffset(i32, add(0x2, pattern(cache, "8B 05 ?? ?? ?? ?? 83 C0 9C"))),
                 ),
+                .replay_mode = proxy("replay_mode", game.ReplayMode, .{
+                    add(0x1, relativeOffset(i32, add(0x3, pattern(
+                        cache,
+                        "48 83 3D ?? ?? ?? ?? 00 75 ?? B9 40 00 00 00",
+                    )))),
+                    0x38,
+                    0x58,
+                }),
                 .functions = .{
                     .tick = functionPointer(
                         "tick",
@@ -214,8 +225,13 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x20,
                     0x0,
                 }),
-                .match = .fromPointer(null), // Continiously updated address.
-                .ruleset = .fromPointer(null), // Continiously updated address.
+                .match = .fromPointer(null), // Continuously updated address.
+                .ruleset = .fromPointer(null), // Continuously updated address.
+                .replay_mode = proxy("replay_mode", game.ReplayMode, .{
+                    0x0, // Continuously updated address.
+                    0x98,
+                    0x70,
+                }),
                 .functions = .{
                     .tick = functionPointer(
                         "tick",
@@ -276,6 +292,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             const map = getGlobalsMap();
             self.match.address = findGlobalAddress(map, &.match);
             self.ruleset.address = findGlobalAddress(map, &.ruleset);
+            self.replay_mode.trail.buffer[0] = findGlobalAddress(map, &.replay) +| 0x8;
         }
 
         fn updateUnrealClasses(self: *Self) void {

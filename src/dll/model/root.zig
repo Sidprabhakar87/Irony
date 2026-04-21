@@ -54,6 +54,7 @@ pub const MatchBarSettings = @import("settings.zig").MatchBarSettings;
 pub const DetailsSettings = @import("settings.zig").DetailsSettings;
 pub const PlayerSettingsMode = @import("settings.zig").PlayerSettingsMode;
 pub const PlayerSettings = @import("settings.zig").PlayerSettings;
+pub const AutomationSettings = @import("settings.zig").AutomationSettings;
 pub const MiscSettings = @import("settings.zig").MiscSettings;
 pub const SkeletonPointId = @import("skeleton.zig").SkeletonPointId;
 pub const SkeletonPoint = @import("skeleton.zig").SkeletonPoint;

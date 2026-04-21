@@ -14,6 +14,7 @@ pub const Settings = struct {
     measure_tool: MeasureToolSettings = .{},
     match_bar: MatchBarSettings = .{},
     details: DetailsSettings = .{},
+    automation: AutomationSettings = .{},
     misc: MiscSettings = .{},
 
     const Self = @This();
@@ -374,6 +375,19 @@ pub const DetailsSettings = struct {
         secondary_player,
     };
     pub const RowsEnabled = sdk.misc.FieldMap(ui.Details, bool, &true);
+};
+
+pub const AutomationSettings = struct {
+    enabled: bool = true,
+    live_games: Mode = .only_record,
+    replays: Mode = .only_record,
+    save_format: model.RecordingFormat = .irony,
+
+    pub const Mode = enum {
+        do_not_record,
+        only_record,
+        record_and_save,
+    };
 };
 
 pub const MiscSettings = struct {

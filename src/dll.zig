@@ -318,7 +318,7 @@ pub fn main() void {
             .tick => {
                 if (event_buss) |*buss| {
                     const game_memory = memory_search_task.join();
-                    buss.tick(game_memory);
+                    buss.tick(&base_dir, game_memory);
                 }
             },
             .before_resize => |*host_context| {

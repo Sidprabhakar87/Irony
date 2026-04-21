@@ -1,5 +1,6 @@
 const std = @import("std");
 const build_info = @import("build_info");
+const sdk = @import("../../sdk/root.zig");
 const core = @import("../core/root.zig");
 const game = @import("../game/root.zig");
 const model = @import("../model/root.zig");
@@ -10,6 +11,7 @@ pub const Core = struct {
     hit_detector: core.HitDetector,
     move_detector: core.MoveDetector,
     move_measurer: core.MoveMeasurer,
+    automation: core.Automation,
     controller: core.Controller,
 
     const Self = @This();
@@ -21,6 +23,7 @@ pub const Core = struct {
             .hit_detector = .{},
             .move_detector = .{},
             .move_measurer = .{},
+            .automation = .{},
             .controller = core.Controller.init(allocator),
         };
     }
@@ -31,6 +34,8 @@ pub const Core = struct {
 
     pub fn tick(
         self: *Self,
+        base_dir: *const sdk.misc.BaseDir,
+        settings: *const model.Settings,
         game_memory: *const game.Memory(build_info.game),
         context: anytype,
         processFrame: *const fn (context: @TypeOf(context), frame: *const model.Frame) void,
@@ -42,6 +47,7 @@ pub const Core = struct {
         self.hit_detector.detect(&frame);
         self.move_detector.detect(&frame);
         self.move_measurer.measure(&frame);
+        self.automation.processFrame(base_dir, &settings.automation, &self.controller, &frame);
         self.controller.processFrame(&frame, context, processFrame);
     }
 

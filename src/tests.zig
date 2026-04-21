@@ -76,6 +76,7 @@ test {
     _ = @import("dll.zig");
     _ = @import("dll/event_buss.zig");
 
+    _ = @import("dll/core/automation.zig");
     _ = @import("dll/core/controller.zig");
     _ = @import("dll/core/core.zig");
     _ = @import("dll/core/hit_detector.zig");

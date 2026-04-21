@@ -179,9 +179,10 @@ pub const EventBuss = struct {
         self.ui.processFrame(settings, frame);
     }
 
-    pub fn tick(self: *Self, game_memory: *game.Memory(build_info.game)) void {
+    pub fn tick(self: *Self, base_dir: *const sdk.misc.BaseDir, game_memory: *game.Memory(build_info.game)) void {
         game_memory.updateAddresses();
-        self.core.tick(game_memory, self, processFrame);
+        const settings = self.settings_task.peek() orelse return;
+        self.core.tick(base_dir, settings, game_memory, self, processFrame);
     }
 
     pub fn draw(

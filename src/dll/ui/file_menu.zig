@@ -452,7 +452,7 @@ const FileDialog = struct {
         };
         return std.fmt.bufPrintZ(
             buffer,
-            "{:0>4}-{:0>2}-{:0>2} {:0>2}-{:0>2}-{:0>2}",
+            "{:0>4}-{:0>2}-{:0>2}T{:0>2}-{:0>2}-{:0>2}",
             .{ @abs(ts.year), ts.month, ts.day, ts.hour, ts.minute, ts.second },
         ) catch |err| {
             sdk.misc.error_context.append("Failed to construct timestamp string for nano time: {}", .{nano});

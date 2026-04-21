@@ -5,6 +5,32 @@ const sdk = @import("../../sdk/root.zig");
 const model = @import("../model/root.zig");
 
 pub const Details = struct {
+    source: Row(
+        "Source",
+        \\One of the following:
+        \\Practice - Data was recorded inside practice mode.
+        \\Live Game - Data was recorded while a live match was played.
+        \\Replay Loading - Data was recorded during the fast game simulation while a replay was loading.
+        \\Replay Playback - Data was recorded from a manual playback of a already loaded replay.
+    ,
+        model.Source,
+        null,
+        drawSource,
+    ) = .{},
+    match_phase: Row(
+        "Match Phase",
+        \\One of the following:
+        \\Not In Match - Not inside a match. Most commonly in practice mode.
+        \\Intro - Game is playing the character intro animations. The match is beginning.
+        \\Round Start - Starting part of the round where the characters are unable to interact.
+        \\Mid Round - Main part of the round where the characters are fighting.
+        \\Round End - Ending part of the round where the winner of the round is already decided.
+        \\Outro - Game is playing the character outro or match draw animation. The match is ending.
+    ,
+        model.MatchPhase,
+        null,
+        drawMatchPhase,
+    ) = .{},
     frames_since_round_start: Row(
         "Since Round Start",
         \\Number of frames that passed since round start.
@@ -427,6 +453,8 @@ pub const Details = struct {
             .secondary_player => frame.getPlayerByRole(.secondary),
         };
         const s = settings;
+        self.source.processFrame(s, frame.source, frame.source);
+        self.match_phase.processFrame(s, frame.match_phase, frame.match_phase);
         self.frames_since_round_start.processFrame(s, frame.frames_since_round_start, frame.frames_since_round_start);
         self.frames_left_in_round.processFrame(s, frame.frames_left_in_round, frame.frames_left_in_round);
         self.player_name.processFrame(s, c1.name, c2.name);
@@ -776,6 +804,28 @@ fn drawF32MinMax(value: model.F32MinMax, alpha: f32) void {
         return;
     }
     drawText(buffer[0..writer.end :0], alpha);
+}
+
+fn drawSource(value: model.Source, alpha: f32) void {
+    const text = switch (value) {
+        .practice => "Practice",
+        .live_game => "Live Game",
+        .replay_loading => "Replay Loading",
+        .replay_playback => "Replay Playback",
+    };
+    drawText(text, alpha);
+}
+
+fn drawMatchPhase(value: model.MatchPhase, alpha: f32) void {
+    const text = switch (value) {
+        .not_in_a_match => "Not In Match",
+        .intro => "Intro",
+        .round_start => "Round Start",
+        .mid_round => "Mid Round",
+        .round_end => "Round End",
+        .outro => "Outro",
+    };
+    drawText(text, alpha);
 }
 
 fn drawMovePhase(value: model.MovePhase, alpha: f32) void {
@@ -1275,6 +1325,104 @@ test "should not draw row when row is disabled in settings" {
             try ctx.expectItemNotExists("table/Attack Type");
             try ctx.expectItemNotExists("table/Attack Type/cell_1/High");
             try ctx.expectItemNotExists("table/Attack Type/cell_2/Mid");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw source correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Source");
+
+            details.processFrame(&settings, &.{ .source = null });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/---");
+
+            details.processFrame(&settings, &.{ .source = .practice });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Practice");
+            try ctx.expectItemExists("cell_2/Practice");
+
+            details.processFrame(&settings, &.{ .source = .live_game });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Live Game");
+            try ctx.expectItemExists("cell_2/Live Game");
+
+            details.processFrame(&settings, &.{ .source = .replay_loading });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Replay Loading");
+            try ctx.expectItemExists("cell_2/Replay Loading");
+
+            details.processFrame(&settings, &.{ .source = .replay_playback });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Replay Playback");
+            try ctx.expectItemExists("cell_2/Replay Playback");
+        }
+    };
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "should draw match phase correctly" {
+    const Test = struct {
+        var settings = model.DetailsSettings{ .rows_enabled = .{} };
+        var details = Details{};
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            _ = imgui.igBegin("Window", null, 0);
+            defer imgui.igEnd();
+            details.draw(&settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            ctx.setRef("Window/table/Match Phase");
+
+            details.processFrame(&settings, &.{ .match_phase = null });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/---");
+            try ctx.expectItemExists("cell_2/---");
+
+            details.processFrame(&settings, &.{ .match_phase = .not_in_a_match });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Not In Match");
+            try ctx.expectItemExists("cell_2/Not In Match");
+
+            details.processFrame(&settings, &.{ .match_phase = .intro });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Intro");
+            try ctx.expectItemExists("cell_2/Intro");
+
+            details.processFrame(&settings, &.{ .match_phase = .round_start });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Round Start");
+            try ctx.expectItemExists("cell_2/Round Start");
+
+            details.processFrame(&settings, &.{ .match_phase = .mid_round });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Mid Round");
+            try ctx.expectItemExists("cell_2/Mid Round");
+
+            details.processFrame(&settings, &.{ .match_phase = .round_end });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Round End");
+            try ctx.expectItemExists("cell_2/Round End");
+
+            details.processFrame(&settings, &.{ .match_phase = .outro });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Outro");
+            try ctx.expectItemExists("cell_2/Outro");
         }
     };
     const context = try sdk.ui.getTestingContext();

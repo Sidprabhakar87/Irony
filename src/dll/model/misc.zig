@@ -158,3 +158,10 @@ pub const Camera = struct {
     yaw: f32,
     roll: f32,
 };
+
+pub const Source = enum(u2) {
+    practice = 0,
+    live_game = 1,
+    replay_loading = 2,
+    replay_playback = 3,
+};

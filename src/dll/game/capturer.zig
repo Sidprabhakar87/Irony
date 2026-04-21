@@ -31,6 +31,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             const secondary_player_info = game_memory.secondary_player_info.toConstPointer();
             const match = game_memory.match.toConstPointer();
             const ruleset = game_memory.ruleset.toConstPointer();
+            const replay_mode = game_memory.replay_mode.toConstPointer();
             const main_player_id = captureMainPlayerId(main_player_info, secondary_player_info);
             const left_player_id = captureLeftPlayerId(player_1, player_2, main_player_id);
             const floor_z = captureFloorZ(player_1, player_2);
@@ -66,6 +67,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 walls.asSlice(),
             );
             return .{
+                .source = captureSource(match, replay_mode),
                 .rounds_needed_to_win = if (ruleset) |r| r.rounds_needed_to_win else null,
                 .frames_since_round_start = captureFramesSinceRoundStart(player_1, player_2),
                 .frames_left_in_round = captureFramesLeftInRound(match),
@@ -77,6 +79,25 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 .walls = walls,
                 .floor_gimmicks = floor_gimmicks,
             };
+        }
+
+        pub fn captureSource(
+            match_maybe: ?*const game.Match(game_id),
+            replay_mode_maybe: ?*const game.ReplayMode,
+        ) ?model.Source {
+            const match = match_maybe orelse return null;
+            const match_phase: game.MatchPhase = match.phase;
+            if (match_phase == .practice_mode or match_phase == .move_showcase) {
+                return .practice;
+            }
+            if (replay_mode_maybe) |replay_mode| {
+                switch (replay_mode.*) {
+                    .loading => return .replay_loading,
+                    .playback => return .replay_playback,
+                    else => {},
+                }
+            }
+            return .live_game;
         }
 
         fn captureFramesSinceRoundStart(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?u32 {
@@ -964,6 +985,53 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
 }
 
 const testing = std.testing;
+
+test "should capture source correctly" {
+    const gm = game.Memory(.t8).testingInit;
+    var capturer = Capturer(.t8){};
+    try testing.expectEqual(
+        null,
+        capturer.captureFrame(&gm(.{
+            .match = null,
+            .replay_mode = &.playback,
+        })).source,
+    );
+    try testing.expectEqual(
+        .practice,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .practice_mode },
+            .replay_mode = &.playback,
+        })).source,
+    );
+    try testing.expectEqual(
+        .practice,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .move_showcase },
+            .replay_mode = &.playback,
+        })).source,
+    );
+    try testing.expectEqual(
+        .replay_playback,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .mid_round },
+            .replay_mode = &.playback,
+        })).source,
+    );
+    try testing.expectEqual(
+        .replay_loading,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .mid_round },
+            .replay_mode = &.loading,
+        })).source,
+    );
+    try testing.expectEqual(
+        .live_game,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .mid_round },
+            .replay_mode = null,
+        })).source,
+    );
+}
 
 test "should capture rounds needed to win correctly" {
     const gm = game.Memory(.t8).testingInit;

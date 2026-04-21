@@ -165,3 +165,12 @@ pub const Source = enum(u2) {
     replay_loading = 2,
     replay_playback = 3,
 };
+
+pub const MatchPhase = enum(u3) {
+    not_in_a_match = 0,
+    intro = 1,
+    round_start = 2,
+    mid_round = 3,
+    round_end = 4,
+    outro = 5,
+};

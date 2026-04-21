@@ -31,6 +31,7 @@ pub const HeatTag = @import("misc.zig").HeatTag;
 pub const ActivatedHeat = @import("misc.zig").ActivatedHeat;
 pub const Camera = @import("misc.zig").Camera;
 pub const Source = @import("misc.zig").Source;
+pub const MatchPhase = @import("misc.zig").MatchPhase;
 pub const PlayerId = @import("player.zig").PlayerId;
 pub const PlayerSide = @import("player.zig").PlayerSide;
 pub const PlayerRole = @import("player.zig").PlayerRole;

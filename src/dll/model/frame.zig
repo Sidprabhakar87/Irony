@@ -4,6 +4,7 @@ const model = @import("root.zig");
 
 pub const Frame = struct {
     source: ?model.Source = null,
+    match_phase: ?model.MatchPhase = null,
     rounds_needed_to_win: ?u32 = null,
     frames_since_round_start: ?u32 = null,
     frames_left_in_round: ?u32 = null,

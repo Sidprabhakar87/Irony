@@ -68,6 +68,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             );
             return .{
                 .source = captureSource(match, replay_mode),
+                .match_phase = captureMatchPhase(match),
                 .rounds_needed_to_win = if (ruleset) |r| r.rounds_needed_to_win else null,
                 .frames_since_round_start = captureFramesSinceRoundStart(player_1, player_2),
                 .frames_left_in_round = captureFramesLeftInRound(match),
@@ -98,6 +99,19 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 }
             }
             return .live_game;
+        }
+
+        fn captureMatchPhase(match_maybe: ?*const game.Match(game_id)) ?model.MatchPhase {
+            const match = match_maybe orelse return null;
+            const match_phase: game.MatchPhase = match.phase;
+            return switch (match_phase) {
+                .intro_1, .intro_2 => .intro,
+                .round_start => .round_start,
+                .mid_round => .mid_round,
+                .round_end => .round_end,
+                .win_loose_outro, .draw_outro => .outro,
+                else => .not_in_a_match,
+            };
         }
 
         fn captureFramesSinceRoundStart(player_1: ?*const GamePlayer, player_2: ?*const GamePlayer) ?u32 {
@@ -1030,6 +1044,63 @@ test "should capture source correctly" {
             .match = &.{ .phase = .mid_round },
             .replay_mode = null,
         })).source,
+    );
+}
+
+test "should capture match phase correctly" {
+    const gm = game.Memory(.t8).testingInit;
+    var capturer = Capturer(.t8){};
+    try testing.expectEqual(
+        null,
+        capturer.captureFrame(&gm(.{ .match = null })).match_phase,
+    );
+    try testing.expectEqual(
+        .intro,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .intro_1 } })).match_phase,
+    );
+    try testing.expectEqual(
+        .intro,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .intro_2 } })).match_phase,
+    );
+    try testing.expectEqual(
+        .round_start,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .round_start } })).match_phase,
+    );
+    try testing.expectEqual(
+        .mid_round,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .mid_round } })).match_phase,
+    );
+    try testing.expectEqual(
+        .round_end,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .round_end } })).match_phase,
+    );
+    try testing.expectEqual(
+        .outro,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .win_loose_outro } })).match_phase,
+    );
+    try testing.expectEqual(
+        .outro,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .draw_outro } })).match_phase,
+    );
+    try testing.expectEqual(
+        .not_in_a_match,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .@"continue" } })).match_phase,
+    );
+    try testing.expectEqual(
+        .not_in_a_match,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .practice_mode } })).match_phase,
+    );
+    try testing.expectEqual(
+        .not_in_a_match,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .move_showcase } })).match_phase,
+    );
+    try testing.expectEqual(
+        .not_in_a_match,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .rematch_menu_1 } })).match_phase,
+    );
+    try testing.expectEqual(
+        .not_in_a_match,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .rematch_menu_2 } })).match_phase,
     );
 }
 

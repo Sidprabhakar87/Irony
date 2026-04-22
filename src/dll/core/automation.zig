@@ -134,14 +134,57 @@ pub const Automation = struct {
             return err;
         };
 
-        // TODO Filter out invalid file name characters.
         const p1_name = p1.name.asSlice();
         const p2_name = p2.name.asSlice();
+        const is_character_invalid: [256]bool = comptime block: {
+            var result = [1]bool{false} ** 256;
+            for (0..31) |c| {
+                result[c] = true;
+            }
+            result['<'] = true;
+            result['>'] = true;
+            result['"'] = true;
+            result['/'] = true;
+            result['\\'] = true;
+            result['|'] = true;
+            result['?'] = true;
+            result['*'] = true;
+            break :block result;
+        };
+        const placeholder_character = '_';
         if (p1.name.len > 0 and p2.name.len > 0) {
-            writer.print("{s} vs {s}  ", .{ p1_name, p2_name }) catch |err| {
-                sdk.misc.error_context.new("Failed to write player names: {s} vs {s}", .{ p1_name, p2_name });
+            var p1_iterator = (std.unicode.Utf8View{ .bytes = p1_name }).iterator();
+            while (p1_iterator.nextCodepointSlice()) |codepoint| {
+                if (codepoint.len == 1 and is_character_invalid[codepoint[0]]) {
+                    writer.writeByte(placeholder_character) catch |err| {
+                        sdk.misc.error_context.new("Failed to write player 1 name: {s}", .{p1_name});
+                        return err;
+                    };
+                } else {
+                    writer.writeAll(codepoint) catch |err| {
+                        sdk.misc.error_context.new("Failed to write player 1 name: {s}", .{p1_name});
+                        return err;
+                    };
+                }
+            }
+            writer.writeAll(" vs ") catch |err| {
+                sdk.misc.error_context.new("Failed to write: vs", .{});
                 return err;
             };
+            var p2_iterator = (std.unicode.Utf8View{ .bytes = p2_name }).iterator();
+            while (p2_iterator.nextCodepointSlice()) |codepoint| {
+                if (codepoint.len == 1 and is_character_invalid[codepoint[0]]) {
+                    writer.writeByte(placeholder_character) catch |err| {
+                        sdk.misc.error_context.new("Failed to write player 2 name: {s}", .{p2_name});
+                        return err;
+                    };
+                } else {
+                    writer.writeAll(codepoint) catch |err| {
+                        sdk.misc.error_context.new("Failed to write player 2 name: {s}", .{p2_name});
+                        return err;
+                    };
+                }
+            }
         }
 
         if (p1.rounds_won) |p1_rounds| {

@@ -1,25 +1,16 @@
 const std = @import("std");
 
-const declaration = "std::string IGFD::Utils::RoundNumber(double vvalue, int n)";
-const replacement_body =
-    \\{
-    \\    char format[16];
-    \\    std::snprintf(format, sizeof(format), "%%.%df", n);
-    \\    char buffer[128];
-    \\    std::snprintf(buffer, sizeof(buffer), format, vvalue);
-    \\    return std::string(buffer);
-    \\}
-;
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-    if (args.len != 2) {
+    if (args.len != 4) {
         return error.WrongNumberOfArguments;
     }
     const path = args[1];
+    const declaration = args[2];
+    const replacement_body = args[3];
 
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();

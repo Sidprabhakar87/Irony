@@ -235,22 +235,48 @@ fn imguiDependency(
     optimize: std.builtin.OptimizeMode,
     use_test_engine: bool,
 ) ModuleAndLibrary {
-    const file_dialog_patcher = b.addExecutable(.{
-        .name = "imgui_file_dialog_patcher",
+    const find_replace_patcher = b.addExecutable(.{
+        .name = "find_replace_patcher",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("dep/imgui_file_dialog/patcher.zig"),
+            .root_source_file = b.path("dep/file_patchers/find_replace.zig"),
             .target = b.graph.host,
         }),
     });
-    const file_dialog_patcher_run = b.addRunArtifact(file_dialog_patcher);
-    file_dialog_patcher_run.addFileArg(b.dependency("imgui_file_dialog", .{}).path("ImGuiFileDialog.cpp"));
-    const patched_file_dialog = file_dialog_patcher_run.captureStdOut();
+    const function_patcher = b.addExecutable(.{
+        .name = "function_patcher",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("dep/file_patchers/function.zig"),
+            .target = b.graph.host,
+        }),
+    });
+
+    const original = b.dependency("imgui_file_dialog", .{}).path("ImGuiFileDialog.cpp");
+
+    const patch_round_number = b.addRunArtifact(function_patcher);
+    patch_round_number.addFileArg(original);
+    patch_round_number.addArg("std::string IGFD::Utils::RoundNumber(double vvalue, int n)");
+    patch_round_number.addArg(
+        \\{
+        \\    char format[16];
+        \\    std::snprintf(format, sizeof(format), "%%.%df", n);
+        \\    char buffer[128];
+        \\    std::snprintf(buffer, sizeof(buffer), format, vvalue);
+        \\    return std::string(buffer);
+        \\}
+    );
+    const patched_1 = patch_round_number.captureStdOut();
+
+    const patch_file_path = b.addRunArtifact(find_replace_patcher);
+    patch_file_path.addFileArg(patched_1);
+    patch_file_path.addArg("fs::path fpath(vFilePathName);");
+    patch_file_path.addArg("fs::path fpath = fs::u8path(vFilePathName);");
+    const patched_2 = patch_file_path.captureStdOut();
 
     const files = b.addWriteFiles();
     _ = files.addCopyDirectory(b.dependency("cimgui", .{}).path("."), ".", .{});
     _ = files.addCopyDirectory(b.dependency("imgui", .{}).path("."), "./imgui", .{});
     _ = files.addCopyDirectory(b.dependency("imgui_file_dialog", .{}).path("."), "./imgui_file_dialog", .{});
-    _ = files.addCopyFile(patched_file_dialog, "./imgui_file_dialog/ImGuiFileDialog_patched.cpp");
+    _ = files.addCopyFile(patched_2, "./imgui_file_dialog/ImGuiFileDialog_patched.cpp");
     if (use_test_engine) {
         _ = files.addCopyDirectory(
             b.dependency("imgui_test_engine", .{}).path("./imgui_test_engine"),

@@ -288,7 +288,7 @@ const FileDialog = struct {
 
     const directory_name = "recordings";
     const save_filters = block: {
-        var buffer: [128]u8 = undefined;
+        var buffer: [256]u8 = undefined;
         var writer = std.Io.Writer.fixed(&buffer);
         const tags = std.meta.tags(model.RecordingFormat);
         for (tags, 0..) |format, index| {
@@ -308,7 +308,32 @@ const FileDialog = struct {
         const result = buffer[0..(writer.end - 1) :0].*;
         break :block &result;
     };
-    const open_filters = save_filters ++ ",All files (.*){.*}";
+    const open_filters = block: {
+        var buffer: [256]u8 = undefined;
+        var writer = std.Io.Writer.fixed(&buffer);
+        const tags = std.meta.tags(model.RecordingFormat);
+        writer.writeAll(save_filters) catch unreachable;
+        writer.writeAll(",All files (") catch unreachable;
+        for (tags, 0..) |format, index| {
+            const extension = format.getFileExtension();
+            writer.writeAll(extension) catch unreachable;
+            if (index < tags.len - 1) {
+                writer.writeAll(", ") catch unreachable;
+            }
+        }
+        writer.writeAll("){") catch unreachable;
+        for (tags, 0..) |format, index| {
+            const extension = format.getFileExtension();
+            writer.writeAll(extension) catch unreachable;
+            if (index < tags.len - 1) {
+                writer.writeByte(',') catch unreachable;
+            }
+        }
+        writer.writeByte('}') catch unreachable;
+        writer.writeByte(0) catch unreachable;
+        const result = buffer[0..(writer.end - 1) :0].*;
+        break :block &result;
+    };
 
     fn getFormatDisplayName(format: model.RecordingFormat) [:0]const u8 {
         return switch (format) {

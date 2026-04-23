@@ -1,3 +1,4 @@
+pub const AutomationConfig = @import("automation.zig").AutomationConfig;
 pub const Automation = @import("automation.zig").Automation;
 pub const Controller = @import("controller.zig").Controller;
 pub const Core = @import("core.zig").Core;

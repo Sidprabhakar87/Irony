@@ -290,8 +290,8 @@ const FileDialog = struct {
     const save_filters = block: {
         var buffer: [256]u8 = undefined;
         var writer = std.Io.Writer.fixed(&buffer);
-        const tags = std.meta.tags(model.RecordingFormat);
-        for (tags, 0..) |format, index| {
+        const formats = model.RecordingFormat.all;
+        for (formats, 0..) |format, index| {
             const name = getFormatDisplayName(format);
             const extension = format.getFileExtension();
             writer.writeAll(name) catch unreachable;
@@ -300,7 +300,7 @@ const FileDialog = struct {
             writer.writeAll("){") catch unreachable;
             writer.writeAll(extension) catch unreachable;
             writer.writeByte('}') catch unreachable;
-            if (index < tags.len - 1) {
+            if (index < formats.len - 1) {
                 writer.writeByte(',') catch unreachable;
             }
         }
@@ -311,21 +311,21 @@ const FileDialog = struct {
     const open_filters = block: {
         var buffer: [256]u8 = undefined;
         var writer = std.Io.Writer.fixed(&buffer);
-        const tags = std.meta.tags(model.RecordingFormat);
+        const formats = model.RecordingFormat.all;
         writer.writeAll(save_filters) catch unreachable;
         writer.writeAll(",All files (") catch unreachable;
-        for (tags, 0..) |format, index| {
+        for (formats, 0..) |format, index| {
             const extension = format.getFileExtension();
             writer.writeAll(extension) catch unreachable;
-            if (index < tags.len - 1) {
+            if (index < formats.len - 1) {
                 writer.writeAll(", ") catch unreachable;
             }
         }
         writer.writeAll("){") catch unreachable;
-        for (tags, 0..) |format, index| {
+        for (formats, 0..) |format, index| {
             const extension = format.getFileExtension();
             writer.writeAll(extension) catch unreachable;
-            if (index < tags.len - 1) {
+            if (index < formats.len - 1) {
                 writer.writeByte(',') catch unreachable;
             }
         }

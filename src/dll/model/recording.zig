@@ -10,6 +10,7 @@ pub const RecordingFormat = enum {
     json_zstd,
 
     const Self = @This();
+    pub const all = std.meta.tags(Self);
 
     pub fn getFileExtension(self: Self) [:0]const u8 {
         return switch (self) {
@@ -20,7 +21,7 @@ pub const RecordingFormat = enum {
     }
 
     pub fn fromFilePath(path: []const u8) ?Self {
-        for (std.meta.tags(Self)) |self| {
+        for (Self.all) |self| {
             const extension = self.getFileExtension();
             if (std.ascii.endsWithIgnoreCase(path, extension)) {
                 return self;

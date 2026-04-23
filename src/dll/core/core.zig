@@ -11,7 +11,7 @@ pub const Core = struct {
     hit_detector: core.HitDetector,
     move_detector: core.MoveDetector,
     move_measurer: core.MoveMeasurer,
-    automation: core.Automation,
+    automation: core.Automation(.{}),
     controller: core.Controller,
 
     const Self = @This();

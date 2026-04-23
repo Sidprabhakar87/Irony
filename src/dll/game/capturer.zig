@@ -67,7 +67,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 walls.asSlice(),
             );
             return .{
-                .source = captureSource(match, replay_mode),
+                .source = captureSource(match, replay_mode, &game_memory.functions),
                 .match_phase = captureMatchPhase(match),
                 .rounds_needed_to_win = if (ruleset) |r| r.rounds_needed_to_win else null,
                 .frames_since_round_start = captureFramesSinceRoundStart(player_1, player_2),
@@ -85,20 +85,41 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
         pub fn captureSource(
             match_maybe: ?*const game.Match(game_id),
             replay_mode_maybe: ?*const game.ReplayMode,
+            functions: *const game.Memory(game_id).Functions,
         ) ?model.Source {
-            const match = match_maybe orelse return null;
-            const match_phase: game.MatchPhase = match.phase;
-            if (match_phase == .practice_mode or match_phase == .move_showcase) {
-                return .practice;
-            }
-            if (replay_mode_maybe) |replay_mode| {
-                switch (replay_mode.*) {
-                    .loading => return .replay_loading,
-                    .playback => return .replay_playback,
+            if (match_maybe) |match| {
+                switch (match.phase) {
+                    .practice_mode, .move_showcase => return .practice,
                     else => {},
                 }
             }
-            return .live_game;
+            switch (game_id) {
+                .t7 => {
+                    if (replay_mode_maybe) |replay_mode| {
+                        switch (replay_mode.*) {
+                            .loading => return .replay_loading,
+                            .playback => return .replay_playback,
+                            else => {},
+                        }
+                    }
+                },
+                .t8 => {
+                    const isReplay = functions.isReplay orelse return null;
+                    var is_replay: bool = undefined;
+                    var is_precalculated: bool = undefined;
+                    isReplay(&is_replay, &is_precalculated);
+                    if (is_replay) {
+                        return switch (is_precalculated) {
+                            true => .replay_playback,
+                            false => .replay_loading,
+                        };
+                    }
+                },
+            }
+            return switch (match_maybe != null) {
+                true => .live_game,
+                false => null,
+            };
         }
 
         fn captureMatchPhase(match_maybe: ?*const game.Match(game_id)) ?model.MatchPhase {
@@ -1000,27 +1021,55 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
 
 const testing = std.testing;
 
-test "should capture source correctly" {
-    const gm = game.Memory(.t8).testingInit;
-    var capturer = Capturer(.t8){};
+test "should capture source correctly in T7" {
+    const gm = game.Memory(.t7).testingInit;
+    var capturer = Capturer(.t7){};
     try testing.expectEqual(
         null,
         capturer.captureFrame(&gm(.{
             .match = null,
-            .replay_mode = &.playback,
+            .replay_mode = null,
         })).source,
     );
     try testing.expectEqual(
         .practice,
         capturer.captureFrame(&gm(.{
             .match = &.{ .phase = .practice_mode },
-            .replay_mode = &.playback,
+            .replay_mode = null,
         })).source,
     );
     try testing.expectEqual(
         .practice,
         capturer.captureFrame(&gm(.{
             .match = &.{ .phase = .move_showcase },
+            .replay_mode = null,
+        })).source,
+    );
+    try testing.expectEqual(
+        .practice,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .practice_mode },
+            .replay_mode = &.loading,
+        })).source,
+    );
+    try testing.expectEqual(
+        .replay_loading,
+        capturer.captureFrame(&gm(.{
+            .match = null,
+            .replay_mode = &.loading,
+        })).source,
+    );
+    try testing.expectEqual(
+        .replay_loading,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .mid_round },
+            .replay_mode = &.loading,
+        })).source,
+    );
+    try testing.expectEqual(
+        .replay_playback,
+        capturer.captureFrame(&gm(.{
+            .match = null,
             .replay_mode = &.playback,
         })).source,
     );
@@ -1032,17 +1081,99 @@ test "should capture source correctly" {
         })).source,
     );
     try testing.expectEqual(
-        .replay_loading,
+        .live_game,
         capturer.captureFrame(&gm(.{
             .match = &.{ .phase = .mid_round },
-            .replay_mode = &.loading,
+            .replay_mode = null,
+        })).source,
+    );
+}
+
+test "should capture source correctly in T8" {
+    const Functions = struct {
+        fn notReplay(is_replay: *bool, is_pre_calculated: *bool) callconv(.c) void {
+            is_replay.* = false;
+            is_pre_calculated.* = false;
+        }
+        fn replayLoading(is_replay: *bool, is_pre_calculated: *bool) callconv(.c) void {
+            is_replay.* = true;
+            is_pre_calculated.* = false;
+        }
+        fn replayPlayback(is_replay: *bool, is_pre_calculated: *bool) callconv(.c) void {
+            is_replay.* = true;
+            is_pre_calculated.* = true;
+        }
+    };
+    const gm = game.Memory(.t8).testingInit;
+    var capturer = Capturer(.t8){};
+    try testing.expectEqual(
+        null,
+        capturer.captureFrame(&gm(.{
+            .match = null,
+            .functions = .{ .isReplay = null },
+        })).source,
+    );
+    try testing.expectEqual(
+        null,
+        capturer.captureFrame(&gm(.{
+            .match = null,
+            .functions = .{ .isReplay = Functions.notReplay },
+        })).source,
+    );
+    try testing.expectEqual(
+        null,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .mid_round },
+            .functions = .{ .isReplay = null },
+        })).source,
+    );
+    try testing.expectEqual(
+        .practice,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .practice_mode },
+            .functions = .{ .isReplay = null },
+        })).source,
+    );
+    try testing.expectEqual(
+        .practice,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .practice_mode },
+            .functions = .{ .isReplay = Functions.replayLoading },
+        })).source,
+    );
+    try testing.expectEqual(
+        .practice,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .move_showcase },
+            .functions = .{ .isReplay = null },
+        })).source,
+    );
+    try testing.expectEqual(
+        .practice,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .move_showcase },
+            .functions = .{ .isReplay = Functions.replayPlayback },
         })).source,
     );
     try testing.expectEqual(
         .live_game,
         capturer.captureFrame(&gm(.{
             .match = &.{ .phase = .mid_round },
-            .replay_mode = null,
+            .functions = .{ .isReplay = Functions.notReplay },
+        })).source,
+    );
+    try testing.expectEqual(
+        .replay_loading,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .mid_round },
+            .functions = .{ .isReplay = Functions.replayLoading },
+        })).source,
+    );
+    try testing.expectEqual(
+        .replay_playback,
+        capturer.captureFrame(&gm(.{
+            .match = &.{ .phase = .mid_round },
+            .functions = .{ .isReplay = Functions.replayPlayback },
         })).source,
     );
 }

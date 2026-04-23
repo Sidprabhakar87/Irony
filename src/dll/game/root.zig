@@ -74,3 +74,4 @@ pub const FindUnrealClassFunction = @import("types.zig").FindUnrealClassFunction
 pub const FindUnrealObjectsOfClassFunction = @import("types.zig").FindUnrealObjectsOfClassFunction;
 pub const GetGlobalsMapFunction = @import("types.zig").GetGlobalsMapFunction;
 pub const FindGlobalAddressFunction = @import("types.zig").FindGlobalAddressFunction;
+pub const IsReplayFunction = @import("types.zig").IsReplayFunction;

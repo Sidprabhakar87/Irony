@@ -38,6 +38,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 findUnrealObjectsOfClass: ?*const game.FindUnrealObjectsOfClassFunction = null,
                 getGlobalsMap: ?*const game.GetGlobalsMapFunction = null,
                 findGlobalAddress: ?*const game.FindGlobalAddressFunction = null,
+                isReplay: ?*const game.IsReplayFunction = null,
             },
         };
         pub const UnrealClasses = struct {
@@ -268,6 +269,11 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                             cache,
                             "E8 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 48 0F BE CB 48 83 C0 40",
                         ))),
+                    ),
+                    .isReplay = functionPointer(
+                        "isReplay",
+                        game.IsReplayFunction,
+                        pattern(cache, "48 89 5C 24 08 57 48 83 EC 20 C6 01 00"),
                     ),
                 },
             };

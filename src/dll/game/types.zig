@@ -868,3 +868,6 @@ pub const GetGlobalsMapFunction = fn () callconv(.c) *GlobalsMap;
 
 // UE: TMap::Find
 pub const FindGlobalAddressFunction = fn (map: *const GlobalsMap, key: *const GlobalKey) callconv(.c) usize;
+
+// T8: IsReplayMode
+pub const IsReplayFunction = fn (is_replay: *bool, is_pre_calculated: *bool) callconv(.c) void;

@@ -15,6 +15,13 @@ pub const Automation = struct {
     };
     const directory_name = "recordings";
 
+    pub fn update(self: *Self, controller: *core.Controller) void {
+        switch (self.state) {
+            .idle, .recording => {},
+            .saving => self.updateSavingState(controller),
+        }
+    }
+
     pub fn processFrame(
         self: *Self,
         base_dir: *const sdk.misc.BaseDir,
@@ -26,7 +33,7 @@ pub const Automation = struct {
         switch (self.state) {
             .idle => self.processIdleFrame(settings, controller, frame),
             .recording => |source| self.processRecordingFrame(base_dir, settings, controller, frame, source),
-            .saving => self.processSavingFrame(controller),
+            .saving => self.updateSavingState(controller),
         }
     }
 
@@ -70,21 +77,27 @@ pub const Automation = struct {
         frame: *const model.Frame,
         source: model.Source,
     ) void {
+        const setting = switch (source) {
+            .live_game, .practice => settings.live_games,
+            .replay_loading, .replay_playback => settings.replays,
+        };
+        const is_enabled = settings.enabled and setting != .do_not_record;
         const in_a_match = frame.match_phase != null and frame.match_phase != .not_in_a_match;
         const still_recording = controller.mode == .record;
         const source_changed = frame.source != source;
         const last_frame_of_match = self.previous_frame_match_phase == .round_end and frame.match_phase == .outro;
-        if (in_a_match and still_recording and !source_changed and !last_frame_of_match) {
+        if (is_enabled and in_a_match and still_recording and !source_changed and !last_frame_of_match) {
             return;
         }
         if (!still_recording) {
             self.state = .idle;
             return;
         }
-        const setting = switch (source) {
-            .live_game, .practice => settings.live_games,
-            .replay_loading, .replay_playback => settings.replays,
-        };
+        if (!is_enabled) {
+            controller.stop();
+            self.state = .idle;
+            return;
+        }
         switch (setting) {
             .do_not_record, .only_record => {
                 controller.stop();
@@ -106,7 +119,7 @@ pub const Automation = struct {
         }
     }
 
-    fn processSavingFrame(self: *Self, controller: *core.Controller) void {
+    fn updateSavingState(self: *Self, controller: *core.Controller) void {
         if (controller.mode == .save) {
             return;
         }
@@ -168,7 +181,7 @@ pub const Automation = struct {
                 }
             }
             writer.writeAll(" vs ") catch |err| {
-                sdk.misc.error_context.new("Failed to write: vs", .{});
+                sdk.misc.error_context.new("Failed to write player names: {s} vs {s}", .{ p1_name, p2_name });
                 return err;
             };
             var p2_iterator = (std.unicode.Utf8View{ .bytes = p2_name }).iterator();
@@ -185,6 +198,10 @@ pub const Automation = struct {
                     };
                 }
             }
+            writer.writeAll("  ") catch |err| {
+                sdk.misc.error_context.new("Failed to write player names: {s} vs {s}", .{ p1_name, p2_name });
+                return err;
+            };
         }
 
         if (p1.rounds_won) |p1_rounds| {

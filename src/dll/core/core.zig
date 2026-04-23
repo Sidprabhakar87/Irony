@@ -57,6 +57,7 @@ pub const Core = struct {
         context: anytype,
         processFrame: *const fn (context: @TypeOf(context), frame: *const model.Frame) void,
     ) void {
+        self.automation.update(&self.controller);
         self.controller.update(delta_time, context, processFrame);
     }
 };

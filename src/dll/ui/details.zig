@@ -22,10 +22,11 @@ pub const Details = struct {
         \\One of the following:
         \\Not In Match - Not inside a match. Most commonly in practice mode.
         \\Intro - Game is playing the character intro animations. The match is beginning.
-        \\Round Start - Starting part of the round where the characters are unable to interact.
-        \\Mid Round - Main part of the round where the characters are fighting.
-        \\Round End - Ending part of the round where the winner of the round is already decided.
         \\Outro - Game is playing the character outro or match draw animation. The match is ending.
+        \\Round Start - Starting part of the round where the characters are unable to interact.
+        \\Round End - Ending part of the round where the winner of the round is already decided.
+        \\Mid Round - Main part of the round where the characters are fighting.
+        \\In Between Rounds - Game is playing a stage transformation cinematic in between two rounds.
     ,
         model.MatchPhase,
         null,
@@ -820,10 +821,11 @@ fn drawMatchPhase(value: model.MatchPhase, alpha: f32) void {
     const text = switch (value) {
         .not_in_a_match => "Not In Match",
         .intro => "Intro",
-        .round_start => "Round Start",
-        .mid_round => "Mid Round",
-        .round_end => "Round End",
         .outro => "Outro",
+        .round_start => "Round Start",
+        .round_end => "Round End",
+        .mid_round => "Mid Round",
+        .in_between_rounds => "In Between Rounds",
     };
     drawText(text, alpha);
 }
@@ -1404,25 +1406,30 @@ test "should draw match phase correctly" {
             try ctx.expectItemExists("cell_1/Intro");
             try ctx.expectItemExists("cell_2/Intro");
 
+            details.processFrame(&settings, &.{ .match_phase = .outro });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/Outro");
+            try ctx.expectItemExists("cell_2/Outro");
+
             details.processFrame(&settings, &.{ .match_phase = .round_start });
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/Round Start");
             try ctx.expectItemExists("cell_2/Round Start");
-
-            details.processFrame(&settings, &.{ .match_phase = .mid_round });
-            ctx.yield(1);
-            try ctx.expectItemExists("cell_1/Mid Round");
-            try ctx.expectItemExists("cell_2/Mid Round");
 
             details.processFrame(&settings, &.{ .match_phase = .round_end });
             ctx.yield(1);
             try ctx.expectItemExists("cell_1/Round End");
             try ctx.expectItemExists("cell_2/Round End");
 
-            details.processFrame(&settings, &.{ .match_phase = .outro });
+            details.processFrame(&settings, &.{ .match_phase = .mid_round });
             ctx.yield(1);
-            try ctx.expectItemExists("cell_1/Outro");
-            try ctx.expectItemExists("cell_2/Outro");
+            try ctx.expectItemExists("cell_1/Mid Round");
+            try ctx.expectItemExists("cell_2/Mid Round");
+
+            details.processFrame(&settings, &.{ .match_phase = .in_between_rounds });
+            ctx.yield(1);
+            try ctx.expectItemExists("cell_1/In Between Rounds");
+            try ctx.expectItemExists("cell_2/In Between Rounds");
         }
     };
     const context = try sdk.ui.getTestingContext();

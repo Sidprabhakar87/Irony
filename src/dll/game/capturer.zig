@@ -127,10 +127,11 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
             const match_phase: game.MatchPhase = match.phase;
             return switch (match_phase) {
                 .intro_1, .intro_2 => .intro,
-                .round_start => .round_start,
-                .mid_round => .mid_round,
-                .round_end => .round_end,
                 .win_loose_outro, .draw_outro => .outro,
+                .round_start => .round_start,
+                .round_end => .round_end,
+                .mid_round => .mid_round,
+                .stage_transformation => .in_between_rounds,
                 else => .not_in_a_match,
             };
         }
@@ -1212,6 +1213,10 @@ test "should capture match phase correctly" {
     try testing.expectEqual(
         .outro,
         capturer.captureFrame(&gm(.{ .match = &.{ .phase = .draw_outro } })).match_phase,
+    );
+    try testing.expectEqual(
+        .in_between_rounds,
+        capturer.captureFrame(&gm(.{ .match = &.{ .phase = .stage_transformation } })).match_phase,
     );
     try testing.expectEqual(
         .not_in_a_match,

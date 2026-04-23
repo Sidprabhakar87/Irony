@@ -422,6 +422,7 @@ pub const MatchPhase = enum(u32) {
     round_end = 5,
     win_loose_outro = 8,
     draw_outro = 9,
+    stage_transformation = 10,
     @"continue" = 17,
     practice_mode = 21,
     move_showcase = 22,

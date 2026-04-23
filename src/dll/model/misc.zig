@@ -169,8 +169,9 @@ pub const Source = enum(u2) {
 pub const MatchPhase = enum(u3) {
     not_in_a_match = 0,
     intro = 1,
-    round_start = 2,
-    mid_round = 3,
+    outro = 2,
+    round_start = 3,
     round_end = 4,
-    outro = 5,
+    mid_round = 5,
+    in_between_rounds = 6,
 };

@@ -241,16 +241,18 @@ test "should render hello world successfully when rendering api is dx11" {
     const ui_context = try Context(.dx11).init(testing.allocator, null, &dx11_context);
     defer ui_context.deinit();
 
-    ui_context.newFrame();
-    if (imgui.igBegin("Hello world.", null, 0)) {
-        imgui.igText("Hello world.", .{});
-    }
-    imgui.igEnd();
-    ui_context.endFrame();
+    for (0..5) |_| {
+        ui_context.newFrame();
+        if (imgui.igBegin("Hello world.", null, 0)) {
+            imgui.igText("Hello world.", .{});
+        }
+        imgui.igEnd();
+        ui_context.endFrame();
 
-    const buffer_context = try dx11_context.beforeRender();
-    ui_context.render(buffer_context);
-    try dx11_context.afterRender(buffer_context);
+        const buffer_context = try dx11_context.beforeRender();
+        ui_context.render(buffer_context);
+        try dx11_context.afterRender(buffer_context);
+    }
 }
 
 test "should render hello world successfully when rendering api is dx12" {
@@ -267,14 +269,16 @@ test "should render hello world successfully when rendering api is dx12" {
     const ui_context = try Context(.dx12).init(testing.allocator, null, &dx12_context);
     defer ui_context.deinit();
 
-    ui_context.newFrame();
-    if (imgui.igBegin("Hello world.", null, 0)) {
-        imgui.igText("Hello world.", .{});
-    }
-    imgui.igEnd();
-    ui_context.endFrame();
+    for (0..5) |_| {
+        ui_context.newFrame();
+        if (imgui.igBegin("Hello world.", null, 0)) {
+            imgui.igText("Hello world.", .{});
+        }
+        imgui.igEnd();
+        ui_context.endFrame();
 
-    const buffer_context = try dx12_context.beforeRender();
-    ui_context.render(buffer_context);
-    try dx12_context.afterRender(buffer_context);
+        const buffer_context = try dx12_context.beforeRender();
+        ui_context.render(buffer_context);
+        try dx12_context.afterRender(buffer_context);
+    }
 }

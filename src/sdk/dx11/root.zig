@@ -10,4 +10,6 @@ pub const Hooks = @import("hooks.zig").Hooks;
 pub const getWindowFromSwapChain = @import("misc.zig").getWindowFromSwapChain;
 pub const getDeviceFromSwapChain = @import("misc.zig").getDeviceFromSwapChain;
 pub const getDeviceContextFromDevice = @import("misc.zig").getDeviceContextFromDevice;
+pub const Shader = @import("shader.zig").Shader;
+pub const ShaderConfig = @import("shader_config.zig").ShaderConfig;
 pub const TestingContext = @import("testing_context.zig").TestingContext;

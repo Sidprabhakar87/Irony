@@ -4,6 +4,8 @@ test {
     _ = @import("sdk/dx11/functions.zig");
     _ = @import("sdk/dx11/hooks.zig");
     _ = @import("sdk/dx11/misc.zig");
+    _ = @import("sdk/dx11/shader_config.zig");
+    _ = @import("sdk/dx11/shader.zig");
     _ = @import("sdk/dx11/testing_context.zig");
 
     _ = @import("sdk/dx12/context.zig");

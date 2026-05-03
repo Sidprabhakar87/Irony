@@ -14,6 +14,8 @@ test {
     _ = @import("sdk/dx12/functions.zig");
     _ = @import("sdk/dx12/hooks.zig");
     _ = @import("sdk/dx12/misc.zig");
+    _ = @import("sdk/dx12/shader.zig");
+    _ = @import("sdk/dx12/shader_config.zig");
     _ = @import("sdk/dx12/testing_context.zig");
 
     _ = @import("sdk/io/irony.zig");

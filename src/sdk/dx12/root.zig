@@ -12,4 +12,6 @@ pub const getWindowFromSwapChain = @import("misc.zig").getWindowFromSwapChain;
 pub const getDeviceFromSwapChain = @import("misc.zig").getDeviceFromSwapChain;
 pub const getCpuDescriptorHandleForHeapStart = @import("misc.zig").getCpuDescriptorHandleForHeapStart;
 pub const getGpuDescriptorHandleForHeapStart = @import("misc.zig").getGpuDescriptorHandleForHeapStart;
+pub const Shader = @import("shader.zig").Shader;
+pub const ShaderConfig = @import("shader_config.zig").ShaderConfig;
 pub const TestingContext = @import("testing_context.zig").TestingContext;

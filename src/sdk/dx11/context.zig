@@ -149,6 +149,8 @@ test "Context beforeRender and afterRender should succeed" {
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try context.afterRender(buffer_context);
+        const result = context.swap_chain.Present(0, 0);
+        if (dx11.Error.from(result)) |_| return error.PresentFailed;
     }
 }
 
@@ -165,11 +167,15 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try context.afterRender(buffer_context);
+        const result = context.swap_chain.Present(0, 0);
+        if (dx11.Error.from(result)) |_| return error.PresentFailed;
     }
     managed_context.deinitBufferContexts();
     try managed_context.reinitBufferContexts(&host_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try context.afterRender(buffer_context);
+        const result = context.swap_chain.Present(0, 0);
+        if (dx11.Error.from(result)) |_| return error.PresentFailed;
     }
 }

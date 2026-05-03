@@ -323,7 +323,7 @@ pub fn Shader(Vertex: type, Index: type, Constants: type) type {
                         break :b std.mem.alignForward(u32, bytes_needed, 16);
                     },
                 };
-                
+
                 const desc = w32.D3D11_BUFFER_DESC{
                     .ByteWidth = size,
                     .Usage = .DYNAMIC,
@@ -343,7 +343,7 @@ pub fn Shader(Vertex: type, Index: type, Constants: type) type {
                     misc.error_context.append("ID3D11Device.CreateBuffer returned a failure value.", .{});
                     return error.Dx11Error;
                 }
-                
+
                 const buffer = Buffer{ .handle = handle, .size = size };
                 buffer_maybe.* = buffer;
                 break :block buffer;
@@ -680,9 +680,11 @@ test "draw should draw a simple triangle without crashing" {
     try shader.setIndices(&context, &.{ 0, 1, 2 });
     try shader.setConstants(&context, &.{ .screen_size = .fromArray(.{ 1, 1 }) });
 
-    for (0..5) |_| {
+    for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try shader.draw(&context, buffer_context);
         try context.afterRender(buffer_context);
+        const result = context.swap_chain.Present(0, 0);
+        if (dx11.Error.from(result)) |_| return error.PresentFailed;
     }
 }

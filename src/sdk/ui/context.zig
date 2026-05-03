@@ -252,6 +252,8 @@ test "should render hello world successfully when rendering api is dx11" {
         const buffer_context = try dx11_context.beforeRender();
         ui_context.render(buffer_context);
         try dx11_context.afterRender(buffer_context);
+        const result = dx11_context.swap_chain.Present(0, 0);
+        if (dx11.Error.from(result)) |_| return error.PresentFailed;
     }
 }
 
@@ -269,7 +271,7 @@ test "should render hello world successfully when rendering api is dx12" {
     const ui_context = try Context(.dx12).init(testing.allocator, null, &dx12_context);
     defer ui_context.deinit();
 
-    for (0..5) |_| {
+    for (0..10) |_| {
         ui_context.newFrame();
         if (imgui.igBegin("Hello world.", null, 0)) {
             imgui.igText("Hello world.", .{});
@@ -280,5 +282,7 @@ test "should render hello world successfully when rendering api is dx12" {
         const buffer_context = try dx12_context.beforeRender();
         ui_context.render(buffer_context);
         try dx12_context.afterRender(buffer_context);
+        const result = dx12_context.swap_chain.Present(0, 0);
+        if (dx12.Error.from(result)) |_| return error.PresentFailed;
     }
 }

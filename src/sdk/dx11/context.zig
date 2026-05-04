@@ -108,10 +108,16 @@ pub const BufferContext = struct {
         _ = self;
         var array = misc.BoundedArray(8, w32.D3D11_VIEWPORT, undefined, false).empty;
         for (viewports) |*viewport| {
-            const size = switch (viewport.size) {
-                .back_buffer => context.getBackBufferSize() catch |err| {
-                    misc.error_context.append("Failed to get back buffer size.", .{});
-                    return err;
+            const size: math.Vec2 = switch (viewport.size) {
+                .back_buffer => block: {
+                    const integer_size = context.getBackBufferSize() catch |err| {
+                        misc.error_context.append("Failed to get back buffer size.", .{});
+                        return err;
+                    };
+                    break :block .fromArray(.{
+                        @floatFromInt(integer_size.x()),
+                        @floatFromInt(integer_size.y()),
+                    });
                 },
                 .custom => |size| size,
             };
@@ -129,6 +135,55 @@ pub const BufferContext = struct {
         }
         const slice = array.asSlice();
         context.device_context.RSSetViewports(@intCast(slice.len), slice.ptr);
+    }
+
+    pub const ScissorRectangle = union(enum) {
+        full_back_buffer: void,
+        custom: Custom,
+
+        pub const Custom = struct {
+            left: i32,
+            top: i32,
+            right: i32,
+            bottom: i32,
+        };
+    };
+
+    pub fn setScissorRectangles(
+        self: *const Self,
+        context: *const dx11.Context,
+        rectangles: []const ScissorRectangle,
+    ) !void {
+        _ = self;
+        var array = misc.BoundedArray(32, w32.RECT, undefined, false).empty;
+        for (rectangles) |*rectangle| {
+            const element: w32.RECT = switch (rectangle.*) {
+                .full_back_buffer => block: {
+                    const size = context.getBackBufferSize() catch |err| {
+                        misc.error_context.append("Failed to get back buffer size.", .{});
+                        return err;
+                    };
+                    break :block .{
+                        .left = 0,
+                        .top = 0,
+                        .right = @intCast(size.x()),
+                        .bottom = @intCast(size.y()),
+                    };
+                },
+                .custom => |*custom| .{
+                    .left = custom.left,
+                    .top = custom.top,
+                    .right = custom.right,
+                    .bottom = custom.bottom,
+                },
+            };
+            array.append(element) catch |err| {
+                misc.error_context.append("Failed to append a scissor rectangle to bounded array.", .{});
+                return err;
+            };
+        }
+        const slice = array.asSlice();
+        context.device_context.RSSetScissorRects(@intCast(slice.len), slice.ptr);
     }
 };
 
@@ -166,7 +221,7 @@ pub const Context = struct {
         _ = self;
     }
 
-    pub fn getBackBufferSize(self: *const Self) !math.Vec2 {
+    pub fn getBackBufferSize(self: *const Self) !math.Vector(2, u32) {
         var swap_chain_desc: w32.DXGI_SWAP_CHAIN_DESC = undefined;
         const result = self.swap_chain.GetDesc(&swap_chain_desc);
         if (dx11.Error.from(result)) |err| {
@@ -175,8 +230,8 @@ pub const Context = struct {
             return error.Dx11Error;
         }
         return .fromArray(.{
-            @floatFromInt(swap_chain_desc.BufferDesc.Width),
-            @floatFromInt(swap_chain_desc.BufferDesc.Height),
+            swap_chain_desc.BufferDesc.Width,
+            swap_chain_desc.BufferDesc.Height,
         });
     }
 };
@@ -207,6 +262,7 @@ test "Context beforeRender and afterRender should succeed" {
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try buffer_context.setViewports(&context, &.{.{}});
+        try buffer_context.setScissorRectangles(&context, &.{.full_back_buffer});
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx11.Error.from(result)) |_| return error.PresentFailed;
@@ -226,6 +282,7 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try buffer_context.setViewports(&context, &.{.{}});
+        try buffer_context.setScissorRectangles(&context, &.{.full_back_buffer});
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx11.Error.from(result)) |_| return error.PresentFailed;
@@ -235,6 +292,7 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try buffer_context.setViewports(&context, &.{.{}});
+        try buffer_context.setScissorRectangles(&context, &.{.full_back_buffer});
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx11.Error.from(result)) |_| return error.PresentFailed;
@@ -251,5 +309,7 @@ test "Context.getBackBufferSize should return correct value" {
     var managed_context = try ManagedContext.init(testing.allocator, &host_context);
     defer managed_context.deinit();
     const context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
-    try testing.expectEqual(math.Vec2.fromArray(.{ 200, 100 }), context.getBackBufferSize());
+    const size = try context.getBackBufferSize();
+    try testing.expectEqual(200, size.x());
+    try testing.expectEqual(100, size.y());
 }

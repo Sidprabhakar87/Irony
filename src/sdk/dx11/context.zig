@@ -121,6 +121,10 @@ pub const Context = struct {
         _ = self;
         _ = buffer_context;
     }
+
+    pub fn waitForGpu(self: *const Self) void {
+        _ = self;
+    }
 };
 
 const testing = std.testing;

@@ -154,7 +154,8 @@ pub fn Context(comptime rendering_api: build_info.RenderingApi) type {
             };
         }
 
-        pub fn deinit(self: *const Self) void {
+        pub fn deinit(self: *const Self, dx_context: *const dx.Context) void {
+            dx_context.waitForGpu();
             imgui.igSetCurrentContext(self.imgui_context);
             imgui.IGFD_Destroy(self.file_dialog_context);
             switch (rendering_api) {
@@ -239,7 +240,7 @@ test "should render hello world successfully when rendering api is dx11" {
     const dx11_context = dx11.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
 
     const ui_context = try Context(.dx11).init(testing.allocator, null, &dx11_context);
-    defer ui_context.deinit();
+    defer ui_context.deinit(&dx11_context);
 
     for (0..5) |_| {
         ui_context.newFrame();
@@ -269,7 +270,7 @@ test "should render hello world successfully when rendering api is dx12" {
     const dx12_context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
 
     const ui_context = try Context(.dx12).init(testing.allocator, null, &dx12_context);
-    defer ui_context.deinit();
+    defer ui_context.deinit(&dx12_context);
 
     for (0..10) |_| {
         ui_context.newFrame();

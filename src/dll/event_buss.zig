@@ -28,9 +28,6 @@ pub const EventBuss = struct {
     const LatestVersionTask = sdk.misc.Task(?sdk.misc.Version);
     const UiContext = sdk.ui.Context(rendering_api);
 
-    const buffer_count = 3;
-    const srv_heap_size = 64;
-
     pub fn init(
         allocator: std.mem.Allocator,
         base_dir: *const sdk.misc.BaseDir,
@@ -137,7 +134,9 @@ pub const EventBuss = struct {
         host_dx_context: *const dx.HostContext,
     ) void {
         _ = base_dir;
-        _ = host_dx_context;
+        const dx_context = if (self.managed_dx_context) |*mdxc| block: {
+            break :block dx.Context.fromHostAndManaged(host_dx_context, mdxc);
+        } else null;
 
         std.log.debug("Deinitializing UI...", .{});
         self.ui.deinit();
@@ -157,7 +156,7 @@ pub const EventBuss = struct {
 
         std.log.debug("De-initializing UI context...", .{});
         if (self.ui_context) |*context| {
-            context.deinit();
+            context.deinit(&dx_context.?);
             self.ui_context = null;
             std.log.info("UI context de-initialized.", .{});
         } else {

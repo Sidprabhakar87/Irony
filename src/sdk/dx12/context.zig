@@ -406,6 +406,14 @@ pub const Context = struct {
             return error.Dx12Error;
         }
     }
+
+    pub fn waitForGpu(self: *const Self) void {
+        for (self.buffer_contexts) |*buffer_context| {
+            while (buffer_context.fence.GetCompletedValue() < buffer_context.fence_value) {
+                _ = w32.WaitForSingleObject(buffer_context.fence_event, 10);
+            }
+        }
+    }
 };
 
 const testing = std.testing;

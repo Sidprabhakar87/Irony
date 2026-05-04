@@ -172,7 +172,8 @@ pub fn Shader(Vertex: type, Index: type, Constants: type) type {
             };
         }
 
-        pub fn deinit(self: *const Self) void {
+        pub fn deinit(self: *const Self, context: *const dx11.Context) void {
+            context.waitForGpu();
             if (self.constant_buffer) |buffer| {
                 _ = buffer.handle.IUnknown.Release();
             }
@@ -670,7 +671,7 @@ test "draw should draw a simple triangle without crashing" {
     };
 
     var shader = try Shader(Vertex, u16, Constants).init(&context, &.{ .source_code = source_code });
-    defer shader.deinit();
+    defer shader.deinit(&context);
 
     try shader.setVertices(&context, &.{
         .{ .position = .fromArray(.{ -0.5, -0.5, 0 }), .color = .fromArray(.{ 1, 0, 0, 1 }) },

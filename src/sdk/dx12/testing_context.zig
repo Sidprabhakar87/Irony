@@ -57,7 +57,7 @@ pub const TestingContext = struct {
             w32.WS_OVERLAPPEDWINDOW,
             0,
             0,
-            100,
+            200,
             100,
             null,
             null,
@@ -122,7 +122,7 @@ pub const TestingContext = struct {
 
         var swap_chain_desc = w32.DXGI_SWAP_CHAIN_DESC{
             .BufferDesc = .{
-                .Width = 100,
+                .Width = 200,
                 .Height = 100,
                 .RefreshRate = .{ .Numerator = 60, .Denominator = 1 },
                 .Format = w32.DXGI_FORMAT_R8G8B8A8_UNORM,

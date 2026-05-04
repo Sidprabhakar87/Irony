@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const w32 = @import("win32").everything;
 const misc = @import("../misc/root.zig");
 const os = @import("../os/root.zig");
+const math = @import("../math/root.zig");
 const dx12 = @import("root.zig");
 
 pub const HostContext = struct {
@@ -284,6 +285,44 @@ pub const BufferContext = struct {
             std.testing.allocator.destroy(self.test_allocation);
         }
     }
+
+    pub const Viewport = struct {
+        top_left: math.Vec2 = .zero,
+        size: Size = .back_buffer,
+        min_depth: f32 = 0,
+        max_depth: f32 = 1,
+
+        pub const Size = union(enum) {
+            back_buffer: void,
+            custom: math.Vec2,
+        };
+    };
+
+    pub fn setViewports(self: *const Self, context: *const dx12.Context, viewports: []const Viewport) !void {
+        var array = misc.BoundedArray(8, w32.D3D12_VIEWPORT, undefined, false).empty;
+        for (viewports) |*viewport| {
+            const size = switch (viewport.size) {
+                .back_buffer => context.getBackBufferSize() catch |err| {
+                    misc.error_context.append("Failed to get back buffer size.", .{});
+                    return err;
+                },
+                .custom => |size| size,
+            };
+            array.append(.{
+                .TopLeftX = viewport.top_left.x(),
+                .TopLeftY = viewport.top_left.y(),
+                .Width = size.x(),
+                .Height = size.y(),
+                .MinDepth = viewport.min_depth,
+                .MaxDepth = viewport.max_depth,
+            }) catch |err| {
+                misc.error_context.append("Failed to append a viewport to bounded array.", .{});
+                return err;
+            };
+        }
+        const slice = array.asSlice();
+        self.command_list.RSSetViewports(@intCast(slice.len), slice.ptr);
+    }
 };
 
 pub const Context = struct {
@@ -414,6 +453,20 @@ pub const Context = struct {
             }
         }
     }
+
+    pub fn getBackBufferSize(self: *const Self) !math.Vec2 {
+        var swap_chain_desc: w32.DXGI_SWAP_CHAIN_DESC = undefined;
+        const result = self.swap_chain.GetDesc(&swap_chain_desc);
+        if (dx12.Error.from(result)) |err| {
+            misc.error_context.new("{f}", .{err});
+            misc.error_context.append("IDXGISwapChain.GetDesc returned a failure value.", .{});
+            return error.Dx12Error;
+        }
+        return .fromArray(.{
+            @floatFromInt(swap_chain_desc.BufferDesc.Width),
+            @floatFromInt(swap_chain_desc.BufferDesc.Height),
+        });
+    }
 };
 
 const testing = std.testing;
@@ -441,6 +494,7 @@ test "Context beforeRender and afterRender should succeed" {
     const context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
+        try buffer_context.setViewports(&context, &.{.{}});
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx12.Error.from(result)) |_| return error.PresentFailed;
@@ -459,6 +513,7 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
     const context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
+        try buffer_context.setViewports(&context, &.{.{}});
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx12.Error.from(result)) |_| return error.PresentFailed;
@@ -467,8 +522,22 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
     try managed_context.reinitBufferContexts(&host_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
+        try buffer_context.setViewports(&context, &.{.{}});
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx12.Error.from(result)) |_| return error.PresentFailed;
     }
+}
+
+test "Context.getBackBufferSize should return correct value" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    const context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+    try testing.expectEqual(math.Vec2.fromArray(.{ 200, 100 }), context.getBackBufferSize());
 }

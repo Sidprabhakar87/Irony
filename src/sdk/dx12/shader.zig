@@ -693,7 +693,7 @@ test "draw should draw a simple triangle without crashing" {
     const host_context = testing_context.getHostContext();
     var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
     defer managed_context.deinit();
-    const context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
 
     const source_code =
         \\struct Vertex {

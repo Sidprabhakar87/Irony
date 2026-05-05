@@ -312,7 +312,7 @@ pub const Context = struct {
         };
     }
 
-    pub fn beforeRender(self: *const Self) !*BufferContext {
+    pub fn beforeRender(self: *Self) !*BufferContext {
         const swap_chain_3: *const w32.IDXGISwapChain3 = @ptrCast(self.swap_chain);
         const buffer_index = swap_chain_3.GetCurrentBackBufferIndex();
         if (buffer_index >= self.buffer_contexts.len) {
@@ -365,7 +365,7 @@ pub const Context = struct {
         return buffer_context;
     }
 
-    pub fn afterRender(self: *const Self, buffer_context: *BufferContext) !void {
+    pub fn afterRender(self: *Self, buffer_context: *BufferContext) !void {
         buffer_context.command_list.ResourceBarrier(1, &.{.{
             .Type = .TRANSITION,
             .Flags = .{ .END_ONLY = 1 },
@@ -492,7 +492,7 @@ test "Context beforeRender and afterRender should succeed" {
     const host_context = testing_context.getHostContext();
     var managed_context = try ManagedContext.init(testing.allocator, &host_context);
     defer managed_context.deinit();
-    const context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+    var context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try context.setDefaultViewportsAndScissors(buffer_context);
@@ -511,7 +511,7 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
     const host_context = testing_context.getHostContext();
     var managed_context = try ManagedContext.init(testing.allocator, &host_context);
     defer managed_context.deinit();
-    const context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+    var context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
         try context.setDefaultViewportsAndScissors(buffer_context);

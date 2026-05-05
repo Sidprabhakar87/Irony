@@ -196,7 +196,7 @@ pub const EventBuss = struct {
         self.ui.update(delta_time, &self.core.controller);
 
         const managed_dx_context = if (self.managed_dx_context) |*context| context else return;
-        const dx_context = dx.Context.fromHostAndManaged(host_dx_context, managed_dx_context);
+        var dx_context = dx.Context.fromHostAndManaged(host_dx_context, managed_dx_context);
         const ui_context = if (self.ui_context) |*context| context else return;
 
         const latest_version = block: {

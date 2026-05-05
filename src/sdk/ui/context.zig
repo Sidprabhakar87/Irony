@@ -237,7 +237,7 @@ test "should render hello world successfully when rendering api is dx11" {
     const host_context = testing_context.getHostContext();
     var managed_context = try dx11.ManagedContext.init(testing.allocator, &host_context);
     defer managed_context.deinit();
-    const dx11_context = dx11.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+    var dx11_context = dx11.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
 
     const ui_context = try Context(.dx11).init(testing.allocator, null, &dx11_context);
     defer ui_context.deinit(&dx11_context);
@@ -267,7 +267,7 @@ test "should render hello world successfully when rendering api is dx12" {
     const host_context = testing_context.getHostContext();
     var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
     defer managed_context.deinit();
-    const dx12_context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+    var dx12_context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
 
     const ui_context = try Context(.dx12).init(testing.allocator, null, &dx12_context);
     defer ui_context.deinit(&dx12_context);

@@ -636,7 +636,7 @@ fn checkConstantsLayout(comptime Constants: type, vertex_blob: *w32.ID3DBlob) !v
         errdefer misc.error_context.append("Check failed for field: {s}", .{field.name});
         const variable = constants.GetVariableByName(field.name) orelse {
             misc.error_context.append("Failed to find a HLSL variable with matching name.", .{});
-            return error.LinkError;
+            return error.Dx12Error;
         };
         var desc: w32.D3D12_SHADER_VARIABLE_DESC = undefined;
         const desc_result = variable.GetDesc(&desc);
@@ -650,14 +650,14 @@ fn checkConstantsLayout(comptime Constants: type, vertex_blob: *w32.ID3DBlob) !v
                 "GPU offset {} does not match the CPU offset: {}",
                 .{ desc.StartOffset, @offsetOf(Constants, field.name) },
             );
-            return error.LinkError;
+            return error.Dx12Error;
         }
         if (desc.Size != @sizeOf(field.type)) {
             misc.error_context.new(
                 "GPU size {} does not match the CPU size: {}",
                 .{ desc.Size, @sizeOf(field.type) },
             );
-            return error.LinkError;
+            return error.Dx12Error;
         }
         number_of_fields += 1;
     }
@@ -677,14 +677,13 @@ fn checkConstantsLayout(comptime Constants: type, vertex_blob: *w32.ID3DBlob) !v
             "Found {} constant variables on the GPU side while the CPU side contains only {} constant fields.",
             .{ desc.Variables, number_of_fields },
         );
-        return error.LinkError;
+        return error.Dx12Error;
     }
 }
 
 const testing = std.testing;
 
-test "draw should draw a simple triangle without crashing" {
-    std.debug.print("TEST!\n", .{});
+test "should succeed in drawing a shader with only vertices" {
     if (@import("config").skip_gpu) {
         return error.SkipZigTest;
     }
@@ -700,25 +699,79 @@ test "draw should draw a simple triangle without crashing" {
         \\    float3 position : position;
         \\    float4 color : color;
         \\};
-        \\
         \\struct Pixel {
         \\    float4 position: SV_POSITION;
         \\    float4 color: COLOR;
         \\};
-        \\
-        \\cbuffer Constants : register(b0) {
-        \\    float2 screen_size;
-        \\}
-        \\
         \\Pixel vs_main(Vertex vertex) {
         \\    Pixel pixel;
         \\    pixel.position.xyz = vertex.position;
-        \\    pixel.position.xy /= screen_size;
         \\    pixel.position.w = 1;
         \\    pixel.color = vertex.color;
         \\    return pixel;
         \\}
-        \\
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    return pixel.color;
+        \\}
+    ;
+    const Vertex = extern struct {
+        position: math.Vec3,
+        _padding: f32 = 0,
+        color: math.Vec4,
+    };
+
+    var shader = try Shader(Vertex, void, void).init(&context, &.{ .source_code = source_code });
+    defer shader.deinit(&context);
+
+    for (0..10) |frame| {
+        if (frame % 2 == 0) {
+            const f: f32 = @floatFromInt(frame);
+            try shader.setVertices(&context, &.{
+                .{ .position = .fromArray(.{ f * (-0.1), f * (-0.1), 0.5 }), .color = .fromArray(.{ 1, 0, 0, 1 }) },
+                .{ .position = .fromArray(.{ f * 0.1, f * (-0.1), 0 }), .color = .fromArray(.{ 0, 1, 0, 1 }) },
+                .{ .position = .fromArray(.{ 0, f * 0.1, 0 }), .color = .fromArray(.{ 0, 0, 1, 1 }) },
+            });
+        }
+        const buffer_context = try context.beforeRender();
+        try context.setDefaultViewportsAndScissors(buffer_context);
+        try shader.draw(&context, buffer_context);
+        try context.afterRender(buffer_context);
+        const result = context.swap_chain.Present(0, 0);
+        if (dx12.Error.from(result)) |_| return error.PresentFailed;
+    }
+}
+
+test "should succeed in drawing a shader with vertices, indices and constants" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float3 position : position;
+        \\    float4 color : color;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\    float4 color: COLOR;
+        \\};
+        \\cbuffer Constants : register(b0) {
+        \\    float4x4 world_to_clip;
+        \\}
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position.xyz = vertex.position;
+        \\    pixel.position.w = 1;
+        \\    pixel.position = mul(pixel.position, world_to_clip);
+        \\    pixel.color = vertex.color;
+        \\    return pixel;
+        \\}
         \\float4 ps_main(Pixel pixel) : SV_TARGET {
         \\    return pixel.color;
         \\}
@@ -729,21 +782,23 @@ test "draw should draw a simple triangle without crashing" {
         color: math.Vec4,
     };
     const Constants = extern struct {
-        screen_size: math.Vec2,
+        world_to_clip: math.Mat4,
     };
 
     var shader = try Shader(Vertex, u16, Constants).init(&context, &.{ .source_code = source_code });
     defer shader.deinit(&context);
 
-    try shader.setVertices(&context, &.{
-        .{ .position = .fromArray(.{ -0.5, -0.5, 0 }), .color = .fromArray(.{ 1, 0, 0, 1 }) },
-        .{ .position = .fromArray(.{ 0.5, -0.5, 0 }), .color = .fromArray(.{ 0, 1, 0, 1 }) },
-        .{ .position = .fromArray(.{ 0, 0.5, 0 }), .color = .fromArray(.{ 0, 0, 1, 1 }) },
-    });
-    try shader.setIndices(&context, &.{ 0, 1, 2 });
-    try shader.setConstants(&context, &.{ .screen_size = .fromArray(.{ 1, 1 }) });
-
-    for (0..10) |_| {
+    for (0..10) |frame| {
+        if (frame % 2 == 0) {
+            const f: f32 = @floatFromInt(frame);
+            try shader.setVertices(&context, &.{
+                .{ .position = .fromArray(.{ f * (-0.1), f * (-0.1), 0.5 }), .color = .fromArray(.{ 1, 0, 0, 1 }) },
+                .{ .position = .fromArray(.{ f * 0.1, f * (-0.1), 0 }), .color = .fromArray(.{ 0, 1, 0, 1 }) },
+                .{ .position = .fromArray(.{ 0, f * 0.1, 0 }), .color = .fromArray(.{ 0, 0, 1, 1 }) },
+            });
+            try shader.setIndices(&context, &.{ 0, 1, 2 });
+            try shader.setConstants(&context, &.{ .world_to_clip = .identity });
+        }
         const buffer_context = try context.beforeRender();
         try context.setDefaultViewportsAndScissors(buffer_context);
         try shader.draw(&context, buffer_context);
@@ -751,4 +806,367 @@ test "draw should draw a simple triangle without crashing" {
         const result = context.swap_chain.Present(0, 0);
         if (dx12.Error.from(result)) |_| return error.PresentFailed;
     }
+}
+
+test "init should error when source code has syntax error" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const Vertex = extern struct { vec: math.Vec4 };
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, void).init(&context, &.{ .source_code = "syntax error" }),
+    );
+}
+
+test "init should error when vertex field is missing on CPU side" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float2 position_xy : position_xy;
+        \\    float2 position_zw : position_zw;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position.xy = vertex.position_xy;
+        \\    pixel.position.zw = vertex.position_zw;
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position_xy: math.Vec2, _padding: math.Vec2 };
+
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, void).init(&context, &.{ .source_code = source_code }),
+    );
+}
+
+// TODO vertex runtime reflection tests
+
+test "init should error when constant field is missing on CPU side" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\cbuffer Constants : register(b0) {
+        \\    float4x4 transform_1;
+        \\    float4x4 transform_2;
+        \\}
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    pixel.position = mul(pixel.position, transform_1);
+        \\    pixel.position = mul(pixel.position, transform_2);
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec4 };
+    const Constants = extern struct { transform_1: math.Mat4 };
+
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, Constants).init(&context, &.{ .source_code = source_code }),
+    );
+}
+
+test "init should error when constant field is missing on GPU side" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\cbuffer Constants : register(b0) {
+        \\    float4x4 transform_1;
+        \\}
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    pixel.position = mul(pixel.position, transform_1);
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec4 };
+    const Constants = extern struct { transform_1: math.Mat4, transform_2: math.Mat4 };
+
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, Constants).init(&context, &.{ .source_code = source_code }),
+    );
+}
+
+test "init should error when constant field has different offset on GPU then on CPU" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\cbuffer Constants : register(b0) {
+        \\    float3 offset_1;
+        \\    float3 offset_2;
+        \\}
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    pixel.position.xyz += offset_1;
+        \\    pixel.position.xyz += offset_2;
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec4 };
+    const Constants = extern struct { offset_1: math.Vec3, offset_2: math.Vec3 };
+
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, Constants).init(&context, &.{ .source_code = source_code }),
+    );
+}
+
+test "init should error when constant field has different size on GPU then on CPU" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\cbuffer Constants : register(b0) {
+        \\    float4x4 transform;
+        \\}
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    pixel.position = mul(pixel.position, transform);
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec4 };
+    const Constants = extern struct { transform: math.Mat3 };
+
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, Constants).init(&context, &.{ .source_code = source_code }),
+    );
+}
+
+test "draw should error when vertices are not set" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec4 };
+
+    var shader = try Shader(Vertex, void, void).init(&context, &.{ .source_code = source_code });
+    defer shader.deinit(&context);
+
+    const buffer_context = try context.beforeRender();
+    defer context.afterRender(buffer_context) catch @panic("Failed to execute afterRender().");
+    try context.setDefaultViewportsAndScissors(buffer_context);
+
+    try testing.expectError(error.MissingVertices, shader.draw(&context, buffer_context));
+}
+
+test "draw should error when indices are not set" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec4 };
+
+    var shader = try Shader(Vertex, u32, void).init(&context, &.{ .source_code = source_code });
+    defer shader.deinit(&context);
+
+    try shader.setVertices(&context, &.{
+        .{ .position = .fromArray(.{ 0.1, 0.1, 0.1, 1.0 }) },
+        .{ .position = .fromArray(.{ 0.2, 0.2, 0.2, 1.0 }) },
+        .{ .position = .fromArray(.{ 0.3, 0.3, 0.3, 1.0 }) },
+    });
+
+    const buffer_context = try context.beforeRender();
+    defer context.afterRender(buffer_context) catch @panic("Failed to execute afterRender().");
+    try context.setDefaultViewportsAndScissors(buffer_context);
+
+    try testing.expectError(error.MissingIndices, shader.draw(&context, buffer_context));
+}
+
+test "draw should error when constants are not set" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\cbuffer Constants : register(b0) {
+        \\    float4x4 transform;
+        \\}
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    pixel.position = mul(pixel.position, transform);
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec4 };
+    const Constants = extern struct { transform: math.Mat4 };
+
+    var shader = try Shader(Vertex, void, Constants).init(&context, &.{ .source_code = source_code });
+    defer shader.deinit(&context);
+
+    try shader.setVertices(&context, &.{
+        .{ .position = .fromArray(.{ 0.1, 0.1, 0.1, 1.0 }) },
+        .{ .position = .fromArray(.{ 0.2, 0.2, 0.2, 1.0 }) },
+        .{ .position = .fromArray(.{ 0.3, 0.3, 0.3, 1.0 }) },
+    });
+
+    const buffer_context = try context.beforeRender();
+    defer context.afterRender(buffer_context) catch @panic("Failed to execute afterRender().");
+    try context.setDefaultViewportsAndScissors(buffer_context);
+
+    try testing.expectError(error.MissingConstants, shader.draw(&context, buffer_context));
 }

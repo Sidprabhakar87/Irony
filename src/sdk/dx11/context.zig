@@ -91,100 +91,6 @@ pub const BufferContext = struct {
             std.testing.allocator.destroy(self.test_allocation);
         }
     }
-
-    pub const Viewport = struct {
-        top_left: math.Vec2 = .zero,
-        size: Size = .back_buffer,
-        min_depth: f32 = 0,
-        max_depth: f32 = 1,
-
-        pub const Size = union(enum) {
-            back_buffer: void,
-            custom: math.Vec2,
-        };
-    };
-
-    pub fn setViewports(self: *const Self, context: *const dx11.Context, viewports: []const Viewport) !void {
-        _ = self;
-        var array = misc.BoundedArray(8, w32.D3D11_VIEWPORT, undefined, false).empty;
-        for (viewports) |*viewport| {
-            const size: math.Vec2 = switch (viewport.size) {
-                .back_buffer => block: {
-                    const integer_size = context.getBackBufferSize() catch |err| {
-                        misc.error_context.append("Failed to get back buffer size.", .{});
-                        return err;
-                    };
-                    break :block .fromArray(.{
-                        @floatFromInt(integer_size.x()),
-                        @floatFromInt(integer_size.y()),
-                    });
-                },
-                .custom => |size| size,
-            };
-            array.append(.{
-                .TopLeftX = viewport.top_left.x(),
-                .TopLeftY = viewport.top_left.y(),
-                .Width = size.x(),
-                .Height = size.y(),
-                .MinDepth = viewport.min_depth,
-                .MaxDepth = viewport.max_depth,
-            }) catch |err| {
-                misc.error_context.append("Failed to append a viewport to bounded array.", .{});
-                return err;
-            };
-        }
-        const slice = array.asSlice();
-        context.device_context.RSSetViewports(@intCast(slice.len), slice.ptr);
-    }
-
-    pub const ScissorRectangle = union(enum) {
-        full_back_buffer: void,
-        custom: Custom,
-
-        pub const Custom = struct {
-            left: i32,
-            top: i32,
-            right: i32,
-            bottom: i32,
-        };
-    };
-
-    pub fn setScissorRectangles(
-        self: *const Self,
-        context: *const dx11.Context,
-        rectangles: []const ScissorRectangle,
-    ) !void {
-        _ = self;
-        var array = misc.BoundedArray(32, w32.RECT, undefined, false).empty;
-        for (rectangles) |*rectangle| {
-            const element: w32.RECT = switch (rectangle.*) {
-                .full_back_buffer => block: {
-                    const size = context.getBackBufferSize() catch |err| {
-                        misc.error_context.append("Failed to get back buffer size.", .{});
-                        return err;
-                    };
-                    break :block .{
-                        .left = 0,
-                        .top = 0,
-                        .right = @intCast(size.x()),
-                        .bottom = @intCast(size.y()),
-                    };
-                },
-                .custom => |*custom| .{
-                    .left = custom.left,
-                    .top = custom.top,
-                    .right = custom.right,
-                    .bottom = custom.bottom,
-                },
-            };
-            array.append(element) catch |err| {
-                misc.error_context.append("Failed to append a scissor rectangle to bounded array.", .{});
-                return err;
-            };
-        }
-        const slice = array.asSlice();
-        context.device_context.RSSetScissorRects(@intCast(slice.len), slice.ptr);
-    }
 };
 
 pub const Context = struct {
@@ -234,6 +140,45 @@ pub const Context = struct {
             swap_chain_desc.BufferDesc.Height,
         });
     }
+
+    pub fn setViewports(
+        self: *const Self,
+        buffer_context: *const dx11.BufferContext,
+        viewports: []const w32.D3D11_VIEWPORT,
+    ) void {
+        _ = buffer_context;
+        self.device_context.RSSetViewports(@intCast(viewports.len), viewports.ptr);
+    }
+
+    pub fn setScissorRectangles(
+        self: *const Self,
+        buffer_context: *const dx11.BufferContext,
+        rectangles: []const w32.RECT,
+    ) void {
+        _ = buffer_context;
+        self.device_context.RSSetScissorRects(@intCast(rectangles.len), rectangles.ptr);
+    }
+
+    pub fn setDefaultViewportsAndScissors(self: *const Self, buffer_context: *const dx11.BufferContext) !void {
+        const size = self.getBackBufferSize() catch |err| {
+            misc.error_context.append("Failed to get back buffer size.", .{});
+            return err;
+        };
+        self.setViewports(buffer_context, &.{.{
+            .TopLeftX = 0,
+            .TopLeftY = 0,
+            .Width = @floatFromInt(size.x()),
+            .Height = @floatFromInt(size.y()),
+            .MinDepth = 0,
+            .MaxDepth = 1,
+        }});
+        self.setScissorRectangles(buffer_context, &.{.{
+            .left = 0,
+            .top = 0,
+            .right = @intCast(size.x()),
+            .bottom = @intCast(size.y()),
+        }});
+    }
 };
 
 const testing = std.testing;
@@ -261,8 +206,7 @@ test "Context beforeRender and afterRender should succeed" {
     const context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
-        try buffer_context.setViewports(&context, &.{.{}});
-        try buffer_context.setScissorRectangles(&context, &.{.full_back_buffer});
+        try context.setDefaultViewportsAndScissors(buffer_context);
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx11.Error.from(result)) |_| return error.PresentFailed;
@@ -281,8 +225,7 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
     const context = Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
-        try buffer_context.setViewports(&context, &.{.{}});
-        try buffer_context.setScissorRectangles(&context, &.{.full_back_buffer});
+        try context.setDefaultViewportsAndScissors(buffer_context);
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx11.Error.from(result)) |_| return error.PresentFailed;
@@ -291,8 +234,7 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
     try managed_context.reinitBufferContexts(&host_context);
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
-        try buffer_context.setViewports(&context, &.{.{}});
-        try buffer_context.setScissorRectangles(&context, &.{.full_back_buffer});
+        try context.setDefaultViewportsAndScissors(buffer_context);
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (dx11.Error.from(result)) |_| return error.PresentFailed;

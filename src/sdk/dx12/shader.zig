@@ -745,8 +745,7 @@ test "draw should draw a simple triangle without crashing" {
 
     for (0..10) |_| {
         const buffer_context = try context.beforeRender();
-        try buffer_context.setViewports(&context, &.{.{}});
-        try buffer_context.setScissorRectangles(&context, &.{.full_back_buffer});
+        try context.setDefaultViewportsAndScissors(buffer_context);
         try shader.draw(&context, buffer_context);
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);

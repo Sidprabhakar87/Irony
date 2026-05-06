@@ -346,3 +346,181 @@ pub const ShaderConfig = struct {
         }
     };
 };
+
+const testing = std.testing;
+
+test "PrimitiveTopology.toNative should return correct value" {
+    const T = ShaderConfig.PrimitiveTopology;
+    const N = w32.D3D_PRIMITIVE_TOPOLOGY;
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_POINTLIST, T.point_list.toNative());
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_LINELIST, T.line_list.toNative());
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_LINESTRIP, T.line_strip.toNative());
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_TRIANGLELIST, T.triangle_list.toNative());
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, T.triangle_strip.toNative());
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_LINELIST_ADJ, T.line_list_adj.toNative());
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ, T.line_strip_adj.toNative());
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ, T.triangle_list_adj.toNative());
+    try testing.expectEqual(N._PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ, T.triangle_strip_adj.toNative());
+}
+
+test "getNativeDepthStencil should return correct value" {
+    const native_1 = (ShaderConfig{
+        .source_code = "",
+        .depth = .{
+            .enable_testing = false,
+            .enable_writing = true,
+            .testing_function = .less,
+        },
+        .stencil = null,
+    }).getNativeDepthStencil();
+    try testing.expectEqual(0, native_1.DepthEnable);
+    try testing.expectEqual(w32.D3D11_DEPTH_WRITE_MASK.ALL, native_1.DepthWriteMask);
+    try testing.expectEqual(w32.D3D11_COMPARISON_FUNC.LESS, native_1.DepthFunc);
+    try testing.expectEqual(0, native_1.StencilEnable);
+
+    try testing.expectEqual(
+        w32.D3D11_DEPTH_STENCIL_DESC{
+            .DepthEnable = 1,
+            .DepthWriteMask = .ZERO,
+            .DepthFunc = .GREATER,
+            .StencilEnable = 1,
+            .StencilReadMask = 0x0F,
+            .StencilWriteMask = 0xF0,
+            .FrontFace = .{
+                .StencilFailOp = .KEEP,
+                .StencilDepthFailOp = .ZERO,
+                .StencilPassOp = .REPLACE,
+                .StencilFunc = .LESS_EQUAL,
+            },
+            .BackFace = .{
+                .StencilFailOp = .INCR_SAT,
+                .StencilDepthFailOp = .DECR_SAT,
+                .StencilPassOp = .INVERT,
+                .StencilFunc = .LESS_EQUAL,
+            },
+        },
+        (ShaderConfig{
+            .source_code = "",
+            .depth = .{
+                .enable_testing = true,
+                .enable_writing = false,
+                .testing_function = .greater,
+            },
+            .stencil = .{
+                .read_mask = 0x0F,
+                .write_mask = 0xF0,
+                .front_face = .{
+                    .stencil_fail_operation = .keep,
+                    .stencil_pass_depth_fail_operation = .zero,
+                    .stencil_pass_depth_pass_operation = .replace,
+                    .function = .less_equal,
+                },
+                .back_face = .{
+                    .stencil_fail_operation = .increment_sat,
+                    .stencil_pass_depth_fail_operation = .decrement_sat,
+                    .stencil_pass_depth_pass_operation = .invert,
+                    .function = .less_equal,
+                },
+            },
+        }).getNativeDepthStencil(),
+    );
+}
+
+test "Blend.toNative should return correct value" {
+    const native_1 = (ShaderConfig.Blend{
+        .enable_alpha_to_coverage = false,
+        .mode = .{ .shared = null },
+    }).toNative();
+    try testing.expectEqual(0, native_1.AlphaToCoverageEnable);
+    try testing.expectEqual(0, native_1.IndependentBlendEnable);
+    try testing.expectEqual(0, native_1.RenderTarget[0].BlendEnable);
+
+    const native_2 = (ShaderConfig.Blend{
+        .enable_alpha_to_coverage = true,
+        .mode = .{ .shared = .{
+            .src = .zero,
+            .dest = .one,
+            .op = .add,
+            .src_alpha = .src_color,
+            .dest_alpha = .inv_src_color,
+            .op_alpha = .subtract,
+            .render_target_write_mask = .{ .red = 1 },
+        } },
+    }).toNative();
+    try testing.expectEqual(1, native_2.AlphaToCoverageEnable);
+    try testing.expectEqual(0, native_2.IndependentBlendEnable);
+    try testing.expectEqual(1, native_2.RenderTarget[0].BlendEnable);
+    try testing.expectEqual(w32.D3D11_BLEND.ZERO, native_2.RenderTarget[0].SrcBlend);
+    try testing.expectEqual(w32.D3D11_BLEND.ONE, native_2.RenderTarget[0].DestBlend);
+    try testing.expectEqual(w32.D3D11_BLEND_OP.ADD, native_2.RenderTarget[0].BlendOp);
+    try testing.expectEqual(w32.D3D11_BLEND.SRC_COLOR, native_2.RenderTarget[0].SrcBlendAlpha);
+    try testing.expectEqual(w32.D3D11_BLEND.INV_SRC_COLOR, native_2.RenderTarget[0].DestBlendAlpha);
+    try testing.expectEqual(w32.D3D11_BLEND_OP.SUBTRACT, native_2.RenderTarget[0].BlendOpAlpha);
+    try testing.expectEqual(
+        @intFromEnum(w32.D3D12_COLOR_WRITE_ENABLE.RED),
+        native_2.RenderTarget[0].RenderTargetWriteMask,
+    );
+
+    const native_3 = (ShaderConfig.Blend{
+        .enable_alpha_to_coverage = false,
+        .mode = .{ .independent = [1]?ShaderConfig.Blend.Target{null} ** 8 },
+    }).toNative();
+    try testing.expectEqual(0, native_3.AlphaToCoverageEnable);
+    try testing.expectEqual(1, native_3.IndependentBlendEnable);
+    for (&native_3.RenderTarget) |*target| {
+        try testing.expectEqual(0, target.BlendEnable);
+    }
+}
+
+test "Rasterizer.toNative should return correct value" {
+    try testing.expectEqual(
+        w32.D3D11_RASTERIZER_DESC{
+            .FillMode = .WIREFRAME,
+            .CullMode = .NONE,
+            .FrontCounterClockwise = 0,
+            .DepthBias = 1,
+            .DepthBiasClamp = 2,
+            .SlopeScaledDepthBias = 3,
+            .DepthClipEnable = 0,
+            .ScissorEnable = 1,
+            .MultisampleEnable = 1,
+            .AntialiasedLineEnable = 0,
+        },
+        (ShaderConfig.Rasterizer{
+            .fill_mode = .wireframe,
+            .cull_mode = .none,
+            .front_direction = .clockwise,
+            .depth_bias = 1,
+            .depth_bias_clamp = 2,
+            .slope_scaled_depth_bias = 3,
+            .enable_depth_clipping = false,
+            .enable_multisampling = true,
+            .enable_line_antialiasing = false,
+        }).toNative(),
+    );
+    try testing.expectEqual(
+        w32.D3D11_RASTERIZER_DESC{
+            .FillMode = .SOLID,
+            .CullMode = .FRONT,
+            .FrontCounterClockwise = 1,
+            .DepthBias = 4,
+            .DepthBiasClamp = 5,
+            .SlopeScaledDepthBias = 6,
+            .DepthClipEnable = 1,
+            .ScissorEnable = 1,
+            .MultisampleEnable = 0,
+            .AntialiasedLineEnable = 1,
+        },
+        (ShaderConfig.Rasterizer{
+            .fill_mode = .solid,
+            .cull_mode = .front,
+            .front_direction = .counter_clockwise,
+            .depth_bias = 4,
+            .depth_bias_clamp = 5,
+            .slope_scaled_depth_bias = 6,
+            .enable_depth_clipping = true,
+            .enable_multisampling = false,
+            .enable_line_antialiasing = true,
+        }).toNative(),
+    );
+}

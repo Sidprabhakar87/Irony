@@ -56,7 +56,28 @@ pub fn Shader(Vertex: type, Index: type, Constants: type) type {
                 _ = blob.IUnknown.Release();
             };
 
-            try checkConstantsLayout(Constants, vertex_blob);
+            var reflection: *w32.ID3D12ShaderReflection = undefined;
+            const reflect_result = w32.D3DReflect(
+                @ptrCast(vertex_blob.GetBufferPointer()),
+                vertex_blob.GetBufferSize(),
+                w32.IID_ID3D12ShaderReflection,
+                @ptrCast(&reflection),
+            );
+            if (dx12.Error.from(reflect_result)) |err| {
+                misc.error_context.new("{f}", .{err});
+                misc.error_context.append("ID3DReflect returned a failure value.", .{});
+                return error.Dx12Error;
+            }
+            defer _ = reflection.IUnknown.Release();
+
+            checkVertexLayout(Vertex, reflection) catch |err| {
+                misc.error_context.append("Vertex layout check failed.", .{});
+                return err;
+            };
+            checkConstantsLayout(Constants, reflection) catch |err| {
+                misc.error_context.append("Constants layout check failed.", .{});
+                return err;
+            };
 
             const params = w32.D3D12_ROOT_PARAMETER{
                 .ParameterType = .CBV,
@@ -496,7 +517,7 @@ inline fn getInputLayoutDesc(comptime Vertex: type) w32.D3D12_INPUT_LAYOUT_DESC 
             result[len] = .{
                 .SemanticName = field.name,
                 .SemanticIndex = 0,
-                .Format = getTypeFormat(field.type),
+                .Format = getInputParameterInfo(field.type).type_format,
                 .InputSlot = 0,
                 .AlignedByteOffset = @offsetOf(Vertex, field.name),
                 .InputSlotClass = .VERTEX_DATA,
@@ -512,86 +533,88 @@ inline fn getInputLayoutDesc(comptime Vertex: type) w32.D3D12_INPUT_LAYOUT_DESC 
     };
 }
 
-inline fn getTypeFormat(comptime Type: type) w32.DXGI_FORMAT {
-    return switch (Type) {
-        u8 => .R8_UINT,
-        [1]u8 => .R8_UINT,
-        [2]u8 => .R8G8_UINT,
-        [3]u8 => .R8G8B8_UINT,
-        [4]u8 => .R8G8B8A8_UINT,
-        math.Vector(1, u8) => .R8_UINT,
-        math.Vector(2, u8) => .R8G8_UINT,
-        math.Vector(3, u8) => .R8G8B8_UINT,
-        math.Vector(4, u8) => .R8G8B8A8_UINT,
-        i8 => .R8_SINT,
-        [1]i8 => .R8_SINT,
-        [2]i8 => .R8G8_SINT,
-        [3]i8 => .R8G8B8_SINT,
-        [4]i8 => .R8G8B8A8_SINT,
-        math.Vector(1, i8) => .R8_SINT,
-        math.Vector(2, i8) => .R8G8_SINT,
-        math.Vector(3, i8) => .R8G8B8_SINT,
-        math.Vector(4, i8) => .R8G8B8A8_SINT,
-        u16 => .R16_UINT,
-        [1]u16 => .R16_UINT,
-        [2]u16 => .R16G16_UINT,
-        [3]u16 => .R16G16B16_UINT,
-        [4]u16 => .R16G16B16A16_UINT,
-        math.Vector(1, u16) => .R16_UINT,
-        math.Vector(2, u16) => .R16G16_UINT,
-        math.Vector(3, u16) => .R16G16B16_UINT,
-        math.Vector(4, u16) => .R16G16B16A16_UINT,
-        i16 => .R16_SINT,
-        [1]i16 => .R16_SINT,
-        [2]i16 => .R16G16_SINT,
-        [3]i16 => .R16G16B16_SINT,
-        [4]i16 => .R16G16B16A16_SINT,
-        math.Vector(1, i16) => .R16_SINT,
-        math.Vector(2, i16) => .R16G16_SINT,
-        math.Vector(3, i16) => .R16G16B16_SINT,
-        math.Vector(4, i16) => .R16G16B16A16_SINT,
-        f16 => .R16_FLOAT,
-        [1]f16 => .R16_FLOAT,
-        [2]f16 => .R16G16_FLOAT,
-        [3]f16 => .R16G16B16_FLOAT,
-        [4]f16 => .R16G16B16A16_FLOAT,
-        math.Vector(1, f16) => .R16_FLOAT,
-        math.Vector(2, f16) => .R16G16_FLOAT,
-        math.Vector(3, f16) => .R16G16B16_FLOAT,
-        math.Vector(4, f16) => .R16G16B16A16_FLOAT,
-        u32 => .R32_UINT,
-        [1]u32 => .R32_UINT,
-        [2]u32 => .R32G32_UINT,
-        [3]u32 => .R32G32B32_UINT,
-        [4]u32 => .R32G32B32A32_UINT,
-        math.Vector(1, u32) => .R32_UINT,
-        math.Vector(2, u32) => .R32G32_UINT,
-        math.Vector(3, u32) => .R32G32B32_UINT,
-        math.Vector(4, u32) => .R32G32B32A32_UINT,
-        i32 => .R32_SINT,
-        [1]i32 => .R32_SINT,
-        [2]i32 => .R32G32_SINT,
-        [3]i32 => .R32G32B32_SINT,
-        [4]i32 => .R32G32B32A32_SINT,
-        math.Vector(1, i32) => .R32_SINT,
-        math.Vector(2, i32) => .R32G32_SINT,
-        math.Vector(3, i32) => .R32G32B32_SINT,
-        math.Vector(4, i32) => .R32G32B32A32_SINT,
-        f32 => .R32_FLOAT,
-        [1]f32 => .R32_FLOAT,
-        [2]f32 => .R32G32_FLOAT,
-        [3]f32 => .R32G32B32_FLOAT,
-        [4]f32 => .R32G32B32A32_FLOAT,
-        math.Vector(1, f32) => .R32_FLOAT,
-        math.Vector(2, f32) => .R32G32_FLOAT,
-        math.Vector(3, f32) => .R32G32B32_FLOAT,
-        math.Vector(4, f32) => .R32G32B32A32_FLOAT,
-        else => @compileError("Unsupported vertex attribute type: " ++ @typeName(Type)),
+fn checkVertexLayout(comptime Vertex: type, reflection: *const w32.ID3D12ShaderReflection) !void {
+    const info = switch (@typeInfo(Vertex)) {
+        .@"struct" => |*info| info,
+        else => @compileError("Expecting Vertex to be a struct type but got: " ++ @typeName(Vertex)),
     };
+    if (info.layout != .@"extern") {
+        @compileError(std.fmt.comptimePrint(
+            "Expecting vertex struct {s} to have extern layout but got: {s}",
+            .{ @typeName(Vertex), @tagName(info.layout) },
+        ));
+    }
+
+    var shader_desc: w32.D3D12_SHADER_DESC = undefined;
+    const shader_result = reflection.GetDesc(&shader_desc);
+    if (dx12.Error.from(shader_result)) |err| {
+        misc.error_context.new("{f}", .{err});
+        misc.error_context.append("ID3D12ShaderReflection.GetDesc returned a failure value.", .{});
+        return error.Dx12Error;
+    }
+
+    for (0..shader_desc.InputParameters) |gpu_parameter_index| {
+        var gpu_parameter: w32.D3D12_SIGNATURE_PARAMETER_DESC = undefined;
+        const parameter_result = reflection.GetInputParameterDesc(@intCast(gpu_parameter_index), &gpu_parameter);
+        if (dx12.Error.from(parameter_result)) |err| {
+            misc.error_context.new("{f}", .{err});
+            misc.error_context.append("ID3D12ShaderReflection.GetInputParameterDesc returned a failure value.", .{});
+            misc.error_context.append("Check failed for GPU input parameter at index: {}", .{gpu_parameter_index});
+            return error.Dx12Error;
+        }
+        const gpu_name_start = gpu_parameter.SemanticName orelse {
+            misc.error_context.new("Input parameter has no semantic name.", .{});
+            misc.error_context.append("Check failed for GPU input parameter at index: {}", .{gpu_parameter_index});
+            return error.Dx12Error;
+        };
+        const gpu_name = std.mem.sliceTo(gpu_name_start, 0);
+        errdefer misc.error_context.append("Check failed for GPU input parameter: {s}", .{gpu_name});
+
+        inline for (info.fields) |*cpu_field| {
+            if (std.mem.eql(u8, cpu_field.name, gpu_name)) {
+                const cpu_parameter = getInputParameterInfo(cpu_field.type);
+                if (gpu_parameter.ComponentType != cpu_parameter.component_type) {
+                    misc.error_context.new(
+                        "GPU component type {s} does not match the CPU component type: {s}",
+                        .{ @tagName(gpu_parameter.ComponentType), @tagName(cpu_parameter.component_type) },
+                    );
+                    return error.Dx12Error;
+                }
+                if (@popCount(gpu_parameter.Mask) != cpu_parameter.component_count) {
+                    misc.error_context.new(
+                        "GPU component count {} does not match the CPU component count: {}",
+                        .{ @popCount(gpu_parameter.Mask), cpu_parameter.component_count },
+                    );
+                    return error.Dx12Error;
+                }
+                break;
+            }
+        } else {
+            misc.error_context.new("Failed to find CPU struct field that matches GPU input parameter.", .{});
+            return error.Dx12Error;
+        }
+    }
+
+    const number_of_cpu_fields = comptime block: {
+        var result: usize = 0;
+        for (info.fields) |*field| {
+            if (field.name.len != 0 and field.name[0] != '_') {
+                result += 1;
+            }
+        }
+        break :block result;
+    };
+    if (shader_desc.InputParameters != number_of_cpu_fields) {
+        misc.error_context.new(
+            "Found {} vertex parameters on the GPU side while the CPU side contains only {} vertex fields.",
+            .{ shader_desc.InputParameters, number_of_cpu_fields },
+        );
+        return error.Dx12Error;
+    }
 }
 
-fn checkConstantsLayout(comptime Constants: type, vertex_blob: *w32.ID3DBlob) !void {
-    const fields: []const std.builtin.Type.StructField = switch (@typeInfo(Constants)) {
+fn checkConstantsLayout(comptime Constants: type, reflection: *const w32.ID3D12ShaderReflection) !void {
+    const cpu_fields: []const std.builtin.Type.StructField = switch (@typeInfo(Constants)) {
         .void => &.{},
         .@"struct" => |*info| block: {
             if (info.layout != .@"extern") {
@@ -605,80 +628,165 @@ fn checkConstantsLayout(comptime Constants: type, vertex_blob: *w32.ID3DBlob) !v
         else => @compileError("Expecting Constants to be a struct type but got: " ++ @typeName(Constants)),
     };
 
-    var reflection: *w32.ID3D12ShaderReflection = undefined;
-    const reflect_result = w32.D3DReflect(
-        @ptrCast(vertex_blob.GetBufferPointer()),
-        vertex_blob.GetBufferSize(),
-        w32.IID_ID3D12ShaderReflection,
-        @ptrCast(&reflection),
-    );
-    if (dx12.Error.from(reflect_result)) |err| {
-        misc.error_context.new("{f}", .{err});
-        misc.error_context.append("ID3DReflect returned a failure value.", .{});
-        return error.Dx12Error;
-    }
-    defer _ = reflection.IUnknown.Release();
-
-    const constants = reflection.GetConstantBufferByName("Constants") orelse {
-        if (fields.len == 0) {
+    const gpu_constants = reflection.GetConstantBufferByName("Constants") orelse {
+        if (cpu_fields.len == 0) {
             return;
         }
         misc.error_context.new("Failed to find cbuffer called Constants inside the shader.", .{});
         return error.Dx12Error;
     };
 
-    var number_of_fields: usize = 0;
-    inline for (fields) |*field| {
-        errdefer misc.error_context.append("Check failed for field: {s}", .{field.name});
-        if (field.name.len == 0 or field.name[0] == '_') {
+    var number_of_cpu_fields: usize = 0;
+    inline for (cpu_fields) |*cpu_field| {
+        errdefer misc.error_context.append("Check failed for CPU field: {s}", .{cpu_field.name});
+        if (cpu_field.name.len == 0 or cpu_field.name[0] == '_') {
             continue;
         }
-        errdefer misc.error_context.append("Check failed for field: {s}", .{field.name});
-        const variable = constants.GetVariableByName(field.name) orelse {
-            misc.error_context.append("Failed to find a HLSL variable with matching name.", .{});
+        const gpu_variable = gpu_constants.GetVariableByName(cpu_field.name) orelse {
+            misc.error_context.append("Failed to find a GPU variable with matching name.", .{});
             return error.Dx12Error;
         };
-        var desc: w32.D3D12_SHADER_VARIABLE_DESC = undefined;
-        const desc_result = variable.GetDesc(&desc);
+        var gpu_variable_desc: w32.D3D12_SHADER_VARIABLE_DESC = undefined;
+        const desc_result = gpu_variable.GetDesc(&gpu_variable_desc);
         if (dx12.Error.from(desc_result)) |err| {
             misc.error_context.new("{f}", .{err});
             misc.error_context.append("ID3D12ShaderReflectionVariable.GetDesc returned a failure value.", .{});
             return error.Dx12Error;
         }
-        if (desc.StartOffset != @offsetOf(Constants, field.name)) {
+        if (gpu_variable_desc.StartOffset != @offsetOf(Constants, cpu_field.name)) {
             misc.error_context.new(
                 "GPU offset {} does not match the CPU offset: {}",
-                .{ desc.StartOffset, @offsetOf(Constants, field.name) },
+                .{ gpu_variable_desc.StartOffset, @offsetOf(Constants, cpu_field.name) },
             );
             return error.Dx12Error;
         }
-        if (desc.Size != @sizeOf(field.type)) {
+        if (gpu_variable_desc.Size != @sizeOf(cpu_field.type)) {
             misc.error_context.new(
                 "GPU size {} does not match the CPU size: {}",
-                .{ desc.Size, @sizeOf(field.type) },
+                .{ gpu_variable_desc.Size, @sizeOf(cpu_field.type) },
             );
             return error.Dx12Error;
         }
-        number_of_fields += 1;
+        number_of_cpu_fields += 1;
     }
 
-    var desc: w32.D3D12_SHADER_BUFFER_DESC = undefined;
-    const desc_result = constants.GetDesc(&desc);
+    var gpu_constants_desc: w32.D3D12_SHADER_BUFFER_DESC = undefined;
+    const desc_result = gpu_constants.GetDesc(&gpu_constants_desc);
     if (dx12.Error.from(desc_result)) |err| {
-        if (fields.len == 0) {
+        if (cpu_fields.len == 0) {
             return;
         }
         misc.error_context.new("{f}", .{err});
         misc.error_context.append("ID3D12ShaderReflectionConstantBuffer.GetDesc returned a failure value.", .{});
         return error.Dx12Error;
     }
-    if (desc.Variables != number_of_fields) {
+    if (gpu_constants_desc.Variables != number_of_cpu_fields) {
         misc.error_context.new(
             "Found {} constant variables on the GPU side while the CPU side contains only {} constant fields.",
-            .{ desc.Variables, number_of_fields },
+            .{ gpu_constants_desc.Variables, number_of_cpu_fields },
         );
         return error.Dx12Error;
     }
+}
+
+const InputParameterInfo = struct {
+    type_format: w32.DXGI_FORMAT,
+    component_type: w32.D3D_REGISTER_COMPONENT_TYPE,
+    component_count: usize,
+};
+
+inline fn getInputParameterInfo(comptime Type: type) InputParameterInfo {
+    const info = struct {
+        inline fn call(
+            type_format: w32.DXGI_FORMAT,
+            component_type: w32.D3D_REGISTER_COMPONENT_TYPE,
+            component_count: usize,
+        ) InputParameterInfo {
+            return .{
+                .type_format = type_format,
+                .component_type = component_type,
+                .component_count = component_count,
+            };
+        }
+    }.call;
+    const u_type = w32.D3D_REGISTER_COMPONENT_TYPE._REGISTER_COMPONENT_UINT32;
+    const i_type = w32.D3D_REGISTER_COMPONENT_TYPE._REGISTER_COMPONENT_SINT32;
+    const f_type = w32.D3D_REGISTER_COMPONENT_TYPE._REGISTER_COMPONENT_FLOAT32;
+    return switch (Type) {
+        u8 => info(.R8_UINT, u_type, 1),
+        [1]u8 => info(.R8_UINT, u_type, 1),
+        [2]u8 => info(.R8G8_UINT, u_type, 2),
+        [3]u8 => info(.R8G8B8_UINT, u_type, 3),
+        [4]u8 => info(.R8G8B8A8_UINT, u_type, 4),
+        math.Vector(1, u8) => info(.R8_UINT, u_type, 1),
+        math.Vector(2, u8) => info(.R8G8_UINT, u_type, 2),
+        math.Vector(3, u8) => info(.R8G8B8_UINT, u_type, 3),
+        math.Vector(4, u8) => info(.R8G8B8A8_UINT, u_type, 4),
+        i8 => info(.R8_SINT, i_type, 1),
+        [1]i8 => info(.R8_SINT, i_type, 1),
+        [2]i8 => info(.R8G8_SINT, i_type, 2),
+        [3]i8 => info(.R8G8B8_SINT, i_type, 3),
+        [4]i8 => info(.R8G8B8A8_SINT, i_type, 4),
+        math.Vector(1, i8) => info(.R8_SINT, i_type, 1),
+        math.Vector(2, i8) => info(.R8G8_SINT, i_type, 2),
+        math.Vector(3, i8) => info(.R8G8B8_SINT, i_type, 3),
+        math.Vector(4, i8) => info(.R8G8B8A8_SINT, i_type, 4),
+        u16 => info(.R16_UINT, u_type, 1),
+        [1]u16 => info(.R16_UINT, u_type, 1),
+        [2]u16 => info(.R16G16_UINT, u_type, 2),
+        [3]u16 => info(.R16G16B16_UINT, u_type, 3),
+        [4]u16 => info(.R16G16B16A16_UINT, u_type, 4),
+        math.Vector(1, u16) => info(.R16_UINT, u_type, 1),
+        math.Vector(2, u16) => info(.R16G16_UINT, u_type, 2),
+        math.Vector(3, u16) => info(.R16G16B16_UINT, u_type, 3),
+        math.Vector(4, u16) => info(.R16G16B16A16_UINT, u_type, 4),
+        i16 => info(.R16_SINT, i_type, 1),
+        [1]i16 => info(.R16_SINT, i_type, 1),
+        [2]i16 => info(.R16G16_SINT, i_type, 2),
+        [3]i16 => info(.R16G16B16_SINT, i_type, 3),
+        [4]i16 => info(.R16G16B16A16_SINT, i_type, 4),
+        math.Vector(1, i16) => info(.R16_SINT, i_type, 1),
+        math.Vector(2, i16) => info(.R16G16_SINT, i_type, 2),
+        math.Vector(3, i16) => info(.R16G16B16_SINT, i_type, 3),
+        math.Vector(4, i16) => info(.R16G16B16A16_SINT, i_type, 4),
+        f16 => info(.R16_FLOAT, f_type, 1),
+        [1]f16 => info(.R16_FLOAT, f_type, 1),
+        [2]f16 => info(.R16G16_FLOAT, f_type, 2),
+        [3]f16 => info(.R16G16B16_FLOAT, f_type, 3),
+        [4]f16 => info(.R16G16B16A16_FLOAT, f_type, 4),
+        math.Vector(1, f16) => info(.R16_FLOAT, f_type, 1),
+        math.Vector(2, f16) => info(.R16G16_FLOAT, f_type, 2),
+        math.Vector(3, f16) => info(.R16G16B16_FLOAT, f_type, 3),
+        math.Vector(4, f16) => info(.R16G16B16A16_FLOAT, f_type, 4),
+        u32 => info(.R32_UINT, u_type, 1),
+        [1]u32 => info(.R32_UINT, u_type, 1),
+        [2]u32 => info(.R32G32_UINT, u_type, 2),
+        [3]u32 => info(.R32G32B32_UINT, u_type, 3),
+        [4]u32 => info(.R32G32B32A32_UINT, u_type, 4),
+        math.Vector(1, u32) => info(.R32_UINT, u_type, 1),
+        math.Vector(2, u32) => info(.R32G32_UINT, u_type, 2),
+        math.Vector(3, u32) => info(.R32G32B32_UINT, u_type, 3),
+        math.Vector(4, u32) => info(.R32G32B32A32_UINT, u_type, 4),
+        i32 => info(.R32_SINT, i_type, 1),
+        [1]i32 => info(.R32_SINT, i_type, 1),
+        [2]i32 => info(.R32G32_SINT, i_type, 2),
+        [3]i32 => info(.R32G32B32_SINT, i_type, 3),
+        [4]i32 => info(.R32G32B32A32_SINT, i_type, 4),
+        math.Vector(1, i32) => info(.R32_SINT, i_type, 1),
+        math.Vector(2, i32) => info(.R32G32_SINT, i_type, 2),
+        math.Vector(3, i32) => info(.R32G32B32_SINT, i_type, 3),
+        math.Vector(4, i32) => info(.R32G32B32A32_SINT, i_type, 4),
+        f32 => info(.R32_FLOAT, f_type, 1),
+        [1]f32 => info(.R32_FLOAT, f_type, 1),
+        [2]f32 => info(.R32G32_FLOAT, f_type, 2),
+        [3]f32 => info(.R32G32B32_FLOAT, f_type, 3),
+        [4]f32 => info(.R32G32B32A32_FLOAT, f_type, 4),
+        math.Vector(1, f32) => info(.R32_FLOAT, f_type, 1),
+        math.Vector(2, f32) => info(.R32G32_FLOAT, f_type, 2),
+        math.Vector(3, f32) => info(.R32G32B32_FLOAT, f_type, 3),
+        math.Vector(4, f32) => info(.R32G32B32A32_FLOAT, f_type, 4),
+        else => @compileError("Unsupported vertex attribute type: " ++ @typeName(Type)),
+    };
 }
 
 const testing = std.testing;
@@ -839,24 +947,24 @@ test "init should error when vertex field is missing on CPU side" {
 
     const source_code =
         \\struct Vertex {
-        \\    float2 position_xy : position_xy;
-        \\    float2 position_zw : position_zw;
+        \\    float4 position : position;
+        \\    float4 color : color;
         \\};
         \\struct Pixel {
         \\    float4 position: SV_POSITION;
+        \\    float4 color : COLOR;
         \\};
         \\Pixel vs_main(Vertex vertex) {
         \\    Pixel pixel;
-        \\    pixel.position.xy = vertex.position_xy;
-        \\    pixel.position.zw = vertex.position_zw;
+        \\    pixel.position = vertex.position;
+        \\    pixel.color = vertex.color;
         \\    return pixel;
         \\}
         \\float4 ps_main(Pixel pixel) : SV_TARGET {
-        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
-        \\    return color;
+        \\    return pixel.color;
         \\}
     ;
-    const Vertex = extern struct { position_xy: math.Vec2, _padding: math.Vec2 };
+    const Vertex = extern struct { position: math.Vec4 };
 
     try testing.expectError(
         error.Dx12Error,
@@ -864,7 +972,113 @@ test "init should error when vertex field is missing on CPU side" {
     );
 }
 
-// TODO vertex runtime reflection tests
+test "init should error when vertex field is missing on GPU side" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec4, color: math.Vec4 };
+
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, void).init(&context, &.{ .source_code = source_code }),
+    );
+}
+
+test "init should error when vertex input parameter has different component type on CPU compared to GPU" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vector(4, i32) };
+
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, void).init(&context, &.{ .source_code = source_code }),
+    );
+}
+
+test "init should error when vertex input parameter has different component count on CPU compared to GPU" {
+    if (@import("config").skip_gpu) {
+        return error.SkipZigTest;
+    }
+    const testing_context = try dx12.TestingContext.init();
+    defer testing_context.deinit();
+    const host_context = testing_context.getHostContext();
+    var managed_context = try dx12.ManagedContext.init(testing.allocator, &host_context);
+    defer managed_context.deinit();
+    var context = dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
+
+    const source_code =
+        \\struct Vertex {
+        \\    float4 position : position;
+        \\};
+        \\struct Pixel {
+        \\    float4 position: SV_POSITION;
+        \\};
+        \\Pixel vs_main(Vertex vertex) {
+        \\    Pixel pixel;
+        \\    pixel.position = vertex.position;
+        \\    return pixel;
+        \\}
+        \\float4 ps_main(Pixel pixel) : SV_TARGET {
+        \\    float4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        \\    return color;
+        \\}
+    ;
+    const Vertex = extern struct { position: math.Vec3, _padding: f32 };
+
+    try testing.expectError(
+        error.Dx12Error,
+        Shader(Vertex, void, void).init(&context, &.{ .source_code = source_code }),
+    );
+}
 
 test "init should error when constant field is missing on CPU side" {
     if (@import("config").skip_gpu) {

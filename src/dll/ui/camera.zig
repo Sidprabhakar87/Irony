@@ -538,6 +538,7 @@ test "should project correctly when follow target is ingame camera" {
                 .pitch = 0,
                 .roll = 0,
                 .yaw = 0,
+                .horizontal_fov = 0,
             },
             .players = .{
                 .{

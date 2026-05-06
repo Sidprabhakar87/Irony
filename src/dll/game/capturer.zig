@@ -194,6 +194,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
 
         fn captureCamera(camera_manager: ?*const game.CameraManager(game_id)) ?model.Camera {
             const camera = if (camera_manager) |c| c else return null;
+            const horizontal_fov = camera.horizontal_fov.convert();
             const position = camera.position.convert();
             const rotation = camera.rotation.convert();
             return .{
@@ -201,6 +202,7 @@ pub fn Capturer(comptime game_id: build_info.Game) type {
                 .pitch = rotation.x(),
                 .yaw = rotation.y(),
                 .roll = rotation.z(),
+                .horizontal_fov = horizontal_fov,
             };
         }
 
@@ -1364,9 +1366,11 @@ test "should capture camera correctly" {
             .pitch = 0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0.75 * std.math.pi,
+            .horizontal_fov = 1.0 / 3.0 * std.math.pi,
         },
         capturer.captureFrame(&gm(.{
             .camera_manager = &.{
+                .horizontal_fov = .fromConverted(1.0 / 3.0 * std.math.pi),
                 .position = .fromConverted(.fromArray(.{ 1, 2, 3 })),
                 .rotation = .fromConverted(.fromArray(.{
                     0.25 * std.math.pi,

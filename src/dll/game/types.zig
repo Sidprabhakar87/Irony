@@ -484,6 +484,12 @@ pub fn CameraManager(comptime game_id: build_info.Game) type {
         .t7 => f32,
         .t8 => f64,
     };
+    const Fov = sdk.memory.ConvertedValue(
+        f32,
+        f32,
+        game.degreesToRadians(f32),
+        game.radiansToDegrees(f32),
+    );
     const Vec = sdk.memory.ConvertedValue(
         sdk.math.Vector(3, Float),
         sdk.math.Vec3,
@@ -504,12 +510,14 @@ pub fn CameraManager(comptime game_id: build_info.Game) type {
     );
     return switch (game_id) {
         .t7 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x3F8, "position", Vec, &.fromRaw(.zero)),
-            field(0x404, "rotation", Rot, &.fromRaw(.zero)),
+            field(0x39C, "horizontal_fov", Fov, &.fromRaw(0)), // UE: LockedFOV
+            field(0x3F8, "position", Vec, &.fromRaw(.zero)), // UE: CameraCache.POV.Location
+            field(0x404, "rotation", Rot, &.fromRaw(.zero)), // UE: CameraCache.POV.Rotation
         }),
         .t8 => sdk.memory.StructWithOffsets(null, &.{
-            field(0x22D0, "position", Vec, &.fromRaw(.zero)),
-            field(0x22E8, "rotation", Rot, &.fromRaw(.zero)),
+            field(0x02B4, "horizontal_fov", Fov, &.fromRaw(0)), // UE: LockedFOV
+            field(0x22D0, "position", Vec, &.fromRaw(.zero)), // UE: CameraCachePrivate.POV.Location
+            field(0x22E8, "rotation", Rot, &.fromRaw(.zero)), // UE: CameraCachePrivate.POV.Rotation
         }),
     };
 }

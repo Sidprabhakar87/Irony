@@ -45,6 +45,7 @@ test "should draw lines correctly when direction is not front" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
+            .horizontal_fov = 0,
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -99,6 +100,7 @@ test "should draw nothing when direction is front" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
+            .horizontal_fov = 0,
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -126,6 +128,7 @@ test "should draw nothing when disabled in settings" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
+            .horizontal_fov = 0,
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {

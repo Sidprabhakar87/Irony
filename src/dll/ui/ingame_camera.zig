@@ -4,9 +4,6 @@ const sdk = @import("../../sdk/root.zig");
 const model = @import("../model/root.zig");
 const ui = @import("../ui/root.zig");
 
-const half_horizontal_fov: f32 = 0.5 * std.math.degreesToRadians(62.0);
-const half_vertical_fov: f32 = std.math.atan((9.0 / 16.0) * std.math.tan(half_horizontal_fov));
-
 pub fn drawIngameCamera(
     settings: *const model.IngameCameraSettings,
     frame: *const model.Frame,
@@ -17,6 +14,10 @@ pub fn drawIngameCamera(
         return;
     }
     const camera = if (frame.camera) |*c| c else return;
+    const display_size = imgui.igGetIO_Nil().*.DisplaySize;
+    const inverse_aspect_ratio = display_size.y / display_size.x;
+    const half_horizontal_fov: f32 = 0.5 * camera.horizontal_fov;
+    const half_vertical_fov: f32 = std.math.atan(inverse_aspect_ratio * std.math.tan(half_horizontal_fov));
     const edges = [4]sdk.math.Vec3{
         sdk.math.Vec3.fromArray(.{ 1, std.math.tan(half_horizontal_fov), std.math.tan(half_vertical_fov) }).normalize(),
         sdk.math.Vec3.fromArray(.{ 1, std.math.tan(half_horizontal_fov), -std.math.tan(half_vertical_fov) }).normalize(),
@@ -45,7 +46,7 @@ test "should draw lines correctly when direction is not front" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
-            .horizontal_fov = 0,
+            .horizontal_fov = std.math.degreesToRadians(62.0),
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -100,7 +101,7 @@ test "should draw nothing when direction is front" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
-            .horizontal_fov = 0,
+            .horizontal_fov = std.math.degreesToRadians(62.0),
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -128,7 +129,7 @@ test "should draw nothing when disabled in settings" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
-            .horizontal_fov = 0,
+            .horizontal_fov = std.math.degreesToRadians(62.0),
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {

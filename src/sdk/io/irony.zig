@@ -782,50 +782,114 @@ fn setFieldToDefault(lhs_pointer: anytype, comptime access: []const AccessElemen
     if (@typeInfo(@TypeOf(default_pointer)) != .pointer) {
         @compileError("Expected default_pointer to be a pointer but got: " ++ @typeName(@TypeOf(default_pointer)));
     }
-    if (@typeInfo(@TypeOf(lhs_pointer)).pointer.child != @typeInfo(@TypeOf(default_pointer)).pointer.child) {
+    const Lhs = @typeInfo(@TypeOf(lhs_pointer)).pointer.child;
+    const Default = @typeInfo(@TypeOf(default_pointer)).pointer.child;
+    if (Lhs != Default) {
         @compileError(
             "Expected lhs_pointer and default_pointer point to same type but" ++
                 " lhs_pointer is " ++ @typeName(@TypeOf(lhs_pointer)) ++
                 " and default_pointer is " ++ @typeName(@TypeOf(default_pointer)),
         );
     }
+    _ = setFieldToDefaultRecursive(Lhs, lhs_pointer, access, default_pointer);
+}
+
+fn setFieldToDefaultRecursive(
+    comptime Type: type,
+    lhs_pointer: *Type,
+    comptime access: []const AccessElement,
+    default_pointer_maybe: ?*const Type,
+) bool {
     if (access.len == 0) {
-        lhs_pointer.* = default_pointer.*;
-        return;
-    }
-    const next_lhs_pointer, const next_default_pointer = switch (access[0]) {
-        .struct_field => |name| .{ &@field(lhs_pointer, name), &@field(default_pointer, name) },
-        .array_index => |index| .{ &lhs_pointer[index], &default_pointer[index] },
-        .optional_tag => {
+        if (default_pointer_maybe) |default_pointer| {
             lhs_pointer.* = default_pointer.*;
-            return;
+            return true;
+        } else {
+            return false;
+        }
+    }
+    const next_lhs_pointer, const next_default_pointer_maybe = switch (access[0]) {
+        .struct_field => |name| .{
+            &@field(lhs_pointer, name),
+            if (default_pointer_maybe) |default_pointer| &@field(default_pointer, name) else block: {
+                break :block comptime for (@typeInfo(Type).@"struct".fields) |field| {
+                    if (std.mem.eql(u8, field.name, name)) {
+                        break @as(?*const field.type, @ptrCast(@alignCast(field.default_value_ptr)));
+                    }
+                } else null;
+            },
+        },
+        .array_index => |index| .{
+            &lhs_pointer[index],
+            if (default_pointer_maybe) |default_pointer| &default_pointer[index] else null,
+        },
+        .optional_tag => {
+            if (default_pointer_maybe) |default_pointer| {
+                lhs_pointer.* = default_pointer.*;
+                return true;
+            } else {
+                return false;
+            }
         },
         .optional_payload => block: {
             if (lhs_pointer.*) |*lhs_payload_pointer| {
-                if (default_pointer.*) |*default_payload_pointer| {
-                    break :block .{ lhs_payload_pointer, default_payload_pointer };
+                if (default_pointer_maybe) |default_pointer| {
+                    if (default_pointer.*) |*default_payload_pointer| {
+                        break :block .{ lhs_payload_pointer, default_payload_pointer };
+                    }
+                }
+                break :block .{ lhs_payload_pointer, null };
+            } else {
+                if (default_pointer_maybe) |default_pointer| {
+                    lhs_pointer.* = default_pointer.*;
+                    return true;
+                } else {
+                    return false;
                 }
             }
-            lhs_pointer.* = default_pointer.*;
-            return;
         },
         .union_tag => {
-            lhs_pointer.* = default_pointer.*;
-            return;
+            if (default_pointer_maybe) |default_pointer| {
+                lhs_pointer.* = default_pointer.*;
+                return true;
+            } else {
+                return false;
+            }
         },
         .union_field => |name| block: {
             const expected_tag = @field(std.meta.Tag(@TypeOf(lhs_pointer.*)), name);
             const lhs_tag = std.meta.activeTag(lhs_pointer.*);
-            const default_tag = std.meta.activeTag(default_pointer.*);
-            if (lhs_tag != expected_tag or default_tag != expected_tag) {
-                lhs_pointer.* = default_pointer.*;
-                return;
+            if (lhs_tag != expected_tag) {
+                if (default_pointer_maybe) |default_pointer| {
+                    lhs_pointer.* = default_pointer.*;
+                    return true;
+                } else {
+                    return false;
+                }
             }
-            break :block .{ &@field(lhs_pointer, name), &@field(default_pointer, name) };
+            if (default_pointer_maybe) |default_pointer| {
+                const default_tag = std.meta.activeTag(default_pointer.*);
+                if (default_tag == expected_tag) {
+                    break :block .{ &@field(lhs_pointer, name), &@field(default_pointer, name) };
+                }
+            }
+            break :block .{ &@field(lhs_pointer, name), null };
         },
     };
     const next_access = access[1..];
-    setFieldToDefault(next_lhs_pointer, next_access, next_default_pointer);
+    const success = setFieldToDefaultRecursive(
+        @TypeOf(next_lhs_pointer.*),
+        next_lhs_pointer,
+        next_access,
+        next_default_pointer_maybe,
+    );
+    if (!success) {
+        if (default_pointer_maybe) |default_pointer| {
+            lhs_pointer.* = default_pointer.*;
+            return true;
+        }
+    }
+    return success;
 }
 
 fn serializedSizeOf(comptime Type: type) comptime_int {
@@ -1140,6 +1204,26 @@ test "readIronyFormat should use default value when recording does not contain a
         .{ .a = 1, .b = -3 },
         .{ .a = 2, .b = -3 },
         .{ .a = 3, .b = -3 },
+    }, recording);
+}
+
+test "readIronyFormat should use struct type default value when missing field does not have a runtime default value" {
+    const SavedFrame = struct { a: ?struct { b: f32 = -1 } = null };
+    const LoadedFrame = struct { a: ?struct { b: f32 = -2, c: f32 = -3 } = null };
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+    try writeIronyFormat(SavedFrame, testing.allocator, &.{
+        .{ .a = null },
+        .{ .a = .{ .b = 1 } },
+        .{ .a = .{ .b = 2 } },
+    }, &writer);
+    var reader = std.Io.Reader.fixed(buffer[0..writer.end]);
+    const recording = try readIronyFormat(LoadedFrame, testing.allocator, &reader, &.{});
+    defer testing.allocator.free(recording);
+    try testing.expectEqualSlices(LoadedFrame, &.{
+        .{ .a = null },
+        .{ .a = .{ .b = 1, .c = -3 } },
+        .{ .a = .{ .b = 2, .c = -3 } },
     }, recording);
 }
 

@@ -157,7 +157,7 @@ pub const Camera = struct {
     pitch: f32,
     yaw: f32,
     roll: f32,
-    horizontal_fov: f32,
+    horizontal_fov: f32 = 65.0,
 };
 
 pub const Source = enum(u2) {

@@ -689,7 +689,14 @@ fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.
                     is_token_freed = true;
                 }
                 const Field = field.type;
-                const default_field = if (default) |d| &@field(d, field.name) else null;
+                const default_field = if (default) |d| block: {
+                    break :block &@field(d, field.name);
+                } else block: {
+                    break :block @as(
+                        ?@TypeOf(&@field(default.?, field.name)),
+                        @ptrCast(@alignCast(field.default_value_ptr)),
+                    );
+                };
                 @field(structure, field.name) = readValue(Field, reader, allocator, default_field) catch |err| {
                     misc.error_context.append("Failed to read field value: {s}", .{field.name});
                     return err;
@@ -708,8 +715,25 @@ fn readStruct(comptime Type: type, reader: *std.json.Reader, allocator: std.mem.
     }
     inline for (info.fields, found_fields) |*field, found| {
         if (!found) {
+            const err = error.FieldNotFound;
             misc.error_context.new("Failed to find struct field inside JSON object: {s}", .{field.name});
-            return error.FieldNotFound;
+            const default_field = if (default) |d| block: {
+                break :block &@field(d, field.name);
+            } else block: {
+                break :block @as(
+                    ?@TypeOf(&@field(default.?, field.name)),
+                    @ptrCast(@alignCast(field.default_value_ptr)),
+                );
+            };
+            if (default_field) |d| {
+                misc.error_context.append("Falling back to default value.", .{});
+                if (!builtin.is_test) {
+                    misc.error_context.logWarning(err);
+                }
+                @field(structure, field.name) = d.*;
+            } else {
+                return err;
+            }
         }
     }
     return structure;
@@ -1365,7 +1389,7 @@ test "readJsonValue should use default value when encountering missing value and
         .e = .{ 3, 4, -13 },
         .f = .{ 5, 6, -16 },
         .g = .{ .g1 = 7, .g2 = -20 },
-        .h = null,
+        .h = .{ .h1 = 8, .h2 = -22 },
         .i = .init(.{ .i1 = 9, .i2 = -24 }),
     }, value);
 }
@@ -1410,7 +1434,7 @@ test "readJsonValue should use default value when encountering invalid value and
         .e = .{ 3, -12, 4 },
         .f = .{ 5, -15, 6 },
         .g = .{ .g1 = 7, .g2 = -20 },
-        .h = null,
+        .h = .{ .h1 = 8, .h2 = -22 },
         .i = .fromArray(.{ 9, -24, 10 }),
         .j = .fromArray("ab".*),
         .k = .init(.{ .k1 = 11, .k2 = -26 }),

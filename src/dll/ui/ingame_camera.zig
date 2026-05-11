@@ -25,7 +25,7 @@ pub fn drawIngameCamera(
         sdk.math.Vec3.fromArray(.{ 1, -std.math.tan(half_horizontal_fov), -std.math.tan(half_vertical_fov) }).normalize(),
     };
     for (edges) |edge| {
-        const offset = edge.rotateZ(camera.yaw).rotateY(camera.pitch).rotateZ(camera.roll).scale(settings.length);
+        const offset = edge.rotateX(camera.roll).rotateY(camera.pitch).rotateZ(camera.yaw).scale(settings.length);
         const line = sdk.math.LineSegment3{ .point_1 = camera.position, .point_2 = camera.position.add(offset) };
         ui.drawLine(line, settings.color, settings.thickness, 0, matrix);
     }
@@ -46,7 +46,7 @@ test "should draw lines correctly when direction is not front" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
-            .horizontal_fov = std.math.degreesToRadians(62.0),
+            .horizontal_fov = std.math.degreesToRadians(65.0),
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -61,22 +61,22 @@ test "should draw lines correctly when direction is not front" {
             const lines = [4]?*const ui.TestingShapes.Line{
                 ui.testing_shapes.findLineWithWorldPoints(
                     .fromArray(.{ 1, 2, 3 }),
-                    .fromArray(.{ 0.235, 6.117, 5.733 }),
+                    .fromArray(.{ -1.572, 5.877, 1.169 }),
                     0.001,
                 ),
                 ui.testing_shapes.findLineWithWorldPoints(
                     .fromArray(.{ 1, 2, 3 }),
-                    .fromArray(.{ -1.733, 6.117, 3.765 }),
+                    .fromArray(.{ -1.572, 3.831, -0.8772 }),
                     0.001,
                 ),
                 ui.testing_shapes.findLineWithWorldPoints(
                     .fromArray(.{ 1, 2, 3 }),
-                    .fromArray(.{ 3.733, 6.117, 2.235 }),
+                    .fromArray(.{ -1.572, 3.831, -0.877 }),
                     0.001,
                 ),
                 ui.testing_shapes.findLineWithWorldPoints(
                     .fromArray(.{ 1, 2, 3 }),
-                    .fromArray(.{ 1.765, 6.117, 0.267 }),
+                    .fromArray(.{ 3.572, 3.831, -0.877 }),
                     0.001,
                 ),
             };
@@ -101,7 +101,7 @@ test "should draw nothing when direction is front" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
-            .horizontal_fov = std.math.degreesToRadians(62.0),
+            .horizontal_fov = std.math.degreesToRadians(65.0),
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
@@ -129,7 +129,7 @@ test "should draw nothing when disabled in settings" {
             .pitch = -0.25 * std.math.pi,
             .yaw = 0.5 * std.math.pi,
             .roll = 0,
-            .horizontal_fov = std.math.degreesToRadians(62.0),
+            .horizontal_fov = std.math.degreesToRadians(65.0),
         } };
 
         fn guiFunction(_: sdk.ui.TestContext) !void {

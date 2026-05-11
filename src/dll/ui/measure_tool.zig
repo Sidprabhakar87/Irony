@@ -181,8 +181,8 @@ test "should draw correct shapes and text as the user inputs what to measure" {
             const matrix = sdk.math.Mat4.identity
                 .lookAt(.fromArray(.{ 5, 0, 2.5 }), .fromArray(.{ 6, 0, 2.5 }), .plus_z)
                 .orthographic(-10, 10, -5, 5, -1, 1)
-                .scale(window_size.scale(-0.5).extend(1))
-                .translate(window_size.scale(0.5).add(window_pos).extend(0));
+                .scale(.fromArray(.{ 0.5 * window_size.x(), -0.5 * window_size.y(), 1 }))
+                .translate(window_pos.add(window_size.scale(0.5)).extend(0));
             const inverse_matrix = matrix.inverse() orelse @panic("Failed to calculate inverse matrix.");
             measure_tool.processInput(&settings, matrix, inverse_matrix);
             measure_tool.draw(&settings, matrix);

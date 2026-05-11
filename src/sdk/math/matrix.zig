@@ -468,21 +468,21 @@ pub fn Matrix(comptime size: usize, comptime Element: type) type {
                 );
                 break :block fallback_up;
             };
-            var z_cross_up = z.cross(normalized_up);
-            if (z_cross_up.isZero(0)) {
+            var up_cross_z = normalized_up.cross(z);
+            if (up_cross_z.isZero(0)) {
                 std.log.warn(
                     "When creating a look at matrix, the supplied up vector {f} was colinear with the look direction {f}. " ++
                         "Using fallback up direction.",
                     .{ up, direction },
                 );
-                z_cross_up = z.cross(fallback_up);
-                if (z_cross_up.isZero(0)) {
-                    z_cross_up = z.cross(fallback_up);
+                up_cross_z = z.cross(fallback_up);
+                if (up_cross_z.isZero(0)) {
+                    up_cross_z = z.cross(fallback_up);
                 }
             }
-            const x = z_cross_up.normalize();
+            const x = up_cross_z.normalize();
 
-            const y = x.cross(z);
+            const y = z.cross(x);
 
             return Self.fromArray(.{
                 .{ x.x(), y.x(), z.x(), 0 },
@@ -1193,7 +1193,7 @@ test "lookAt should return correct value" {
     const up = math.Vector(3, f32).fromArray(.{ 0, 0, 1 });
     const matrix = Matrix(4, f32).identity.lookAt(eye, target, up);
     const transformed = vec.pointTransform(matrix);
-    try testing.expectApproxEqAbs(-3, transformed.x(), 0.00001);
+    try testing.expectApproxEqAbs(3, transformed.x(), 0.00001);
     try testing.expectApproxEqAbs(3, transformed.y(), 0.00001);
     try testing.expectApproxEqAbs(2, transformed.z(), 0.00001);
 }

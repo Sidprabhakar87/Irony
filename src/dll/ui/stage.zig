@@ -708,7 +708,7 @@ test "should draw correct lines when direction is not top" {
             defer imgui.igEnd();
 
             const matrix = sdk.math.Mat4.fromLookAt(.zero, .plus_y, .plus_z)
-                .scale(.fromArray(.{ 1, -1, 1 }))
+                .scale(.fromArray(.{ -1, -1, 1 }))
                 .translate(.fromArray(.{ 0, 1000, 0 }));
             const inverse_matrix = matrix.inverse() orelse @panic("Failed to inverse matrix.");
 

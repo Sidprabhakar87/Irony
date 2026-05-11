@@ -6,6 +6,7 @@ const sdk = @import("../sdk/root.zig");
 const core = @import("core/root.zig");
 const model = @import("model/root.zig");
 const ui = @import("ui/root.zig");
+const rendering = @import("rendering/root.zig");
 const game = @import("game/root.zig");
 
 const rendering_api = build_info.rendering_api;
@@ -22,6 +23,7 @@ pub const EventBuss = struct {
     latest_version_task: LatestVersionTask,
     core: core.Core,
     ui: ui.Ui,
+    rendering: rendering.Rendering,
 
     const Self = @This();
     const SettingsTask = sdk.misc.Task(model.Settings);
@@ -110,12 +112,16 @@ pub const EventBuss = struct {
         };
 
         std.log.debug("Initializing core...", .{});
-        const c = core.Core.init(allocator);
+        const core_instance = core.Core.init(allocator);
         std.log.info("Core initialized.", .{});
 
         std.log.debug("Initializing UI...", .{});
         const ui_instance = ui.Ui.init(allocator);
         std.log.info("UI initialized.", .{});
+
+        std.log.debug("Initializing rendering...", .{});
+        const rendering_instance = rendering.Rendering.init(if (dx_context) |*dxc| dxc else null);
+        std.log.info("Rendering initialized.", .{});
 
         return .{
             .timer = .{},
@@ -123,8 +129,9 @@ pub const EventBuss = struct {
             .ui_context = ui_context,
             .settings_task = settings_task,
             .latest_version_task = latest_version_task,
-            .core = c,
+            .core = core_instance,
             .ui = ui_instance,
+            .rendering = rendering_instance,
         };
     }
 
@@ -137,6 +144,10 @@ pub const EventBuss = struct {
         const dx_context = if (self.managed_dx_context) |*mdxc| block: {
             break :block dx.Context.fromHostAndManaged(host_dx_context, mdxc);
         } else null;
+
+        std.log.debug("De-initializing rendering...", .{});
+        self.rendering.deinit(if (dx_context) |*dxc| dxc else null);
+        std.log.info("Rendering de-initialized.", .{});
 
         std.log.debug("Deinitializing UI...", .{});
         self.ui.deinit();
@@ -188,10 +199,13 @@ pub const EventBuss = struct {
         self: *Self,
         base_dir: *const sdk.misc.BaseDir,
         host_dx_context: *const dx.HostContext,
-        game_memory: ?*const game.Memory(build_info.game),
+        game_memory: ?*game.Memory(build_info.game),
         memory_usage: usize,
     ) void {
         const delta_time = self.timer.measureDeltaTime();
+        if (game_memory) |gm| {
+            gm.updateAddresses();
+        }
         self.core.update(delta_time, self, processFrame);
         self.ui.update(delta_time, &self.core.controller);
 
@@ -218,11 +232,28 @@ pub const EventBuss = struct {
         );
         ui_context.endFrame();
 
+        // TODO Test lines. Remove later.
+        self.rendering.lines.add(
+            &.{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_x.scale(100) },
+            .fromArray(.{ 1, 0, 0, 1 }),
+        );
+        self.rendering.lines.add(
+            &.{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_y.scale(100) },
+            .fromArray(.{ 0, 1, 0, 1 }),
+        );
+        self.rendering.lines.add(
+            &.{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_z.scale(100) },
+            .fromArray(.{ 0, 0, 1, 1 }),
+        );
+
         const buffer_context = dx_context.beforeRender() catch |err| {
             sdk.misc.error_context.append("Failed to execute DirectX before render code.", .{});
             sdk.misc.error_context.logError(err);
             return;
         };
+        if (game_memory) |gm| {
+            self.rendering.render(&dx_context, buffer_context, gm);
+        }
         ui_context.render(buffer_context);
         dx_context.afterRender(buffer_context) catch |err| {
             sdk.misc.error_context.append("Failed to execute DirectX after render code.", .{});

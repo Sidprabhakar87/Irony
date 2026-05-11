@@ -106,6 +106,9 @@ test {
     _ = @import("dll/model/skeleton.zig");
     _ = @import("dll/model/walls.zig");
 
+    _ = @import("dll/rendering/lines.zig");
+    _ = @import("dll/rendering/rendering.zig");
+
     _ = @import("dll/ui/about_window.zig");
     _ = @import("dll/ui/camera.zig");
     _ = @import("dll/ui/collision_spheres.zig");

@@ -462,7 +462,7 @@ fn compile(source_code: [:0]const u8, entry_point: [:0]const u8, target: [:0]con
         null,
         entry_point,
         target,
-        0,
+        w32.D3DCOMPILE_PACK_MATRIX_ROW_MAJOR,
         0,
         &shader_blob,
         &error_blob,

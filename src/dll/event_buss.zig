@@ -234,16 +234,19 @@ pub const EventBuss = struct {
 
         // TODO Test lines. Remove later.
         self.rendering.lines.add(
-            &.{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_x.scale(100) },
+            .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_x.scale(100) },
             .fromArray(.{ 1, 0, 0, 1 }),
+            10,
         );
         self.rendering.lines.add(
-            &.{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_y.scale(100) },
+            .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_y.scale(100) },
             .fromArray(.{ 0, 1, 0, 1 }),
+            10,
         );
         self.rendering.lines.add(
-            &.{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_z.scale(100) },
+            .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_z.scale(100) },
             .fromArray(.{ 0, 0, 1, 1 }),
+            10,
         );
 
         const buffer_context = dx_context.beforeRender() catch |err| {

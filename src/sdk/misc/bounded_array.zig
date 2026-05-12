@@ -79,6 +79,17 @@ pub fn BoundedArray(
             self.len += 1;
         }
 
+        pub fn appendAll(self: *Self, elements: []const Element) !void {
+            if (self.len + elements.len > capacity) {
+                misc.error_context.new("The bounded array buffer is full.", .{});
+                return error.NoSpaceLeft;
+            }
+            for (elements) |element| {
+                self.buffer[self.len] = element;
+                self.len += 1;
+            }
+        }
+
         pub fn asSlice(self: anytype) switch (sentinel) {
             false => misc.SelfBasedSlice(@TypeOf(self), Self, Element),
             true => misc.SelfBasedSentinelSlice(@TypeOf(self), Self, Element, empty_element),
@@ -160,6 +171,25 @@ test "append should error when bounded array is full" {
     try testing.expectError(error.NoSpaceLeft, array_1.append(5));
     var array_2 = BoundedArray(4, u8, 123, true).fromArray(.{ 1, 2, 3, 4 });
     try testing.expectError(error.NoSpaceLeft, array_2.append(5));
+}
+
+test "appendAll should add all elements to the end of the bounded array when they fit" {
+    var array = BoundedArray(3, u8, 123, true).empty;
+    try testing.expectEqual([4]u8{ 123, 123, 123, 123 }, array.buffer);
+    try testing.expectEqual(0, array.len);
+    try array.appendAll(&.{1});
+    try testing.expectEqual([4]u8{ 1, 123, 123, 123 }, array.buffer);
+    try testing.expectEqual(1, array.len);
+    try array.appendAll(&.{ 2, 3 });
+    try testing.expectEqual([4]u8{ 1, 2, 3, 123 }, array.buffer);
+    try testing.expectEqual(3, array.len);
+}
+
+test "appendAll should error when elements don't fit into bounded array" {
+    var array_1 = BoundedArray(4, u8, 123, false).fromArray(.{ 1, 2, 3 });
+    try testing.expectError(error.NoSpaceLeft, array_1.appendAll(&.{ 4, 5 }));
+    var array_2 = BoundedArray(4, u8, 123, true).fromArray(.{ 1, 2 });
+    try testing.expectError(error.NoSpaceLeft, array_2.appendAll(&.{ 3, 4, 5 }));
 }
 
 test "asSlice should return slice that point to the non empty elements inside the buffer" {

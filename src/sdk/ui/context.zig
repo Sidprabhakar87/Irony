@@ -242,7 +242,7 @@ test "should render hello world successfully when rendering api is dx11" {
     const ui_context = try Context(.dx11).init(testing.allocator, null, &dx11_context);
     defer ui_context.deinit(&dx11_context);
 
-    for (0..5) |_| {
+    for (0..10) |_| {
         ui_context.newFrame();
         if (imgui.igBegin("Hello world.", null, 0)) {
             imgui.igText("Hello world.", .{});

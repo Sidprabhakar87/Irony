@@ -232,21 +232,29 @@ pub const EventBuss = struct {
         );
         ui_context.endFrame();
 
-        // TODO Test lines. Remove later.
-        self.rendering.lines.add(
-            .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_x.scale(100) },
+        // TODO Test shapes. Remove later.
+        self.rendering.shapes.addPoint(
+            .fromArray(.{ 0, 0, 100 }),
             .fromArray(.{ 1, 0, 0, 1 }),
-            10,
+            20,
         );
-        self.rendering.lines.add(
-            .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_y.scale(100) },
+        self.rendering.shapes.addLine(
+            .{
+                .point_1 = .fromArray(.{ 100, 0, 100 }),
+                .point_2 = .fromArray(.{ 200, 0, 100 }),
+            },
             .fromArray(.{ 0, 1, 0, 1 }),
-            10,
+            5,
         );
-        self.rendering.lines.add(
-            .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_z.scale(100) },
+        self.rendering.shapes.addSphere(
+            .{ .center = .fromArray(.{ 400, 0, 100 }), .radius = 50 },
             .fromArray(.{ 0, 0, 1, 1 }),
-            10,
+            5,
+        );
+        self.rendering.shapes.addCylinder(
+            .{ .center = .fromArray(.{ 600, 0, 100 }), .radius = 50, .half_height = 50 },
+            .fromArray(.{ 1, 1, 0, 1 }),
+            5,
         );
 
         const buffer_context = dx_context.beforeRender() catch |err| {

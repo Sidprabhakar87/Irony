@@ -30,7 +30,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         };
         const Shader = dx.Shader(Vertex, Index, Constants);
 
-        const max_lines = 128;
+        const max_lines = 1024;
 
         pub fn init(context_maybe: ?*const dx.Context) Self {
             const shader = if (context_maybe) |context| Shader.init(context, &.{
@@ -194,7 +194,7 @@ test "should render without errors when rendering api is DX11" {
             .fromArray(.{ 0, 0, 1, 1 }),
             10,
         );
-        
+
         const world_to_clip = sdk.math.Mat4.identity
             .lookAt(.fromArray(.{ @floatFromInt(index), 1, 1 }), .zero, .plus_z)
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
@@ -237,7 +237,7 @@ test "should render without errors when rendering api is DX12" {
             .fromArray(.{ 0, 0, 1, 1 }),
             10,
         );
-        
+
         const world_to_clip = sdk.math.Mat4.identity
             .lookAt(.fromArray(.{ @floatFromInt(index), 1, 1 }), .zero, .plus_z)
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);

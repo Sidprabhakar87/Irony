@@ -13,6 +13,7 @@ const dx = switch (rendering_api) {
 
 pub const Rendering = struct {
     lines: Lines,
+    shapes: rendering.Shapes,
 
     const Self = @This();
     const Lines = rendering.Lines(rendering_api);
@@ -21,6 +22,7 @@ pub const Rendering = struct {
         const lines: Lines = Lines.init(context);
         return .{
             .lines = lines,
+            .shapes = .{},
         };
     }
 
@@ -35,6 +37,7 @@ pub const Rendering = struct {
         game_memory: *const game.Memory(game_id),
     ) void {
         defer self.lines.clear();
+        defer self.shapes.clear();
 
         context.setDefaultViewportsAndScissors(buffer_context) catch |err| {
             sdk.misc.error_context.append("Failed to set default viewport and scissors.", .{});
@@ -44,6 +47,7 @@ pub const Rendering = struct {
         const camera = game_memory.camera_manager.toConstPointer() orelse return;
         const world_to_clip = calculateWorldToClip(context, camera) orelse return;
 
+        self.shapes.render(&self.lines, camera.position.convert());
         self.lines.render(context, buffer_context, world_to_clip);
     }
 

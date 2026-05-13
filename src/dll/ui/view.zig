@@ -44,14 +44,21 @@ pub const View = struct {
         self.measure_tool.processInput(&settings.measure_tool, matrix, inverse_matrix);
         self.camera.processInput(direction, inverse_matrix);
 
-        ui.drawIngameCamera(&settings.ingame_camera, frame, direction, matrix);
-        ui.drawCollisionSpheres(&settings.collision_spheres, frame, matrix, inverse_matrix);
-        self.hurt_cylinders.draw(&settings.hurt_cylinders, frame, direction, matrix, inverse_matrix);
-        ui.drawStage(&settings.stage, frame, direction, matrix, inverse_matrix);
-        ui.drawForwardDirections(&settings.forward_directions, frame, direction, matrix);
-        ui.drawSkeletons(&settings.skeletons, frame, matrix);
-        self.hit_lines.draw(&settings.hit_lines, frame, matrix);
-        self.measure_tool.draw(&settings.measure_tool, matrix);
+        const shapes_2d = ui.Shapes2D{
+            .direction = direction,
+            .matrix = matrix,
+            .inverse_matrix = inverse_matrix,
+        };
+        const shapes = ui.Shapes{ ._2d = shapes_2d };
+
+        ui.drawIngameCamera(&shapes, &settings.ingame_camera, frame);
+        ui.drawCollisionSpheres(&shapes, &settings.collision_spheres, frame);
+        self.hurt_cylinders.draw(&shapes, &settings.hurt_cylinders, frame);
+        ui.drawStage(&shapes_2d, &settings.stage, frame);
+        ui.drawForwardDirections(&shapes, &settings.forward_directions, frame);
+        ui.drawSkeletons(&shapes, &settings.skeletons, frame);
+        self.hit_lines.draw(&shapes, &settings.hit_lines, frame);
+        self.measure_tool.draw(&shapes, &settings.measure_tool);
         self.control_hints.draw(direction);
     }
 };

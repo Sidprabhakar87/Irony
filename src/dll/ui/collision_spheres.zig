@@ -5,10 +5,9 @@ const model = @import("../model/root.zig");
 const ui = @import("../ui/root.zig");
 
 pub fn drawCollisionSpheres(
+    shapes: *const ui.Shapes,
     settings: *const model.PlayerSettings(model.CollisionSpheresSettings),
     frame: *const model.Frame,
-    matrix: sdk.math.Mat4,
-    inverse_matrix: sdk.math.Mat4,
 ) void {
     for (model.PlayerId.all) |player_id| {
         const player_settings = settings.getById(frame, player_id);
@@ -18,7 +17,7 @@ pub fn drawCollisionSpheres(
         const player = frame.getPlayerById(player_id);
         const spheres: *const model.CollisionSpheres = if (player.collision_spheres) |*s| s else continue;
         for (spheres.values) |sphere| {
-            ui.drawSphere(sphere, player_settings.color, player_settings.thickness, matrix, inverse_matrix);
+            shapes.drawSphere(sphere, player_settings.color, player_settings.thickness);
         }
     }
 }
@@ -61,7 +60,12 @@ test "should draw spheres correctly" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawCollisionSpheres(&settings, &frame, .identity, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawCollisionSpheres(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -139,7 +143,12 @@ test "should not draw spheres for the player disabled in settings" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawCollisionSpheres(&settings, &frame, .identity, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawCollisionSpheres(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {

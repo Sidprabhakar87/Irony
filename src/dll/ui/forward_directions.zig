@@ -5,12 +5,11 @@ const model = @import("../model/root.zig");
 const ui = @import("../ui/root.zig");
 
 pub fn drawForwardDirections(
+    shapes: *const ui.Shapes,
     settings: *const model.PlayerSettings(model.ForwardDirectionSettings),
     frame: *const model.Frame,
-    direction: ui.ViewDirection,
-    matrix: sdk.math.Mat4,
 ) void {
-    if (direction != .top) {
+    if (shapes.* == ._2d and shapes._2d.direction != .top) {
         return;
     }
     for (model.PlayerId.all) |player_id| {
@@ -26,7 +25,7 @@ pub fn drawForwardDirections(
             .point_1 = position,
             .point_2 = position.add(delta),
         };
-        ui.drawLine(line, player_settings.color, player_settings.thickness, 0, matrix);
+        shapes.drawLine(line, player_settings.color, player_settings.thickness, 0);
     }
 }
 
@@ -56,7 +55,12 @@ test "should draw lines correctly when direction is top" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawForwardDirections(&settings, &frame, .top, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .top,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawForwardDirections(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -106,8 +110,18 @@ test "should not draw anything when direction is not top" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawForwardDirections(&settings, &frame, .front, .identity);
-            drawForwardDirections(&settings, &frame, .side, .identity);
+            const front_shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawForwardDirections(&front_shapes, &settings, &frame);
+            const side_shapes = ui.Shapes{ ._2d = .{
+                .direction = .side,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawForwardDirections(&side_shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -141,7 +155,12 @@ test "should not draw the line for the player disabled in settings" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawForwardDirections(&settings, &frame, .top, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .top,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawForwardDirections(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {

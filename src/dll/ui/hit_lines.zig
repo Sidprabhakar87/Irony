@@ -54,19 +54,19 @@ pub const HitLines = struct {
     }
 
     pub fn draw(
-        self: *Self,
+        self: *const Self,
+        shapes: *const ui.Shapes,
         settings: *const model.PlayerSettings(model.HitLinesSettings),
         frame: *const model.Frame,
-        matrix: sdk.math.Mat4,
     ) void {
-        self.drawLingering(settings, frame, matrix);
-        drawRegular(settings, frame, matrix);
+        self.drawLingering(shapes, settings, frame);
+        drawRegular(shapes, settings, frame);
     }
 
     fn drawRegular(
+        shapes: *const ui.Shapes,
         settings: *const model.PlayerSettings(model.HitLinesSettings),
         frame: *const model.Frame,
-        matrix: sdk.math.Mat4,
     ) void {
         for (model.PlayerId.all) |player_id| {
             const player_settings = settings.getById(frame, player_id);
@@ -89,7 +89,7 @@ pub const HitLines = struct {
                 const line = hit_line.line;
                 const color = line_settings.outline.colors.get(player.attack_type orelse .not_attack);
                 const thickness = line_settings.fill.thickness + (2.0 * line_settings.outline.thickness);
-                ui.drawLine(line, color, thickness, 0, matrix);
+                shapes.drawLine(line, color, thickness, 0);
             }
         }
         for (model.PlayerId.all) |player_id| {
@@ -113,16 +113,16 @@ pub const HitLines = struct {
                 const line = hit_line.line;
                 const color = line_settings.fill.colors.get(player.attack_type orelse .not_attack);
                 const thickness = line_settings.fill.thickness;
-                ui.drawLine(line, color, thickness, 0, matrix);
+                shapes.drawLine(line, color, thickness, 0);
             }
         }
     }
 
     fn drawLingering(
         self: *const Self,
+        shapes: *const ui.Shapes,
         settings: *const model.PlayerSettings(model.HitLinesSettings),
         frame: *const model.Frame,
-        matrix: sdk.math.Mat4,
     ) void {
         for (0..self.lingering.len) |index| {
             const hit_line = self.lingering.get(index) catch unreachable;
@@ -150,7 +150,7 @@ pub const HitLines = struct {
             color.asColor().a *= 1.0 - (completion * completion * completion * completion);
             const thickness = line_settings.fill.thickness + (2.0 * line_settings.outline.thickness);
 
-            ui.drawLine(line, color, thickness, 0, matrix);
+            shapes.drawLine(line, color, thickness, 0);
         }
         for (0..self.lingering.len) |index| {
             const hit_line = self.lingering.get(index) catch unreachable;
@@ -178,7 +178,7 @@ pub const HitLines = struct {
             color.asColor().a *= 1.0 - (completion * completion * completion * completion);
             const thickness = line_settings.fill.thickness;
 
-            ui.drawLine(line, color, thickness, 0, matrix);
+            shapes.drawLine(line, color, thickness, 0);
         }
     }
 };
@@ -242,7 +242,12 @@ test "should draw regular lines correctly" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            hit_lines.draw(&settings, &frame, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            hit_lines.draw(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -302,7 +307,12 @@ test "should draw lingering lines correctly" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            hit_lines.draw(&settings, &frame, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            hit_lines.draw(&shapes, &settings, &frame);
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {
@@ -394,7 +404,12 @@ test "should not draw lines for the player disabled in settings" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            hit_lines.draw(&settings, &frame, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            hit_lines.draw(&shapes, &settings, &frame);
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {
@@ -512,7 +527,12 @@ test "should draw with correct color and thickness depending on attack type, ina
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            hit_lines.draw(&settings, &frame, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            hit_lines.draw(&shapes, &settings, &frame);
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {

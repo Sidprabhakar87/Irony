@@ -5,12 +5,14 @@ const model = @import("../model/root.zig");
 const ui = @import("../ui/root.zig");
 
 pub fn drawIngameCamera(
+    shapes: *const ui.Shapes,
     settings: *const model.IngameCameraSettings,
     frame: *const model.Frame,
-    direction: ui.ViewDirection,
-    matrix: sdk.math.Mat4,
 ) void {
-    if (!settings.enabled or direction == .front) {
+    if (!settings.enabled) {
+        return;
+    }
+    if (shapes.* == ._2d and shapes._2d.direction != .top) {
         return;
     }
     const camera = if (frame.camera) |*c| c else return;
@@ -27,7 +29,7 @@ pub fn drawIngameCamera(
     for (edges) |edge| {
         const offset = edge.rotateX(-camera.roll).rotateY(camera.pitch).rotateZ(camera.yaw).scale(settings.length);
         const line = sdk.math.LineSegment3{ .point_1 = camera.position, .point_2 = camera.position.add(offset) };
-        ui.drawLine(line, settings.color, settings.thickness, 0, matrix);
+        shapes.drawLine(line, settings.color, settings.thickness, 0);
     }
 }
 
@@ -53,7 +55,12 @@ test "should draw lines correctly when direction is not front" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawIngameCamera(&settings, &frame, .top, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .top,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawIngameCamera(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -108,7 +115,12 @@ test "should draw nothing when direction is front" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawIngameCamera(&settings, &frame, .front, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawIngameCamera(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -136,7 +148,12 @@ test "should draw nothing when disabled in settings" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawIngameCamera(&settings, &frame, .top, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .top,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawIngameCamera(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {

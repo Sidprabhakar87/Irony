@@ -77,23 +77,19 @@ pub const HurtCylinders = struct {
 
     pub fn draw(
         self: *const Self,
+        shapes: *const ui.Shapes,
         settings: *const model.PlayerSettings(model.HurtCylindersSettings),
         frame: *const model.Frame,
-        direction: ui.ViewDirection,
-        matrix: sdk.math.Mat4,
-        inverse_matrix: sdk.math.Mat4,
     ) void {
-        self.drawLingering(settings, frame, direction, matrix, inverse_matrix);
-        self.drawRegular(settings, frame, direction, matrix, inverse_matrix);
+        self.drawLingering(shapes, settings, frame);
+        self.drawRegular(shapes, settings, frame);
     }
 
     fn drawRegular(
         self: *const Self,
+        shapes: *const ui.Shapes,
         settings: *const model.PlayerSettings(model.HurtCylindersSettings),
         frame: *const model.Frame,
-        direction: ui.ViewDirection,
-        matrix: sdk.math.Mat4,
-        inverse_matrix: sdk.math.Mat4,
     ) void {
         for (model.PlayerId.all) |player_id| {
             const player_settings = settings.getById(frame, player_id);
@@ -144,18 +140,16 @@ pub const HurtCylinders = struct {
                 const color = sdk.math.Vec4.lerpElements(player_settings.connected.color, base_settings.color, t);
                 const thickness = std.math.lerp(player_settings.connected.thickness, base_settings.thickness, t);
 
-                ui.drawCylinder(cylinder, color, thickness, direction, matrix, inverse_matrix);
+                shapes.drawCylinder(cylinder, color, thickness);
             }
         }
     }
 
     fn drawLingering(
         self: *const Self,
+        shapes: *const ui.Shapes,
         settings: *const model.PlayerSettings(model.HurtCylindersSettings),
         frame: *const model.Frame,
-        direction: ui.ViewDirection,
-        matrix: sdk.math.Mat4,
-        inverse_matrix: sdk.math.Mat4,
     ) void {
         for (0..self.lingering.len) |index| {
             const hurt_cylinder = self.lingering.get(index) catch unreachable;
@@ -171,7 +165,7 @@ pub const HurtCylinders = struct {
             color.asColor().a *= 1.0 - (completion * completion * completion * completion);
             const thickness = player_settings.lingering.thickness;
 
-            ui.drawCylinder(cylinder, color, thickness, direction, matrix, inverse_matrix);
+            shapes.drawCylinder(cylinder, color, thickness);
         }
     }
 };
@@ -249,7 +243,12 @@ test "should draw cylinders correctly" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            hurt_cylinders.draw(&settings, &frame, .front, .identity, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            hurt_cylinders.draw(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -364,7 +363,12 @@ test "should not draw cylinders for the player disabled in settings" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            hurt_cylinders.draw(&settings, &frame, .front, .identity, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            hurt_cylinders.draw(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -474,7 +478,12 @@ test "should draw with correct color and thickness depending on crushing" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            hurt_cylinders.draw(&settings, &frame, .front, .identity, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            hurt_cylinders.draw(&shapes, &settings, &frame);
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {
@@ -596,11 +605,14 @@ test "should draw connected and lingering cylinders correctly" {
 
         fn guiFunction(_: sdk.ui.TestContext) !void {
             ui.testing_shapes.clear();
-
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-
-            hurt_cylinders.draw(&settings, &frame, .front, .identity, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            hurt_cylinders.draw(&shapes, &settings, &frame);
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {

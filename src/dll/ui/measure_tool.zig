@@ -97,7 +97,7 @@ pub const MeasureTool = struct {
         }
     }
 
-    pub fn draw(self: *Self, settings: *const model.MeasureToolSettings, matrix: sdk.math.Mat4) void {
+    pub fn draw(self: *const Self, shapes: *const ui.Shapes, settings: *const model.MeasureToolSettings) void {
         const line, const hovered_point = switch (self.state) {
             .idle => return,
             .moving => |*state| .{ state.line, state.moving_point },
@@ -109,13 +109,15 @@ pub const MeasureTool = struct {
         const point_2_color = if (hovered_point == .point_2) hovered.color else normal.color;
         const point_1_thickness = if (hovered_point == .point_1) hovered.thickness else normal.thickness;
         const point_2_thickness = if (hovered_point == .point_2) hovered.thickness else normal.thickness;
-        if (hovered_point != null) {
+        if (shapes.* == ._2d and hovered_point != null) {
             imgui.igSetMouseCursor(imgui.ImGuiMouseCursor_Hand);
         }
-        ui.drawLine(line, settings.line.color, settings.line.thickness, 0, matrix);
-        ui.drawPoint(line.point_1, point_1_color, point_1_thickness, matrix);
-        ui.drawPoint(line.point_2, point_2_color, point_2_thickness, matrix);
-        drawLineText(line, settings.text_color, matrix);
+        shapes.drawLine(line, settings.line.color, settings.line.thickness, 0);
+        shapes.drawPoint(line.point_1, point_1_color, point_1_thickness);
+        shapes.drawPoint(line.point_2, point_2_color, point_2_thickness);
+        if (shapes.* == ._2d) {
+            drawLineText(line, settings.text_color, shapes._2d.matrix);
+        }
     }
 
     fn drawLineText(line: sdk.math.LineSegment3, color: sdk.math.Vec4, matrix: sdk.math.Mat4) void {
@@ -185,7 +187,12 @@ test "should draw correct shapes and text as the user inputs what to measure" {
                 .translate(window_pos.add(window_size.scale(0.5)).extend(0));
             const inverse_matrix = matrix.inverse() orelse @panic("Failed to calculate inverse matrix.");
             measure_tool.processInput(&settings, matrix, inverse_matrix);
-            measure_tool.draw(&settings, matrix);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = matrix,
+                .inverse_matrix = inverse_matrix,
+            } };
+            measure_tool.draw(&shapes, &settings);
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {

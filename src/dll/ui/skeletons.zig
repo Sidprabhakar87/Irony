@@ -5,9 +5,9 @@ const model = @import("../model/root.zig");
 const ui = @import("../ui/root.zig");
 
 pub fn drawSkeletons(
+    shapes: *const ui.Shapes,
     settings: *const model.PlayerSettings(model.SkeletonSettings),
     frame: *const model.Frame,
-    matrix: sdk.math.Mat4,
 ) void {
     for (model.PlayerId.all) |player_id| {
         const player_settings = settings.getById(frame, player_id);
@@ -22,35 +22,35 @@ pub fn drawSkeletons(
         if (!can_move) {
             color.asColor().a *= player_settings.cant_move_alpha;
         }
-        drawSkeleton(&skeleton, color, player_settings.thickness, matrix);
+        drawSkeleton(shapes, &skeleton, color, player_settings.thickness);
     }
 }
 
 fn drawSkeleton(
+    shapes: *const ui.Shapes,
     skeleton: *const model.Skeleton,
     color: sdk.math.Vec4,
     thickness: f32,
-    matrix: sdk.math.Mat4,
 ) void {
-    drawBone(matrix, color, thickness, skeleton, .head, .neck);
-    drawBone(matrix, color, thickness, skeleton, .neck, .upper_torso);
-    drawBone(matrix, color, thickness, skeleton, .upper_torso, .left_shoulder);
-    drawBone(matrix, color, thickness, skeleton, .upper_torso, .right_shoulder);
-    drawBone(matrix, color, thickness, skeleton, .left_shoulder, .left_elbow);
-    drawBone(matrix, color, thickness, skeleton, .right_shoulder, .right_elbow);
-    drawBone(matrix, color, thickness, skeleton, .left_elbow, .left_hand);
-    drawBone(matrix, color, thickness, skeleton, .right_elbow, .right_hand);
-    drawBone(matrix, color, thickness, skeleton, .upper_torso, .lower_torso);
-    drawBone(matrix, color, thickness, skeleton, .lower_torso, .left_pelvis);
-    drawBone(matrix, color, thickness, skeleton, .lower_torso, .right_pelvis);
-    drawBone(matrix, color, thickness, skeleton, .left_pelvis, .left_knee);
-    drawBone(matrix, color, thickness, skeleton, .right_pelvis, .right_knee);
-    drawBone(matrix, color, thickness, skeleton, .left_knee, .left_ankle);
-    drawBone(matrix, color, thickness, skeleton, .right_knee, .right_ankle);
+    drawBone(shapes, color, thickness, skeleton, .head, .neck);
+    drawBone(shapes, color, thickness, skeleton, .neck, .upper_torso);
+    drawBone(shapes, color, thickness, skeleton, .upper_torso, .left_shoulder);
+    drawBone(shapes, color, thickness, skeleton, .upper_torso, .right_shoulder);
+    drawBone(shapes, color, thickness, skeleton, .left_shoulder, .left_elbow);
+    drawBone(shapes, color, thickness, skeleton, .right_shoulder, .right_elbow);
+    drawBone(shapes, color, thickness, skeleton, .left_elbow, .left_hand);
+    drawBone(shapes, color, thickness, skeleton, .right_elbow, .right_hand);
+    drawBone(shapes, color, thickness, skeleton, .upper_torso, .lower_torso);
+    drawBone(shapes, color, thickness, skeleton, .lower_torso, .left_pelvis);
+    drawBone(shapes, color, thickness, skeleton, .lower_torso, .right_pelvis);
+    drawBone(shapes, color, thickness, skeleton, .left_pelvis, .left_knee);
+    drawBone(shapes, color, thickness, skeleton, .right_pelvis, .right_knee);
+    drawBone(shapes, color, thickness, skeleton, .left_knee, .left_ankle);
+    drawBone(shapes, color, thickness, skeleton, .right_knee, .right_ankle);
 }
 
 fn drawBone(
-    matrix: sdk.math.Mat4,
+    shapes: *const ui.Shapes,
     color: sdk.math.Vec4,
     thickness: f32,
     skeleton: *const model.Skeleton,
@@ -61,7 +61,7 @@ fn drawBone(
         .point_1 = skeleton.get(point_1),
         .point_2 = skeleton.get(point_2),
     };
-    ui.drawLine(line, color, thickness, 0, matrix);
+    shapes.drawLine(line, color, thickness, 0);
 }
 
 const testing = std.testing;
@@ -148,7 +148,12 @@ test "should draw lines correctly" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawSkeletons(&settings, &frame, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawSkeletons(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -272,7 +277,12 @@ test "should not draw lines for the player disabled in settings" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawSkeletons(&settings, &frame, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawSkeletons(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -369,7 +379,12 @@ test "should draw with correct color depending on blocking property" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawSkeletons(&settings, &frame, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawSkeletons(&shapes, &settings, &frame);
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {
@@ -446,7 +461,12 @@ test "should draw with correct alpha depending on can move property" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawSkeletons(&settings, &frame, .identity);
+            const shapes = ui.Shapes{ ._2d = .{
+                .direction = .front,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            } };
+            drawSkeletons(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {

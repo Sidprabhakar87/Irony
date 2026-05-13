@@ -5,23 +5,17 @@ const sdk = @import("../../sdk/root.zig");
 const model = @import("../model/root.zig");
 const ui = @import("../ui/root.zig");
 
-pub fn drawStage(
-    settings: *const model.StageSettings,
-    frame: *const model.Frame,
-    direction: ui.ViewDirection,
-    matrix: sdk.math.Mat4,
-    inverse_matrix: sdk.math.Mat4,
-) void {
+pub fn drawStage(shapes: *const ui.Shapes2D, settings: *const model.StageSettings, frame: *const model.Frame) void {
     if (!settings.enabled) {
         return;
     }
-    switch (direction) {
-        .top => drawStageFromTop(settings, frame, matrix),
-        .front, .side => drawStageFromSide(settings, frame, matrix, inverse_matrix),
+    switch (shapes.direction) {
+        .top => drawStageFromTop(shapes, settings, frame),
+        .front, .side => drawStageFromSide(shapes, settings, frame),
     }
 }
 
-fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Frame, matrix: sdk.math.Mat4) void {
+fn drawStageFromTop(shapes: *const ui.Shapes2D, settings: *const model.StageSettings, frame: *const model.Frame) void {
     const Polygon = sdk.misc.BoundedArray(model.Walls.max_len + 4, sdk.math.Vec2, .zero, false);
 
     const floor_z = frame.floor_z orelse 0;
@@ -99,7 +93,7 @@ fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Fr
         }
 
         for (polygon_1.asSlice()) |*point| {
-            point.* = point.extend(floor_z).pointTransform(matrix).swizzle("xy");
+            point.* = point.extend(floor_z).pointTransform(shapes.matrix).swizzle("xy");
         }
         const gimmick = settings.floor_gimmicks.getPtrConst(floor_gimmick.properties.type);
         const color = switch (flags.hard and !flags.damaged) {
@@ -119,16 +113,11 @@ fn drawStageFromTop(settings: *const model.StageSettings, frame: *const model.Fr
             .point_1 = wall.edge_1.extend(floor_z),
             .point_2 = walls[wall.edge_2_index].edge_1.extend(floor_z),
         };
-        drawWall(settings, &wall.properties, line, matrix);
+        drawWall(shapes, settings, &wall.properties, line);
     }
 }
 
-fn drawStageFromSide(
-    settings: *const model.StageSettings,
-    frame: *const model.Frame,
-    matrix: sdk.math.Mat4,
-    inverse_matrix: sdk.math.Mat4,
-) void {
+fn drawStageFromSide(shapes: *const ui.Shapes2D, settings: *const model.StageSettings, frame: *const model.Frame) void {
     const walls: []const model.Wall = frame.walls.asSlice();
     const floor_gimmicks: []const model.FloorGimmick = frame.floor_gimmicks.asSlice();
     const floor_z = frame.floor_z orelse return;
@@ -137,20 +126,20 @@ fn drawStageFromSide(
     imgui.igGetCursorScreenPos(window_pos.asImVec());
     var window_size: sdk.math.Vec2 = undefined;
     imgui.igGetContentRegionAvail(window_size.asImVec());
-    const top_left = window_pos.extend(0).pointTransform(inverse_matrix);
-    const bottom_right = window_pos.add(window_size).extend(0).pointTransform(inverse_matrix);
+    const top_left = window_pos.extend(0).pointTransform(shapes.inverse_matrix);
+    const bottom_right = window_pos.add(window_size).extend(0).pointTransform(shapes.inverse_matrix);
 
     if (walls.len == 0) {
         const line = sdk.math.LineSegment3{
             .point_1 = top_left.swizzle("xy").extend(floor_z),
             .point_2 = bottom_right.swizzle("xy").extend(floor_z),
         };
-        ui.drawLine(line, settings.foreground.color, settings.foreground.thickness, 0, matrix);
+        shapes.drawLine(line, settings.foreground.color, settings.foreground.thickness, 0);
         return;
     }
 
     const midpoint = getPlayersMidpoint(frame) orelse top_left.add(bottom_right).scale(0.5).swizzle("xy");
-    const midpoint_depth = midpoint.extend(floor_z).pointTransform(matrix).z();
+    const midpoint_depth = midpoint.extend(floor_z).pointTransform(shapes.matrix).z();
 
     const Edge = struct {
         world_position: sdk.math.Vec3,
@@ -161,7 +150,7 @@ fn drawStageFromSide(
     for (walls, 0..) |*wall, index| {
         const edge = Edge{
             .world_position = wall.edge_1.extend(floor_z),
-            .screen_position = wall.edge_1.extend(floor_z).pointTransform(matrix),
+            .screen_position = wall.edge_1.extend(floor_z).pointTransform(shapes.matrix),
         };
         if (edge.screen_position.z() < midpoint_depth) {
             continue;
@@ -184,7 +173,7 @@ fn drawStageFromSide(
             } else &settings.background,
             true => &settings.broken,
         };
-        ui.drawLine(line, style.color, style.thickness, 0, matrix);
+        shapes.drawLine(line, style.color, style.thickness, 0);
     }
     if (min_edge) |min| {
         if (max_edge) |max| {
@@ -192,13 +181,13 @@ fn drawStageFromSide(
                 .point_1 = min.world_position,
                 .point_2 = max.world_position,
             };
-            ui.drawLine(line, settings.background.color, settings.background.thickness, 0, matrix);
+            shapes.drawLine(line, settings.background.color, settings.background.thickness, 0);
         }
     }
 
     const ray = sdk.math.Ray2{
         .origin = midpoint,
-        .direction = sdk.math.Vec3.plus_x.directionTransform(inverse_matrix).swizzle("xy"),
+        .direction = sdk.math.Vec3.plus_x.directionTransform(shapes.inverse_matrix).swizzle("xy"),
     };
     var min_hit: ?sdk.math.RaycastLineSegmentResult.Hit = null;
     var max_hit: ?sdk.math.RaycastLineSegmentResult.Hit = null;
@@ -230,7 +219,7 @@ fn drawStageFromSide(
                 .point_2 = hit.position.extend(floor_z),
             },
         };
-        drawWall(settings, &wall.properties, line, matrix);
+        drawWall(shapes, settings, &wall.properties, line);
     }
     for (floor_gimmicks) |*floor_gimmick| {
         const flags = floor_gimmick.properties.flags;
@@ -265,9 +254,9 @@ fn drawStageFromSide(
             false => -0.5 * gimmick.side_thickness,
             true => (-0.5 * gimmick.side_thickness) + (-4 * foreground.thickness),
         };
-        ui.drawLine(line, gimmick.side_color, gimmick.side_thickness, gimmick_offset, matrix);
+        shapes.drawLine(line, gimmick.side_color, gimmick.side_thickness, gimmick_offset);
         if (flags.hard and !flags.damaged) {
-            ui.drawLine(line, foreground.color, foreground.thickness, -4 * foreground.thickness, matrix);
+            shapes.drawLine(line, foreground.color, foreground.thickness, -4 * foreground.thickness);
         }
     }
     if (min_hit) |min| {
@@ -276,7 +265,7 @@ fn drawStageFromSide(
                 .point_1 = min.position.extend(floor_z),
                 .point_2 = max.position.extend(floor_z),
             };
-            ui.drawLine(line, settings.foreground.color, settings.foreground.thickness, 0, matrix);
+            shapes.drawLine(line, settings.foreground.color, settings.foreground.thickness, 0);
         }
     }
 }
@@ -298,14 +287,14 @@ fn getPlayersMidpoint(frame: *const model.Frame) ?sdk.math.Vec2 {
 }
 
 fn drawWall(
+    shapes: *const ui.Shapes2D,
     settings: *const model.StageSettings,
     wall_properties: *const model.WallProperties,
     line: sdk.math.LineSegment3,
-    matrix: sdk.math.Mat4,
 ) void {
     const flags = wall_properties.flags;
     if (flags.broken) {
-        ui.drawLine(line, settings.broken.color, settings.broken.thickness, 0, matrix);
+        shapes.drawLine(line, settings.broken.color, settings.broken.thickness, 0);
         return;
     }
     const active_gimmick = switch (flags.gimmick_used_up) {
@@ -318,10 +307,10 @@ fn drawWall(
         false => -0.5 * gimmick.thickness,
         true => (-0.5 * gimmick.thickness) + (-4 * foreground.thickness),
     };
-    ui.drawLine(line, gimmick.color, gimmick.thickness, gimmick_offset, matrix);
-    ui.drawLine(line, foreground.color, foreground.thickness, 0, matrix);
+    shapes.drawLine(line, gimmick.color, gimmick.thickness, gimmick_offset);
+    shapes.drawLine(line, foreground.color, foreground.thickness, 0);
     if (flags.hard and !flags.damaged) {
-        ui.drawLine(line, foreground.color, foreground.thickness, -4 * foreground.thickness, matrix);
+        shapes.drawLine(line, foreground.color, foreground.thickness, -4 * foreground.thickness);
     }
 }
 
@@ -411,7 +400,12 @@ test "should draw correct lines when direction is top" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawStage(&settings, &frame, .top, .identity, .identity);
+            const shapes = ui.Shapes2D{
+                .direction = .top,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            };
+            drawStage(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -712,7 +706,12 @@ test "should draw correct lines when direction is not top" {
                 .translate(.fromArray(.{ 0, 1000, 0 }));
             const inverse_matrix = matrix.inverse() orelse @panic("Failed to inverse matrix.");
 
-            drawStage(&settings, &frame, .front, matrix, inverse_matrix);
+            const shapes = ui.Shapes2D{
+                .direction = .front,
+                .matrix = matrix,
+                .inverse_matrix = inverse_matrix,
+            };
+            drawStage(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -923,7 +922,12 @@ test "should draw nothing when disabled in settings" {
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawStage(&settings, &frame, direction, .identity, .identity);
+            const shapes = ui.Shapes2D{
+                .direction = direction,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            };
+            drawStage(&shapes, &settings, &frame);
         }
 
         fn testFunction(ctx: sdk.ui.TestContext) !void {
@@ -963,7 +967,12 @@ test "should draw nothing when no walls, no floor gimmicks and direction is top"
             ui.testing_shapes.clear();
             _ = imgui.igBegin("Window", null, 0);
             defer imgui.igEnd();
-            drawStage(&settings, &frame, .top, .identity, .identity);
+            const shapes = ui.Shapes2D{
+                .direction = .top,
+                .matrix = .identity,
+                .inverse_matrix = .identity,
+            };
+            drawStage(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {
@@ -1011,7 +1020,12 @@ test "should draw infinite floor line when no walls and direction is not top" {
                 .translate(.fromArray(.{ 0, 1000, 0 }));
             const inverse_matrix = matrix.inverse() orelse @panic("Failed to inverse matrix.");
 
-            drawStage(&settings, &frame, .front, matrix, inverse_matrix);
+            const shapes = ui.Shapes2D{
+                .direction = .front,
+                .matrix = matrix,
+                .inverse_matrix = inverse_matrix,
+            };
+            drawStage(&shapes, &settings, &frame);
         }
 
         fn testFunction(_: sdk.ui.TestContext) !void {

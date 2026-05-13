@@ -85,8 +85,7 @@ pub const Shapes = struct {
         thickness: f32,
         lines: anytype,
     ) void {
-        const delta = sdk.math.Vec3.plus_x.scale(0.001);
-        lines.add(.{ .point_1 = point.add(delta), .point_2 = point.subtract(delta) }, color, thickness);
+        lines.add(.{ .point_1 = point, .point_2 = point }, color, thickness);
     }
 
     fn renderLine(
@@ -107,7 +106,7 @@ pub const Shapes = struct {
     ) void {
         const camera_to_sphere = camera_position.distanceTo(sphere.center);
         if (camera_to_sphere < sphere.radius) {
-            return; // Camera is inside the sphere.
+            return;
         }
         const camera_to_edge = std.math.sqrt(
             (camera_to_sphere * camera_to_sphere) - (sphere.radius * sphere.radius),

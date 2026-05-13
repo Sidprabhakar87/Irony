@@ -7,7 +7,7 @@ struct Vertex {
 };
 
 struct Pixel {
-	float4 clip_position: SV_POSITION;
+	float4 position: SV_POSITION;
 	float4 color : COLOR;
 	float2 screen_position : SCREEN_POSITION;
 	float2 screen_start : SCREEN_START;
@@ -20,6 +20,7 @@ cbuffer Constants : register(b0) {
 	float2 viewport_size;
 }
 
+float2 safeNormalize(float2 the_vector);
 float pointLineDistance(float2 the_point, float2 line_start, float2 line_end);
 
 Pixel vs_main(Vertex vertex) {
@@ -31,7 +32,7 @@ Pixel vs_main(Vertex vertex) {
 
 	float2 screen_start = (clip_start.xy / clip_start.w) * 0.5 * viewport_size;
 	float2 screen_end = (clip_end.xy / clip_end.w) * 0.5 * viewport_size;
-	float2 screen_direction = normalize(screen_end - screen_start);
+	float2 screen_direction = safeNormalize(screen_end - screen_start);
 	float2 screen_normal = float2(-screen_direction.y, screen_direction.x);
 
 	float2 direction_screen_offset = sign(vertex.t - 0.5) * abs_half_thickness * screen_direction;
@@ -41,13 +42,12 @@ Pixel vs_main(Vertex vertex) {
 
 	float3 world_position = lerp(vertex.start, vertex.end, vertex.t);
 	float4 clip_position = mul(float4(world_position, 1.0), world_to_clip);
-	clip_position /= clip_position.w;
-	clip_position.xy += clip_offset;
+	clip_position.xy += clip_offset * clip_position.w;
 
 	Pixel pixel;
-	pixel.clip_position = clip_position;
+	pixel.position = clip_position;
 	pixel.color = vertex.color;
-	pixel.screen_position = clip_position.xy * 0.5 * viewport_size;
+	pixel.screen_position = (clip_position.xy / clip_position.w) * 0.5 * viewport_size;
 	pixel.screen_start = screen_start;
 	pixel.screen_end = screen_end;
 	pixel.half_thickness = abs_half_thickness;
@@ -58,6 +58,11 @@ float4 ps_main(Pixel pixel) : SV_TARGET {
 	float distance = pointLineDistance(pixel.screen_position, pixel.screen_start, pixel.screen_end);
 	float alpha = 1.0 - smoothstep(pixel.half_thickness - 1, pixel.half_thickness, distance);
 	return float4(pixel.color.rgb, pixel.color.a * alpha);
+}
+
+float2 safeNormalize(float2 the_vector) {
+    float length_squared = dot(the_vector, the_vector);
+    return (length_squared >= 1e-8) ? (the_vector * rsqrt(length_squared)) : float2(1, 0);
 }
 
 float pointLineDistance(float2 the_point, float2 line_start, float2 line_end) {

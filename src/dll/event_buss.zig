@@ -120,7 +120,10 @@ pub const EventBuss = struct {
         std.log.info("UI initialized.", .{});
 
         std.log.debug("Initializing rendering...", .{});
-        const rendering_instance = rendering.Rendering.init(if (dx_context) |*dxc| dxc else null);
+        const rendering_instance = rendering.Rendering.init(
+            allocator,
+            if (dx_context) |*dxc| dxc else null,
+        );
         std.log.info("Rendering initialized.", .{});
 
         return .{

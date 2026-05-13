@@ -5,7 +5,8 @@ const game = @import("../game/root.zig");
 const rendering = @import("root.zig");
 
 pub const Shapes = struct {
-    array: sdk.misc.BoundedArray(128, Shape, undefined, false) = .empty,
+    allocator: std.mem.Allocator,
+    list: std.ArrayList(Shape),
 
     const Self = @This();
     pub const Shape = struct {
@@ -22,8 +23,19 @@ pub const Shapes = struct {
 
     const circle_segments = 32;
 
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return .{
+            .allocator = allocator,
+            .list = .empty,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.list.deinit(self.allocator);
+    }
+
     pub fn clear(self: *Self) void {
-        self.array.len = 0;
+        self.list.clearRetainingCapacity();
     }
 
     pub fn addPoint(self: *Self, point: sdk.math.Vec3, color: sdk.math.Vec4, thickness: f32) void {
@@ -59,8 +71,8 @@ pub const Shapes = struct {
     }
 
     fn add(self: *Self, shape: Shape) void {
-        self.array.append(shape) catch |err| {
-            sdk.misc.error_context.append("Failed to add the shape to bounded array.", .{});
+        self.list.append(self.allocator, shape) catch |err| {
+            sdk.misc.error_context.append("Failed to add the shape to array list.", .{});
             sdk.misc.error_context.append("Failed to add a shape to shape renderer.", .{});
             sdk.misc.error_context.logError(err);
             return;
@@ -68,8 +80,7 @@ pub const Shapes = struct {
     }
 
     pub fn render(self: *const Self, lines: anytype, camera_position: sdk.math.Vec3) void {
-        const shapes: []const Shape = self.array.asSlice();
-        for (shapes) |*shape| {
+        for (self.list.items) |*shape| {
             switch (shape.geometry) {
                 .point => |point| renderPoint(point, shape.color, shape.thickness, lines),
                 .line => |line| renderLine(line, shape.color, shape.thickness, lines),

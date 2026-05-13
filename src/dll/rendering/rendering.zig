@@ -18,15 +18,17 @@ pub const Rendering = struct {
     const Self = @This();
     const Lines = rendering.Lines(rendering_api);
 
-    pub fn init(context: ?*const dx.Context) Self {
-        const lines: Lines = Lines.init(context);
+    pub fn init(allocator: std.mem.Allocator, context: ?*const dx.Context) Self {
+        const lines = Lines.init(allocator, context);
+        const shapes = rendering.Shapes.init(allocator);
         return .{
             .lines = lines,
-            .shapes = .{},
+            .shapes = shapes,
         };
     }
 
     pub fn deinit(self: *Self, context: ?*const dx.Context) void {
+        self.shapes.deinit();
         self.lines.deinit(context);
     }
 

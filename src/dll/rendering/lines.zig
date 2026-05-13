@@ -10,10 +10,11 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         .dx12 => sdk.dx12,
     };
     return struct {
+        allocator: std.mem.Allocator,
         shader: ?Shader,
         current_index: Index,
-        vertices: sdk.misc.BoundedArray(4 * max_lines, Vertex, undefined, false),
-        indices: sdk.misc.BoundedArray(6 * max_lines, Index, undefined, false),
+        vertices: std.ArrayList(Vertex),
+        indices: std.ArrayList(Index),
 
         const Self = @This();
         const Vertex = extern struct {
@@ -30,9 +31,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         };
         const Shader = dx.Shader(Vertex, Index, Constants);
 
-        const max_lines = 4096;
-
-        pub fn init(context_maybe: ?*const dx.Context) Self {
+        pub fn init(allocator: std.mem.Allocator, context_maybe: ?*const dx.Context) Self {
             const shader = if (context_maybe) |context| Shader.init(context, &.{
                 .source_code = source_code,
             }) catch |err| block: {
@@ -41,6 +40,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                 break :block null;
             } else null;
             return .{
+                .allocator = allocator,
                 .shader = shader,
                 .current_index = 0,
                 .vertices = .empty,
@@ -49,6 +49,8 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         }
 
         pub fn deinit(self: *Self, context_maybe: ?*const dx.Context) void {
+            self.indices.deinit(self.allocator);
+            self.vertices.deinit(self.allocator);
             if (context_maybe) |context| {
                 if (self.shader) |*shader| {
                     shader.deinit(context);
@@ -62,7 +64,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             color: sdk.math.Vec4,
             thickness: f32,
         ) void {
-            self.vertices.appendAll(&.{
+            self.vertices.appendSlice(self.allocator, &.{
                 .{
                     .start = line.point_1,
                     .end = line.point_2,
@@ -92,12 +94,12 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                     .t = 1,
                 },
             }) catch |err| {
-                sdk.misc.error_context.append("Failed to add vertices to vertex to array.", .{});
+                sdk.misc.error_context.append("Failed to add vertices to vertex to list.", .{});
                 sdk.misc.error_context.append("Failed to add a line to line renderer.", .{});
                 sdk.misc.error_context.logError(err);
                 return;
             };
-            self.indices.appendAll(&.{
+            self.indices.appendSlice(self.allocator, &.{
                 self.current_index,
                 self.current_index + 1,
                 self.current_index + 2,
@@ -105,7 +107,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                 self.current_index + 2,
                 self.current_index + 3,
             }) catch |err| {
-                sdk.misc.error_context.append("Failed to add vertices to vertex to array.", .{});
+                sdk.misc.error_context.append("Failed to add indices to index to list.", .{});
                 sdk.misc.error_context.append("Failed to add a line to line renderer.", .{});
                 sdk.misc.error_context.logError(err);
                 return;
@@ -114,8 +116,8 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         }
 
         pub fn clear(self: *Self) void {
-            self.vertices.len = 0;
-            self.indices.len = 0;
+            self.vertices.clearRetainingCapacity();
+            self.indices.clearRetainingCapacity();
             self.current_index = 0;
         }
 
@@ -127,13 +129,13 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         ) void {
             const shader: *Shader = if (self.shader) |*s| s else return;
             const back_buffer_size = context.getBackBufferSize() catch return;
-            shader.setVertices(context, self.vertices.asSlice()) catch |err| {
+            shader.setVertices(context, self.vertices.items) catch |err| {
                 sdk.misc.error_context.append("Failed to set shader vertices.", .{});
                 sdk.misc.error_context.append("Failed to render lines.", .{});
                 sdk.misc.error_context.logError(err);
                 return;
             };
-            shader.setIndices(context, self.indices.asSlice()) catch |err| {
+            shader.setIndices(context, self.indices.items) catch |err| {
                 sdk.misc.error_context.append("Failed to set shader indices.", .{});
                 sdk.misc.error_context.append("Failed to render lines.", .{});
                 sdk.misc.error_context.logError(err);
@@ -174,7 +176,7 @@ test "should render without errors when rendering api is DX11" {
     defer managed_context.deinit();
     var context = sdk.dx11.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
 
-    var lines = Lines(.dx11).init(&context);
+    var lines = Lines(.dx11).init(testing.allocator, &context);
     defer lines.deinit(&context);
 
     for (0..10) |index| {
@@ -217,7 +219,7 @@ test "should render without errors when rendering api is DX12" {
     defer managed_context.deinit();
     var context = sdk.dx12.Context.fromHostAndManaged(&testing_context.getHostContext(), &managed_context);
 
-    var lines = Lines(.dx12).init(&context);
+    var lines = Lines(.dx12).init(testing.allocator, &context);
     defer lines.deinit(&context);
 
     for (0..10) |index| {

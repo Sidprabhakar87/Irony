@@ -25,7 +25,7 @@ pub fn drawIngameCamera(
         sdk.math.Vec3.fromArray(.{ 1, -std.math.tan(half_horizontal_fov), -std.math.tan(half_vertical_fov) }).normalize(),
     };
     for (edges) |edge| {
-        const offset = edge.rotateX(camera.roll).rotateY(camera.pitch).rotateZ(camera.yaw).scale(settings.length);
+        const offset = edge.rotateX(-camera.roll).rotateY(camera.pitch).rotateZ(camera.yaw).scale(settings.length);
         const line = sdk.math.LineSegment3{ .point_1 = camera.position, .point_2 = camera.position.add(offset) };
         ui.drawLine(line, settings.color, settings.thickness, 0, matrix);
     }

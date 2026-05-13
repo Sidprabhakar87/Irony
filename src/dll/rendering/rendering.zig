@@ -57,8 +57,8 @@ pub const Rendering = struct {
         const pitch = rotation.x();
         const yaw = rotation.y();
         const roll = rotation.z();
-        const forward = sdk.math.Vec3.plus_x.rotateX(roll).rotateY(pitch).rotateZ(yaw);
-        const up = sdk.math.Vec3.plus_z.rotateX(roll).rotateY(pitch).rotateZ(yaw);
+        const forward = sdk.math.Vec3.plus_x.rotateX(-roll).rotateY(pitch).rotateZ(yaw);
+        const up = sdk.math.Vec3.plus_z.rotateX(-roll).rotateY(pitch).rotateZ(yaw);
         const view = sdk.math.Mat4.fromLookAt(position, position.add(forward), up);
 
         const aspect_ratio = block: {

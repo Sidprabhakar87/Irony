@@ -5,7 +5,7 @@ const game = @import("../game/root.zig");
 const rendering = @import("root.zig");
 
 pub const Shapes = struct {
-    array: sdk.misc.BoundedArray(64, Shape, undefined, false) = .empty,
+    array: sdk.misc.BoundedArray(128, Shape, undefined, false) = .empty,
 
     const Self = @This();
     pub const Shape = struct {

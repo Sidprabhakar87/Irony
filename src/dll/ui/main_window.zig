@@ -4,6 +4,7 @@ const build_info = @import("build_info");
 const sdk = @import("../../sdk/root.zig");
 const core = @import("../core/root.zig");
 const model = @import("../model/root.zig");
+const rendering = @import("../rendering/root.zig");
 const ui = @import("root.zig");
 
 pub const MainWindow = struct {
@@ -110,6 +111,16 @@ pub const MainWindow = struct {
             self.controls_height = imgui.igGetCursorPosY() - start_y;
         }
         imgui.igEndChild();
+    }
+
+    pub fn draw3D(
+        self: *const Self,
+        shape_renderer: *rendering.Shapes,
+        settings: *const model.Settings,
+        controller: *const core.Controller,
+    ) void {
+        const frame = controller.getCurrentFrame() orelse return;
+        self.view.draw3D(shape_renderer, settings, frame);
     }
 
     fn drawMenuBar(

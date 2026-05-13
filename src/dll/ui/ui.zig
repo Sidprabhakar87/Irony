@@ -6,6 +6,7 @@ const sdk = @import("../../sdk/root.zig");
 const core = @import("../core/root.zig");
 const game = @import("../game/root.zig");
 const model = @import("../model/root.zig");
+const rendering = @import("../rendering/root.zig");
 const ui = @import("root.zig");
 
 pub const Ui = struct {
@@ -110,6 +111,16 @@ pub const Ui = struct {
         self.game_memory_window.draw(build_info.game, game_memory);
         self.frame_window.draw(controller.getCurrentFrame());
         self.about_window.draw();
+    }
+
+    pub fn draw3D(
+        self: *const Self,
+        shape_renderer: *rendering.Shapes,
+        settings_maybe: ?*const model.Settings,
+        controller: *const core.Controller,
+    ) void {
+    	const settings = settings_maybe orelse return;
+        self.main_window.draw3D(shape_renderer, settings, controller);
     }
 
     fn handleFirstDraw(self: *Self) void {

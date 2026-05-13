@@ -30,7 +30,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         };
         const Shader = dx.Shader(Vertex, Index, Constants);
 
-        const max_lines = 1024;
+        const max_lines = 4096;
 
         pub fn init(context_maybe: ?*const dx.Context) Self {
             const shader = if (context_maybe) |context| Shader.init(context, &.{
@@ -67,28 +67,28 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                     .start = line.point_1,
                     .end = line.point_2,
                     .color = color,
-                    .thickness = thickness,
+                    .thickness = thickness + 1,
                     .t = 0,
                 },
                 .{
                     .start = line.point_1,
                     .end = line.point_2,
                     .color = color,
-                    .thickness = -thickness,
+                    .thickness = -(thickness + 1),
                     .t = 0,
                 },
                 .{
                     .start = line.point_1,
                     .end = line.point_2,
                     .color = color,
-                    .thickness = thickness,
+                    .thickness = (thickness + 1),
                     .t = 1,
                 },
                 .{
                     .start = line.point_1,
                     .end = line.point_2,
                     .color = color,
-                    .thickness = -thickness,
+                    .thickness = -(thickness + 1),
                     .t = 1,
                 },
             }) catch |err| {

@@ -2,6 +2,7 @@ const std = @import("std");
 const imgui = @import("imgui");
 const sdk = @import("../../sdk/root.zig");
 const model = @import("../model/root.zig");
+const rendering = @import("../rendering/root.zig");
 const ui = @import("../ui/root.zig");
 
 pub const ViewDirection = enum {
@@ -60,5 +61,23 @@ pub const View = struct {
         self.hit_lines.draw(&shapes, &settings.hit_lines, frame);
         self.measure_tool.draw(&shapes, &settings.measure_tool);
         self.control_hints.draw(direction);
+    }
+
+    pub fn draw3D(
+        self: *const Self,
+        shape_renderer: *rendering.Shapes,
+        settings: *const model.Settings,
+        frame: *const model.Frame,
+    ) void {
+        const shapes = ui.Shapes{ ._3d = .{
+            .renderer = shape_renderer,
+        } };
+        ui.drawIngameCamera(&shapes, &settings.ingame_camera, frame);
+        ui.drawCollisionSpheres(&shapes, &settings.collision_spheres, frame);
+        self.hurt_cylinders.draw(&shapes, &settings.hurt_cylinders, frame);
+        ui.drawForwardDirections(&shapes, &settings.forward_directions, frame);
+        ui.drawSkeletons(&shapes, &settings.skeletons, frame);
+        self.hit_lines.draw(&shapes, &settings.hit_lines, frame);
+        self.measure_tool.draw(&shapes, &settings.measure_tool);
     }
 };

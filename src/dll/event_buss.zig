@@ -221,41 +221,18 @@ pub const EventBuss = struct {
 
         ui_context.newFrame();
         imgui.igGetIO_Nil().*.MouseDrawCursor = true;
+        const settings_maybe = self.settings_task.peek();
         self.ui.draw(
             base_dir,
             ui_context.file_dialog_context,
-            self.settings_task.peek(),
+            settings_maybe,
             game_memory,
             &self.core.controller,
             latest_version,
             memory_usage,
         );
+        self.ui.draw3D(&self.rendering.shapes, settings_maybe, &self.core.controller);
         ui_context.endFrame();
-
-        // TODO Test shapes. Remove later.
-        self.rendering.shapes.addPoint(
-            .fromArray(.{ 0, 0, 100 }),
-            .fromArray(.{ 1, 0, 0, 1 }),
-            20,
-        );
-        self.rendering.shapes.addLine(
-            .{
-                .point_1 = .fromArray(.{ 100, 0, 100 }),
-                .point_2 = .fromArray(.{ 200, 0, 100 }),
-            },
-            .fromArray(.{ 0, 1, 0, 1 }),
-            5,
-        );
-        self.rendering.shapes.addSphere(
-            .{ .center = .fromArray(.{ 400, 0, 100 }), .radius = 50 },
-            .fromArray(.{ 0, 0, 1, 1 }),
-            5,
-        );
-        self.rendering.shapes.addCylinder(
-            .{ .center = .fromArray(.{ 600, 0, 100 }), .radius = 50, .half_height = 50 },
-            .fromArray(.{ 1, 1, 0, 1 }),
-            5,
-        );
 
         const buffer_context = dx_context.beforeRender() catch |err| {
             sdk.misc.error_context.append("Failed to execute DirectX before render code.", .{});

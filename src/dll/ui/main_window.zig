@@ -85,12 +85,14 @@ pub const MainWindow = struct {
             memory_usage,
         );
 
-        if (imgui.igBeginChild_Str("match_bar", .{ .y = self.match_bar_height }, 0, 0)) {
-            const start_y = imgui.igGetCursorPosY();
-            self.match_bar.draw(&settings.match_bar);
-            self.match_bar_height = imgui.igGetCursorPosY() - start_y;
+        if (settings.match_bar.enabled) {
+            if (imgui.igBeginChild_Str("match_bar", .{ .y = self.match_bar_height }, 0, 0)) {
+                const start_y = imgui.igGetCursorPosY();
+                self.match_bar.draw(&settings.match_bar);
+                self.match_bar_height = imgui.igGetCursorPosY() - start_y;
+            }
+            imgui.igEndChild();
         }
-        imgui.igEndChild();
         if (imgui.igBeginChild_Str("views", .{ .y = -self.controls_height }, 0, imgui.ImGuiWindowFlags_NoScrollbar)) {
             const context = QuadrantContext{
                 .self = self,

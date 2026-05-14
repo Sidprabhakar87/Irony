@@ -223,6 +223,8 @@ const MiscSettings = struct {
     ) void {
         self.ui_font_size_input.draw(&settings.misc.ui_font_size, &default_settings.misc.ui_font_size);
         drawColor("UI Background Color", &settings.misc.ui_background_color, &default_settings.misc.ui_background_color);
+        drawScale("2D Thickness Scale", &settings.misc.thickness_scale_2d, &default_settings.misc.thickness_scale_2d);
+        drawScale("3D Thickness Scale", &settings.misc.thickness_scale_3d, &default_settings.misc.thickness_scale_3d);
         drawThickness(
             "3D Anti-Aliasing",
             &settings.misc.anti_aliasing,
@@ -968,6 +970,10 @@ fn drawThickness(label: [:0]const u8, value: *f32, default: *const f32) void {
 
 fn drawDuration(label: [:0]const u8, value: *f32, default: *const f32) void {
     drawFloat(label, value, default, 0.1, 0, 100, "%.1f s", 0);
+}
+
+fn drawScale(label: [:0]const u8, value: *f32, default: *const f32) void {
+    drawFloat(label, value, default, 0.1, 0, 100, "%.1fx", 0);
 }
 
 fn drawColor(label: [:0]const u8, value: *sdk.math.Vec4, default: *const sdk.math.Vec4) void {
@@ -2157,6 +2163,16 @@ test "misc settings should function correctly" {
             try testing.expectEqual(0.6, current.ui_background_color.x());
             ctx.itemClick("UI Background Color/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.ui_background_color, current.ui_background_color);
+
+            ctx.itemInputValueFloat("2D Thickness Scale", 123);
+            try testing.expectEqual(123, current.thickness_scale_2d);
+            ctx.itemClick("2D Thickness Scale/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.thickness_scale_2d, current.thickness_scale_2d);
+
+            ctx.itemInputValueFloat("3D Thickness Scale", 123);
+            try testing.expectEqual(123, current.thickness_scale_3d);
+            ctx.itemClick("3D Thickness Scale/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.thickness_scale_3d, current.thickness_scale_3d);
 
             ctx.itemInputValueFloat("3D Anti-Aliasing", 123);
             try testing.expectEqual(123, current.anti_aliasing);

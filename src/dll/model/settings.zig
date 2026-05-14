@@ -392,8 +392,10 @@ pub const AutomationSettings = struct {
 
 pub const MiscSettings = struct {
     ui_font_size: f32 = sdk.ui.default_font_size,
-    anti_aliasing: f32 = 1.8,
     ui_background_color: sdk.math.Vec4 = .fromArray(.{ 0.06, 0.06, 0.06, 0.94 }),
+    thickness_scale_2d: f32 = 1,
+    thickness_scale_3d: f32 = 2,
+    anti_aliasing: f32 = 1.8,
     show_memory_usage: bool = true,
     show_version_info: bool = true,
 };

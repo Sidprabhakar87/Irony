@@ -251,12 +251,13 @@ fn drawStageFromSide(shapes: *const ui.Shapes2D, settings: *const model.StageSet
         const gimmick = settings.floor_gimmicks.getPtrConst(floor_gimmick.properties.type);
         const foreground = &settings.foreground;
         const gimmick_offset = switch (flags.hard and !flags.damaged) {
-            false => -0.5 * gimmick.side_thickness,
-            true => (-0.5 * gimmick.side_thickness) + (-4 * foreground.thickness),
+            false => -0.5 * shapes.thickness_scale * gimmick.side_thickness,
+            true => -0.5 * shapes.thickness_scale * (gimmick.side_thickness + (8 * foreground.thickness)),
         };
         shapes.drawLine(line, gimmick.side_color, gimmick.side_thickness, gimmick_offset);
         if (flags.hard and !flags.damaged) {
-            shapes.drawLine(line, foreground.color, foreground.thickness, -4 * foreground.thickness);
+            const offset = -4 * shapes.thickness_scale * foreground.thickness;
+            shapes.drawLine(line, foreground.color, foreground.thickness, offset);
         }
     }
     if (min_hit) |min| {
@@ -304,13 +305,14 @@ fn drawWall(
     const gimmick = settings.wall_gimmicks.getPtrConst(active_gimmick);
     const foreground = &settings.foreground;
     const gimmick_offset = switch (flags.hard and !flags.damaged) {
-        false => -0.5 * gimmick.thickness,
-        true => (-0.5 * gimmick.thickness) + (-4 * foreground.thickness),
+        false => -0.5 * shapes.thickness_scale * gimmick.thickness,
+        true => -0.5 * shapes.thickness_scale * (gimmick.thickness + (8 * foreground.thickness)),
     };
     shapes.drawLine(line, gimmick.color, gimmick.thickness, gimmick_offset);
     shapes.drawLine(line, foreground.color, foreground.thickness, 0);
     if (flags.hard and !flags.damaged) {
-        shapes.drawLine(line, foreground.color, foreground.thickness, -4 * foreground.thickness);
+        const offset = -4 * shapes.thickness_scale * foreground.thickness;
+        shapes.drawLine(line, foreground.color, foreground.thickness, offset);
     }
 }
 
@@ -322,32 +324,32 @@ test "should draw correct lines when direction is top" {
             .enabled = true,
             .foreground = .{
                 .color = .fromArray(.{ 1, 1, 1, 1 }),
-                .thickness = 1,
+                .thickness = 0.5,
             },
             .broken = .{
                 .color = .fromArray(.{ 0.5, 0.5, 0.5, 0.5 }),
-                .thickness = 0.5,
+                .thickness = 0.25,
             },
             .wall_gimmicks = .init(.{
                 .none = .{
                     .color = .fromArray(.{ 1, 0, 0, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
                 .wall_break = .{
                     .color = .fromArray(.{ 1, 1, 0, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
                 .balcony_break = .{
                     .color = .fromArray(.{ 0, 1, 0, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
                 .wall_blast = .{
                     .color = .fromArray(.{ 0, 1, 1, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
                 .wall_bound = .{
                     .color = .fromArray(.{ 0, 0, 1, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
             }),
         };
@@ -404,6 +406,7 @@ test "should draw correct lines when direction is top" {
                 .direction = .top,
                 .matrix = .identity,
                 .inverse_matrix = .identity,
+                .thickness_scale = 2,
             };
             drawStage(&shapes, &settings, &frame);
         }
@@ -514,48 +517,48 @@ test "should draw correct lines when direction is not top" {
             .enabled = true,
             .foreground = .{
                 .color = .fromArray(.{ 1, 1, 1, 1 }),
-                .thickness = 1,
+                .thickness = 0.5,
             },
             .background = .{
                 .color = .fromArray(.{ 1, 1, 1, 0.5 }),
-                .thickness = 2,
+                .thickness = 1,
             },
             .broken = .{
                 .color = .fromArray(.{ 0.5, 0.5, 0.5, 0.5 }),
-                .thickness = 3,
+                .thickness = 1.5,
             },
             .wall_gimmicks = .init(.{
                 .none = .{
                     .color = .fromArray(.{ 1, 0, 0, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
                 .wall_break = .{
                     .color = .fromArray(.{ 1, 1, 0, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
                 .balcony_break = .{
                     .color = .fromArray(.{ 0, 1, 0, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
                 .wall_blast = .{
                     .color = .fromArray(.{ 0, 1, 1, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
                 .wall_bound = .{
                     .color = .fromArray(.{ 0, 0, 1, 0.5 }),
-                    .thickness = 100,
+                    .thickness = 50,
                 },
             }),
             .floor_gimmicks = .init(.{
                 .floor_break = .{
                     .side_color = .fromArray(.{ 1, 0, 0, 0.6 }),
-                    .side_thickness = 200,
+                    .side_thickness = 100,
                     .top_color = undefined,
                     .top_hard_color = undefined,
                 },
                 .floor_blast = .{
                     .side_color = .fromArray(.{ 0, 1, 0, 0.6 }),
-                    .side_thickness = 200,
+                    .side_thickness = 100,
                     .top_color = undefined,
                     .top_hard_color = undefined,
                 },
@@ -710,6 +713,7 @@ test "should draw correct lines when direction is not top" {
                 .direction = .front,
                 .matrix = matrix,
                 .inverse_matrix = inverse_matrix,
+                .thickness_scale = 2,
             };
             drawStage(&shapes, &settings, &frame);
         }
@@ -991,7 +995,7 @@ test "should draw infinite floor line when no walls and direction is not top" {
             .enabled = true,
             .foreground = .{
                 .color = .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }),
-                .thickness = 1,
+                .thickness = 0.5,
             },
         };
         const frame = model.Frame{
@@ -1024,6 +1028,7 @@ test "should draw infinite floor line when no walls and direction is not top" {
                 .direction = .front,
                 .matrix = matrix,
                 .inverse_matrix = inverse_matrix,
+                .thickness_scale = 2,
             };
             drawStage(&shapes, &settings, &frame);
         }

@@ -2,6 +2,7 @@ const std = @import("std");
 const build_info = @import("build_info");
 const sdk = @import("../../sdk/root.zig");
 const game = @import("../game/root.zig");
+const model = @import("../model/root.zig");
 const rendering = @import("root.zig");
 
 const game_id = build_info.game;
@@ -37,10 +38,13 @@ pub const Rendering = struct {
         context: *const dx.Context,
         buffer_context: *const dx.BufferContext,
         game_memory: *const game.Memory(game_id),
-        anti_aliasing: f32,
+        settings: *const model.GeneralSettings.Rendering3D,
     ) void {
         defer self.lines.clear();
         defer self.shapes.clear();
+        if (!settings.enabled) {
+            return;
+        }
 
         context.setDefaultViewportsAndScissors(buffer_context) catch |err| {
             sdk.misc.error_context.append("Failed to set default viewport and scissors.", .{});
@@ -51,7 +55,7 @@ pub const Rendering = struct {
         const world_to_clip = calculateWorldToClip(context, camera) orelse return;
 
         self.shapes.render(&self.lines, camera.position.convert());
-        self.lines.render(context, buffer_context, world_to_clip, anti_aliasing);
+        self.lines.render(context, buffer_context, world_to_clip, settings.anti_aliasing);
     }
 
     fn calculateWorldToClip(context: *const dx.Context, camera: *const game.CameraManager(game_id)) ?sdk.math.Mat4 {

@@ -245,8 +245,9 @@ pub const EventBuss = struct {
             return;
         };
         if (game_memory_maybe) |game_memory| {
-            const anti_aliasing = if (settings_maybe) |s| s.misc.anti_aliasing else 1.0;
-            self.rendering.render(&dx_context, buffer_context, game_memory, anti_aliasing);
+            if (settings_maybe) |settings| {
+                self.rendering.render(&dx_context, buffer_context, game_memory, &settings.general.rendering_3d);
+            }
         }
         ui_context.render(buffer_context);
         dx_context.afterRender(buffer_context) catch |err| {

@@ -4,6 +4,7 @@ const model = @import("../model/root.zig");
 const ui = @import("../ui/root.zig");
 
 pub const Settings = struct {
+    general: GeneralSettings = .{},
     hit_lines: PlayerSettings(HitLinesSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
     hurt_cylinders: PlayerSettings(HurtCylindersSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
     collision_spheres: PlayerSettings(CollisionSpheresSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
@@ -15,7 +16,6 @@ pub const Settings = struct {
     match_bar: MatchBarSettings = .{},
     details: DetailsSettings = .{},
     automation: AutomationSettings = .{},
-    misc: MiscSettings = .{},
 
     const Self = @This();
     pub const file_name = "settings.json";
@@ -61,6 +61,27 @@ pub const Settings = struct {
             return err;
         };
     }
+};
+
+pub const GeneralSettings = struct {
+    ui: Ui = .{},
+    rendering_2d: Rendering2D = .{},
+    rendering_3d: Rendering3D = .{},
+
+    pub const Ui = struct {
+        font_size: f32 = sdk.ui.default_font_size,
+        background_color: sdk.math.Vec4 = .fromArray(.{ 0.06, 0.06, 0.06, 0.94 }),
+        show_memory_usage: bool = true,
+        show_version_info: bool = true,
+    };
+    pub const Rendering2D = struct {
+        thickness_scale: f32 = 1,
+    };
+    pub const Rendering3D = struct {
+        enabled: bool = true,
+        thickness_scale: f32 = 2,
+        anti_aliasing: f32 = 1.8,
+    };
 };
 
 pub const HitLinesSettings = struct {
@@ -388,16 +409,6 @@ pub const AutomationSettings = struct {
         only_record,
         record_and_save,
     };
-};
-
-pub const MiscSettings = struct {
-    ui_font_size: f32 = sdk.ui.default_font_size,
-    ui_background_color: sdk.math.Vec4 = .fromArray(.{ 0.06, 0.06, 0.06, 0.94 }),
-    thickness_scale_2d: f32 = 1,
-    thickness_scale_3d: f32 = 2,
-    anti_aliasing: f32 = 1.8,
-    show_memory_usage: bool = true,
-    show_version_info: bool = true,
 };
 
 pub const PlayerSettingsMode = enum {

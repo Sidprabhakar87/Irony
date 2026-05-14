@@ -7,7 +7,7 @@ const ui = @import("root.zig");
 pub const SettingsWindow = struct {
     is_open: bool,
     navigation_layout: ui.NavigationLayout,
-    misc_settings: MiscSettings,
+    general_settings: GeneralSettings,
     save_button: SaveButton,
 
     const Self = @This();
@@ -18,14 +18,14 @@ pub const SettingsWindow = struct {
         return .{
             .is_open = false,
             .navigation_layout = .{},
-            .misc_settings = .init(allocator),
+            .general_settings = .init(allocator),
             .save_button = .init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.save_button.deinit();
-        self.misc_settings.deinit();
+        self.general_settings.deinit();
     }
 
     pub fn draw(self: *Self, base_dir: *const sdk.misc.BaseDir, settings: *model.Settings) void {
@@ -71,6 +71,14 @@ pub const SettingsWindow = struct {
             .settings = settings,
         };
         self.navigation_layout.draw(&context, &.{
+            .{
+                .name = "General",
+                .content = struct {
+                    fn call(c: *const Context) void {
+                        c.self.general_settings.draw(c.base_dir, c.settings, &default_settings);
+                    }
+                }.call,
+            },
             .{
                 .name = "Hit Lines",
                 .content = struct {
@@ -184,19 +192,11 @@ pub const SettingsWindow = struct {
                     }
                 }.call,
             },
-            .{
-                .name = "Miscellaneous",
-                .content = struct {
-                    fn call(c: *const Context) void {
-                        c.self.misc_settings.draw(c.base_dir, c.settings, &default_settings);
-                    }
-                }.call,
-            },
         });
     }
 };
 
-const MiscSettings = struct {
+const GeneralSettings = struct {
     ui_font_size_input: UiFontSizeInput,
     reload_button: ReloadButton,
     defaults_button: DefaultsButton,
@@ -221,17 +221,64 @@ const MiscSettings = struct {
         settings: *model.Settings,
         default_settings: *const model.Settings,
     ) void {
-        self.ui_font_size_input.draw(&settings.misc.ui_font_size, &default_settings.misc.ui_font_size);
-        drawColor("UI Background Color", &settings.misc.ui_background_color, &default_settings.misc.ui_background_color);
-        drawScale("2D Thickness Scale", &settings.misc.thickness_scale_2d, &default_settings.misc.thickness_scale_2d);
-        drawScale("3D Thickness Scale", &settings.misc.thickness_scale_3d, &default_settings.misc.thickness_scale_3d);
-        drawThickness(
-            "3D Anti-Aliasing",
-            &settings.misc.anti_aliasing,
-            &default_settings.misc.anti_aliasing,
-        );
-        drawBool("Show RAM Usage", &settings.misc.show_memory_usage, &default_settings.misc.show_memory_usage);
-        drawBool("Show Version Info", &settings.misc.show_version_info, &default_settings.misc.show_version_info);
+        const drawUi = struct {
+            fn call(
+                s: *Self,
+                label: [:0]const u8,
+                v: *model.GeneralSettings.Ui,
+                d: *const model.GeneralSettings.Ui,
+            ) void {
+                imgui.igText("%s", label.ptr);
+                imgui.igPushID_Str(label);
+                defer imgui.igPopID();
+                imgui.igIndent(0);
+                defer imgui.igUnindent(0);
+
+                s.ui_font_size_input.draw("Font Size", &v.font_size, &d.font_size);
+                drawColor("Background Color", &v.background_color, &d.background_color);
+                drawBool("Show RAM Usage", &v.show_memory_usage, &d.show_memory_usage);
+                drawBool("Show Version Info", &v.show_version_info, &d.show_version_info);
+            }
+        }.call;
+        const drawRendering2D = struct {
+            fn call(
+                label: [:0]const u8,
+                v: *model.GeneralSettings.Rendering2D,
+                d: *const model.GeneralSettings.Rendering2D,
+            ) void {
+                imgui.igText("%s", label.ptr);
+                imgui.igPushID_Str(label);
+                defer imgui.igPopID();
+                imgui.igIndent(0);
+                defer imgui.igUnindent(0);
+
+                drawScale("Thickness Scale", &v.thickness_scale, &d.thickness_scale);
+            }
+        }.call;
+        const drawRendering3D = struct {
+            fn call(
+                label: [:0]const u8,
+                v: *model.GeneralSettings.Rendering3D,
+                d: *const model.GeneralSettings.Rendering3D,
+            ) void {
+                imgui.igText("%s", label.ptr);
+                imgui.igPushID_Str(label);
+                defer imgui.igPopID();
+                imgui.igIndent(0);
+                defer imgui.igUnindent(0);
+
+                drawBool("Enabled", &v.enabled, &d.enabled);
+                imgui.igBeginDisabled(!v.enabled);
+                defer imgui.igEndDisabled();
+
+                drawScale("Thickness Scale", &v.thickness_scale, &d.thickness_scale);
+                drawThickness("Anti-Aliasing", &v.anti_aliasing, &d.anti_aliasing);
+            }
+        }.call;
+
+        drawUi(self, "User Interface", &settings.general.ui, &default_settings.general.ui);
+        drawRendering2D("2D Rendering", &settings.general.rendering_2d, &default_settings.general.rendering_2d);
+        drawRendering3D("3D Rendering", &settings.general.rendering_3d, &default_settings.general.rendering_3d);
         imgui.igSeparator();
         self.reload_button.draw(base_dir, settings);
         self.defaults_button.draw(settings, default_settings);
@@ -246,17 +293,17 @@ const UiFontSizeInput = struct {
     pub const min_value = 8;
     pub const max_value = 64;
 
-    pub fn draw(self: *Self, value: *f32, default: *const f32) void {
+    pub fn draw(self: *Self, label: [:0]const u8, value: *f32, default: *const f32) void {
         if (self.previous_frame_value != value.*) {
             self.input_value = value.*;
         }
         self.previous_frame_value = value.*;
 
-        imgui.igPushID_Str("UI Font Size");
+        imgui.igPushID_Str(label);
         drawDefaultButton(value, default);
         imgui.igPopID();
         imgui.igSameLine(0, -1);
-        _ = imgui.igInputFloat("UI Font Size", &self.input_value, 0, 0, "%.0f px", 0);
+        _ = imgui.igInputFloat(label, &self.input_value, 0, 0, "%.0f px", 0);
         if (imgui.igIsItemDeactivatedAfterEdit()) {
             value.* = std.math.clamp(self.input_value, min_value, max_value);
         }
@@ -1076,7 +1123,7 @@ test "reset settings to defaults button should set settings to default value whe
         fn testFunction(ctx: sdk.ui.TestContext) !void {
             sdk.ui.toasts.update(100);
             ctx.setRef(SettingsWindow.name);
-            ctx.itemClick("**/Miscellaneous", imgui.ImGuiMouseButton_Left, 0);
+            ctx.itemClick("**/General", imgui.ImGuiMouseButton_Left, 0);
             ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
 
             settings.ingame_camera.thickness = 123;
@@ -1132,7 +1179,7 @@ test "reload settings button should load the same settings that the save button 
             try ctx.expectItemExists("//toast-0/Settings saved successfully.");
             sdk.ui.toasts.update(100);
 
-            ctx.itemClick("**/Miscellaneous", imgui.ImGuiMouseButton_Left, 0);
+            ctx.itemClick("**/General", imgui.ImGuiMouseButton_Left, 0);
             ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
             ctx.itemClick("Reload Settings", imgui.ImGuiMouseButton_Left, 0);
             ctx.itemClick("//$FOCUSED/Cancel", imgui.ImGuiMouseButton_Left, 0);
@@ -1221,6 +1268,78 @@ test "player settings separation should function correctly" {
             try testing.expectEqual(false, current.players[1].enabled);
             ctx.itemCheck("**/Secondary Player/Enabled", 0);
             try testing.expectEqual(true, current.players[1].enabled);
+        }
+    };
+    Test.window = .init(testing.allocator);
+    defer Test.window.deinit();
+    Test.window.is_open = true;
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "general settings should function correctly" {
+    const Test = struct {
+        const default_settings = model.Settings{};
+        var settings = default_settings;
+        var window: SettingsWindow = undefined;
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            window.draw(&testing_base_dir, &settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            const current = &settings.general;
+            const default = &default_settings.general;
+
+            ctx.setRef(SettingsWindow.name);
+            ctx.itemClick("**/General", imgui.ImGuiMouseButton_Left, 0);
+            ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
+
+            ctx.itemInputValueFloat("User Interface/Font Size", UiFontSizeInput.min_value + 5);
+            try testing.expectEqual(UiFontSizeInput.min_value + 5, current.ui.font_size);
+            ctx.itemInputValueFloat("User Interface/Font Size", UiFontSizeInput.min_value - 100);
+            try testing.expectEqual(UiFontSizeInput.min_value, current.ui.font_size);
+            ctx.itemInputValueFloat("User Interface/Font Size", UiFontSizeInput.max_value + 100);
+            try testing.expectEqual(UiFontSizeInput.max_value, current.ui.font_size);
+            ctx.itemClick("User Interface/Font Size/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.ui.font_size, current.ui.font_size);
+
+            ctx.itemInputValueFloat("User Interface/Background Color/##X", 153);
+            try testing.expectEqual(0.6, current.ui.background_color.x());
+            ctx.itemClick("User Interface/Background Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.ui.background_color, current.ui.background_color);
+
+            ctx.itemClick("User Interface/Show RAM Usage", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(!default.ui.show_memory_usage, current.ui.show_memory_usage);
+            ctx.itemClick("User Interface/Show RAM Usage/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.ui.show_memory_usage, current.ui.show_memory_usage);
+
+            ctx.itemClick("User Interface/Show Version Info", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(!default.ui.show_version_info, current.ui.show_version_info);
+            ctx.itemClick("User Interface/Show Version Info/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.ui.show_version_info, current.ui.show_version_info);
+
+            ctx.itemInputValueFloat("2D Rendering/Thickness Scale", 123);
+            try testing.expectEqual(123, current.rendering_2d.thickness_scale);
+            ctx.itemClick("2D Rendering/Thickness Scale/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.rendering_2d.thickness_scale, current.rendering_2d.thickness_scale);
+
+            ctx.itemUncheck("3D Rendering/Enabled", 0);
+            try testing.expectEqual(false, current.rendering_3d.enabled);
+            ctx.itemClick("3D Rendering/Enabled/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.rendering_3d.enabled, current.rendering_3d.enabled);
+            ctx.itemCheck("3D Rendering/Enabled", 0);
+            try testing.expectEqual(true, current.rendering_3d.enabled);
+
+            ctx.itemInputValueFloat("3D Rendering/Thickness Scale", 123);
+            try testing.expectEqual(123, current.rendering_3d.thickness_scale);
+            ctx.itemClick("3D Rendering/Thickness Scale/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.rendering_3d.thickness_scale, current.rendering_3d.thickness_scale);
+
+            ctx.itemInputValueFloat("3D Rendering/Anti-Aliasing", 123);
+            try testing.expectEqual(123, current.rendering_3d.anti_aliasing);
+            ctx.itemClick("3D Rendering/Anti-Aliasing/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.rendering_3d.anti_aliasing, current.rendering_3d.anti_aliasing);
         }
     };
     Test.window = .init(testing.allocator);
@@ -2123,71 +2242,6 @@ test "automation settings should function correctly" {
             try testing.expectEqual(.json, current.save_format);
             ctx.itemClick("Save Format/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.save_format, current.save_format);
-        }
-    };
-    Test.window = .init(testing.allocator);
-    defer Test.window.deinit();
-    Test.window.is_open = true;
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
-}
-
-test "misc settings should function correctly" {
-    const Test = struct {
-        const default_settings = model.Settings{};
-        var settings = default_settings;
-        var window: SettingsWindow = undefined;
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            window.draw(&testing_base_dir, &settings);
-        }
-
-        fn testFunction(ctx: sdk.ui.TestContext) !void {
-            const current = &settings.misc;
-            const default = &default_settings.misc;
-
-            ctx.setRef(SettingsWindow.name);
-            ctx.itemClick("**/Miscellaneous", imgui.ImGuiMouseButton_Left, 0);
-            ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
-
-            ctx.itemInputValueFloat("UI Font Size", UiFontSizeInput.min_value + 5);
-            try testing.expectEqual(UiFontSizeInput.min_value + 5, current.ui_font_size);
-            ctx.itemInputValueFloat("UI Font Size", UiFontSizeInput.min_value - 100);
-            try testing.expectEqual(UiFontSizeInput.min_value, current.ui_font_size);
-            ctx.itemInputValueFloat("UI Font Size", UiFontSizeInput.max_value + 100);
-            try testing.expectEqual(UiFontSizeInput.max_value, current.ui_font_size);
-            ctx.itemClick("UI Font Size/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.ui_font_size, current.ui_font_size);
-
-            ctx.itemInputValueFloat("UI Background Color/##X", 153);
-            try testing.expectEqual(0.6, current.ui_background_color.x());
-            ctx.itemClick("UI Background Color/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.ui_background_color, current.ui_background_color);
-
-            ctx.itemInputValueFloat("2D Thickness Scale", 123);
-            try testing.expectEqual(123, current.thickness_scale_2d);
-            ctx.itemClick("2D Thickness Scale/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.thickness_scale_2d, current.thickness_scale_2d);
-
-            ctx.itemInputValueFloat("3D Thickness Scale", 123);
-            try testing.expectEqual(123, current.thickness_scale_3d);
-            ctx.itemClick("3D Thickness Scale/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.thickness_scale_3d, current.thickness_scale_3d);
-
-            ctx.itemInputValueFloat("3D Anti-Aliasing", 123);
-            try testing.expectEqual(123, current.anti_aliasing);
-            ctx.itemClick("3D Anti-Aliasing/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.anti_aliasing, current.anti_aliasing);
-
-            ctx.itemClick("Show RAM Usage", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(!default.show_memory_usage, current.show_memory_usage);
-            ctx.itemClick("Show RAM Usage/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.show_memory_usage, current.show_memory_usage);
-
-            ctx.itemClick("Show Version Info", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(!default.show_version_info, current.show_version_info);
-            ctx.itemClick("Show Version Info/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.show_version_info, current.show_version_info);
         }
     };
     Test.window = .init(testing.allocator);

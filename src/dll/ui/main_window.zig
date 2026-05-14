@@ -80,7 +80,7 @@ pub const MainWindow = struct {
             base_dir,
             file_dialog_context,
             controller,
-            &settings.misc,
+            &settings.general.ui,
             latest_version,
             memory_usage,
         );
@@ -131,7 +131,7 @@ pub const MainWindow = struct {
         base_dir: *const sdk.misc.BaseDir,
         file_dialog_context: *imgui.ImGuiFileDialog,
         controller: *core.Controller,
-        settings: *const model.MiscSettings,
+        settings: *const model.GeneralSettings.Ui,
         latest_version: ui.LatestVersion,
         memory_usage: usize,
     ) void {

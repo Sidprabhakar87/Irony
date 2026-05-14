@@ -49,7 +49,7 @@ pub const View = struct {
             .direction = direction,
             .matrix = matrix,
             .inverse_matrix = inverse_matrix,
-            .thickness_scale = settings.misc.thickness_scale_2d,
+            .thickness_scale = settings.general.rendering_2d.thickness_scale,
         };
         const shapes = ui.Shapes{ ._2d = shapes_2d };
 
@@ -72,7 +72,7 @@ pub const View = struct {
     ) void {
         const shapes = ui.Shapes{ ._3d = .{
             .renderer = shape_renderer,
-            .thickness_scale = settings.misc.thickness_scale_3d,
+            .thickness_scale = settings.general.rendering_3d.thickness_scale,
         } };
         ui.drawIngameCamera(&shapes, &settings.ingame_camera, frame);
         ui.drawCollisionSpheres(&shapes, &settings.collision_spheres, frame);

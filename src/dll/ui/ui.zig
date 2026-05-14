@@ -57,13 +57,13 @@ pub const Ui = struct {
         latest_version: ui.LatestVersion,
         memory_usage: usize,
     ) void {
-        const defaults = (model.Settings{}).misc;
+        const defaults = (model.Settings{}).general.ui;
 
-        const font_size = if (settings_maybe) |s| s.misc.ui_font_size else defaults.ui_font_size;
+        const font_size = if (settings_maybe) |s| s.general.ui.font_size else defaults.font_size;
         imgui.igPushFont(null, font_size);
         defer imgui.igPopFont();
 
-        const background_color = if (settings_maybe) |s| s.misc.ui_background_color else defaults.ui_background_color;
+        const background_color = if (settings_maybe) |s| s.general.ui.background_color else defaults.background_color;
         imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_WindowBg, background_color.toImVec());
         defer imgui.igPopStyleColor(1);
 
@@ -119,6 +119,9 @@ pub const Ui = struct {
         settings: *const model.Settings,
         controller: *const core.Controller,
     ) void {
+        if (!settings.general.rendering_3d.enabled) {
+            return;
+        }
         self.main_window.draw3D(shape_renderer, settings, controller);
     }
 

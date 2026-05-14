@@ -116,10 +116,9 @@ pub const Ui = struct {
     pub fn draw3D(
         self: *const Self,
         shape_renderer: *rendering.Shapes,
-        settings_maybe: ?*const model.Settings,
+        settings: *const model.Settings,
         controller: *const core.Controller,
     ) void {
-    	const settings = settings_maybe orelse return;
         self.main_window.draw3D(shape_renderer, settings, controller);
     }
 

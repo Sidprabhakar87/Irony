@@ -28,6 +28,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         const Constants = extern struct {
             world_to_clip: sdk.math.Mat4,
             viewport_size: sdk.math.Vec2,
+            anti_aliasing: f32,
         };
         const Shader = dx.Shader(Vertex, Index, Constants);
 
@@ -69,28 +70,28 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                     .start = line.point_1,
                     .end = line.point_2,
                     .color = color,
-                    .thickness = thickness + 1,
+                    .thickness = thickness,
                     .t = 0,
                 },
                 .{
                     .start = line.point_1,
                     .end = line.point_2,
                     .color = color,
-                    .thickness = -(thickness + 1),
+                    .thickness = -thickness,
                     .t = 0,
                 },
                 .{
                     .start = line.point_1,
                     .end = line.point_2,
                     .color = color,
-                    .thickness = (thickness + 1),
+                    .thickness = thickness,
                     .t = 1,
                 },
                 .{
                     .start = line.point_1,
                     .end = line.point_2,
                     .color = color,
-                    .thickness = -(thickness + 1),
+                    .thickness = -thickness,
                     .t = 1,
                 },
             }) catch |err| {
@@ -126,6 +127,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             context: *const dx.Context,
             buffer_context: *const dx.BufferContext,
             world_to_clip: sdk.math.Mat4,
+            anti_aliasing: f32,
         ) void {
             const shader: *Shader = if (self.shader) |*s| s else return;
             const back_buffer_size = context.getBackBufferSize() catch return;
@@ -147,6 +149,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                     @floatFromInt(back_buffer_size.x()),
                     @floatFromInt(back_buffer_size.y()),
                 }),
+                .anti_aliasing = anti_aliasing,
             }) catch |err| {
                 sdk.misc.error_context.append("Failed to set shader constants.", .{});
                 sdk.misc.error_context.append("Failed to render lines.", .{});
@@ -201,7 +204,7 @@ test "should render without errors when rendering api is DX11" {
             .lookAt(.fromArray(.{ @floatFromInt(index), 1, 1 }), .zero, .plus_z)
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
         const buffer_context = try context.beforeRender();
-        lines.render(&context, buffer_context, world_to_clip);
+        lines.render(&context, buffer_context, world_to_clip, 1.8);
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (sdk.dx11.Error.from(result)) |_| return error.PresentFailed;
@@ -244,7 +247,7 @@ test "should render without errors when rendering api is DX12" {
             .lookAt(.fromArray(.{ @floatFromInt(index), 1, 1 }), .zero, .plus_z)
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
         const buffer_context = try context.beforeRender();
-        lines.render(&context, buffer_context, world_to_clip);
+        lines.render(&context, buffer_context, world_to_clip, 1.8);
         try context.afterRender(buffer_context);
         const result = context.swap_chain.Present(0, 0);
         if (sdk.dx12.Error.from(result)) |_| return error.PresentFailed;

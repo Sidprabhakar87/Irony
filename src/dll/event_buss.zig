@@ -202,12 +202,12 @@ pub const EventBuss = struct {
         self: *Self,
         base_dir: *const sdk.misc.BaseDir,
         host_dx_context: *const dx.HostContext,
-        game_memory: ?*game.Memory(build_info.game),
+        game_memory_maybe: ?*game.Memory(build_info.game),
         memory_usage: usize,
     ) void {
         const delta_time = self.timer.measureDeltaTime();
-        if (game_memory) |gm| {
-            gm.updateAddresses();
+        if (game_memory_maybe) |game_memory| {
+            game_memory.updateAddresses();
         }
         self.core.update(delta_time, self, processFrame);
         self.ui.update(delta_time, &self.core.controller);
@@ -216,6 +216,7 @@ pub const EventBuss = struct {
         var dx_context = dx.Context.fromHostAndManaged(host_dx_context, managed_dx_context);
         const ui_context = if (self.ui_context) |*context| context else return;
 
+        const settings_maybe = self.settings_task.peek();
         const latest_version = block: {
             const version_maybe = self.latest_version_task.peek() orelse break :block ui.LatestVersion.loading;
             const version = version_maybe.* orelse break :block ui.LatestVersion.err;
@@ -224,17 +225,18 @@ pub const EventBuss = struct {
 
         ui_context.newFrame();
         imgui.igGetIO_Nil().*.MouseDrawCursor = true;
-        const settings_maybe = self.settings_task.peek();
         self.ui.draw(
             base_dir,
             ui_context.file_dialog_context,
             settings_maybe,
-            game_memory,
+            game_memory_maybe,
             &self.core.controller,
             latest_version,
             memory_usage,
         );
-        self.ui.draw3D(&self.rendering.shapes, settings_maybe, &self.core.controller);
+        if (settings_maybe) |settings| {
+            self.ui.draw3D(&self.rendering.shapes, settings, &self.core.controller);
+        }
         ui_context.endFrame();
 
         const buffer_context = dx_context.beforeRender() catch |err| {
@@ -242,8 +244,9 @@ pub const EventBuss = struct {
             sdk.misc.error_context.logError(err);
             return;
         };
-        if (game_memory) |gm| {
-            self.rendering.render(&dx_context, buffer_context, gm);
+        if (game_memory_maybe) |game_memory| {
+            const anti_aliasing = if (settings_maybe) |s| s.misc.anti_aliasing else 1.0;
+            self.rendering.render(&dx_context, buffer_context, game_memory, anti_aliasing);
         }
         ui_context.render(buffer_context);
         dx_context.afterRender(buffer_context) catch |err| {

@@ -18,13 +18,14 @@ struct Pixel {
 cbuffer Constants : register(b0) {
 	float4x4 world_to_clip;
 	float2 viewport_size;
+	float anti_aliasing;
 }
 
 float2 safeNormalize(float2 the_vector);
 float pointLineDistance(float2 the_point, float2 line_start, float2 line_end);
 
 Pixel vs_main(Vertex vertex) {
-	float half_thickness = 0.5 * vertex.thickness;
+	float half_thickness = 0.5 * (vertex.thickness + (sign(vertex.thickness) * anti_aliasing));
 	float abs_half_thickness = abs(half_thickness);
 
 	float4 clip_start = mul(float4(vertex.start, 1.0), world_to_clip);
@@ -56,7 +57,7 @@ Pixel vs_main(Vertex vertex) {
 
 float4 ps_main(Pixel pixel) : SV_TARGET {
 	float distance = pointLineDistance(pixel.screen_position, pixel.screen_start, pixel.screen_end);
-	float alpha = 1.0 - smoothstep(pixel.half_thickness - 1, pixel.half_thickness, distance);
+	float alpha = 1.0 - smoothstep(pixel.half_thickness - anti_aliasing, pixel.half_thickness, distance);
 	return float4(pixel.color.rgb, pixel.color.a * alpha);
 }
 

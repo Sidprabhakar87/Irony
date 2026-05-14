@@ -37,6 +37,7 @@ pub const Rendering = struct {
         context: *const dx.Context,
         buffer_context: *const dx.BufferContext,
         game_memory: *const game.Memory(game_id),
+        anti_aliasing: f32,
     ) void {
         defer self.lines.clear();
         defer self.shapes.clear();
@@ -50,7 +51,7 @@ pub const Rendering = struct {
         const world_to_clip = calculateWorldToClip(context, camera) orelse return;
 
         self.shapes.render(&self.lines, camera.position.convert());
-        self.lines.render(context, buffer_context, world_to_clip);
+        self.lines.render(context, buffer_context, world_to_clip, anti_aliasing);
     }
 
     fn calculateWorldToClip(context: *const dx.Context, camera: *const game.CameraManager(game_id)) ?sdk.math.Mat4 {

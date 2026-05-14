@@ -223,6 +223,11 @@ const MiscSettings = struct {
     ) void {
         self.ui_font_size_input.draw(&settings.misc.ui_font_size, &default_settings.misc.ui_font_size);
         drawColor("UI Background Color", &settings.misc.ui_background_color, &default_settings.misc.ui_background_color);
+        drawThickness(
+            "3D Anti-Aliasing",
+            &settings.misc.anti_aliasing,
+            &default_settings.misc.anti_aliasing,
+        );
         drawBool("Show RAM Usage", &settings.misc.show_memory_usage, &default_settings.misc.show_memory_usage);
         drawBool("Show Version Info", &settings.misc.show_version_info, &default_settings.misc.show_version_info);
         imgui.igSeparator();
@@ -2147,6 +2152,26 @@ test "misc settings should function correctly" {
             try testing.expectEqual(UiFontSizeInput.max_value, current.ui_font_size);
             ctx.itemClick("UI Font Size/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.ui_font_size, current.ui_font_size);
+
+            ctx.itemInputValueFloat("UI Background Color/##X", 153);
+            try testing.expectEqual(0.6, current.ui_background_color.x());
+            ctx.itemClick("UI Background Color/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.ui_background_color, current.ui_background_color);
+
+            ctx.itemInputValueFloat("3D Anti-Aliasing", 123);
+            try testing.expectEqual(123, current.anti_aliasing);
+            ctx.itemClick("3D Anti-Aliasing/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.anti_aliasing, current.anti_aliasing);
+
+            ctx.itemClick("Show RAM Usage", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(!default.show_memory_usage, current.show_memory_usage);
+            ctx.itemClick("Show RAM Usage/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.show_memory_usage, current.show_memory_usage);
+
+            ctx.itemClick("Show Version Info", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(!default.show_version_info, current.show_version_info);
+            ctx.itemClick("Show Version Info/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.show_version_info, current.show_version_info);
         }
     };
     Test.window = .init(testing.allocator);

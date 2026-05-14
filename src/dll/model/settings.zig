@@ -5,6 +5,7 @@ const ui = @import("../ui/root.zig");
 
 pub const Settings = struct {
     general: GeneralSettings = .{},
+    automation: AutomationSettings = .{},
     hit_lines: PlayerSettings(HitLinesSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
     hurt_cylinders: PlayerSettings(HurtCylindersSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
     collision_spheres: PlayerSettings(CollisionSpheresSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
@@ -15,7 +16,6 @@ pub const Settings = struct {
     measure_tool: MeasureToolSettings = .{},
     match_bar: MatchBarSettings = .{},
     details: DetailsSettings = .{},
-    automation: AutomationSettings = .{},
 
     const Self = @This();
     pub const file_name = "settings.json";
@@ -81,6 +81,19 @@ pub const GeneralSettings = struct {
         enabled: bool = true,
         thickness_scale: f32 = 2,
         anti_aliasing: f32 = 1.8,
+    };
+};
+
+pub const AutomationSettings = struct {
+    enabled: bool = true,
+    live_games: Mode = .only_record,
+    replays: Mode = .only_record,
+    save_format: model.RecordingFormat = .irony,
+
+    pub const Mode = enum {
+        do_not_record,
+        only_record,
+        record_and_save,
     };
 };
 
@@ -396,19 +409,6 @@ pub const DetailsSettings = struct {
         secondary_player,
     };
     pub const RowsEnabled = sdk.misc.FieldMap(ui.Details, bool, &true);
-};
-
-pub const AutomationSettings = struct {
-    enabled: bool = true,
-    live_games: Mode = .only_record,
-    replays: Mode = .only_record,
-    save_format: model.RecordingFormat = .irony,
-
-    pub const Mode = enum {
-        do_not_record,
-        only_record,
-        record_and_save,
-    };
 };
 
 pub const PlayerSettingsMode = enum {

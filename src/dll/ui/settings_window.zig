@@ -80,6 +80,14 @@ pub const SettingsWindow = struct {
                 }.call,
             },
             .{
+                .name = "Automation",
+                .content = struct {
+                    fn call(c: *const Context) void {
+                        drawAutomationSettings(&c.settings.automation, &default_settings.automation);
+                    }
+                }.call,
+            },
+            .{
                 .name = "Hit Lines",
                 .content = struct {
                     fn call(c: *const Context) void {
@@ -181,14 +189,6 @@ pub const SettingsWindow = struct {
                 .content = struct {
                     fn call(c: *const Context) void {
                         drawDetailsSettings(&c.settings.details, &default_settings.details);
-                    }
-                }.call,
-            },
-            .{
-                .name = "Automation",
-                .content = struct {
-                    fn call(c: *const Context) void {
-                        drawAutomationSettings(&c.settings.automation, &default_settings.automation);
                     }
                 }.call,
             },
@@ -536,6 +536,27 @@ fn drawPlayerSettings(
         imgui.igSeparatorText(label_2);
         drawContent(&value.players[1], &default.players[1]);
     }
+}
+
+fn drawAutomationSettings(value: *model.AutomationSettings, default: *const model.AutomationSettings) void {
+    drawBool("Enabled", &value.enabled, &default.enabled);
+    imgui.igBeginDisabled(!value.enabled);
+    defer imgui.igEndDisabled();
+
+    const mode_names = std.enums.EnumFieldStruct(model.AutomationSettings.Mode, [:0]const u8, null){
+        .do_not_record = "Do Not Record",
+        .only_record = "Only Record",
+        .record_and_save = "Record And Save",
+    };
+    const format_names = std.enums.EnumFieldStruct(model.RecordingFormat, [:0]const u8, null){
+        .irony = "Irony (Small file size and fast compression.)###irony",
+        .json = "JSON (Very large file size.)###json",
+        .json_zstd = "Compressed JSON (Medium file size and slow compression.)###json_zstd",
+    };
+
+    drawEnum(model.AutomationSettings.Mode, "Live Games", &mode_names, &value.live_games, &default.live_games);
+    drawEnum(model.AutomationSettings.Mode, "Replays", &mode_names, &value.replays, &default.replays);
+    drawEnum(model.RecordingFormat, "Save Format", &format_names, &value.save_format, &default.save_format);
 }
 
 fn drawHitLinesSettings(value: *model.HitLinesSettings, default: *const model.HitLinesSettings) void {
@@ -978,27 +999,6 @@ fn drawDetailsSettings(value: *model.DetailsSettings, default: *const model.Deta
     drawRowsEnabled("Enabled Rows", &value.rows_enabled, &default.rows_enabled);
 }
 
-fn drawAutomationSettings(value: *model.AutomationSettings, default: *const model.AutomationSettings) void {
-    drawBool("Enabled", &value.enabled, &default.enabled);
-    imgui.igBeginDisabled(!value.enabled);
-    defer imgui.igEndDisabled();
-
-    const mode_names = std.enums.EnumFieldStruct(model.AutomationSettings.Mode, [:0]const u8, null){
-        .do_not_record = "Do Not Record",
-        .only_record = "Only Record",
-        .record_and_save = "Record And Save",
-    };
-    const format_names = std.enums.EnumFieldStruct(model.RecordingFormat, [:0]const u8, null){
-        .irony = "Irony (Small file size and fast compression.)###irony",
-        .json = "JSON (Very large file size.)###json",
-        .json_zstd = "Compressed JSON (Medium file size and slow compression.)###json_zstd",
-    };
-
-    drawEnum(model.AutomationSettings.Mode, "Live Games", &mode_names, &value.live_games, &default.live_games);
-    drawEnum(model.AutomationSettings.Mode, "Replays", &mode_names, &value.replays, &default.replays);
-    drawEnum(model.RecordingFormat, "Save Format", &format_names, &value.save_format, &default.save_format);
-}
-
 fn drawBool(label: [:0]const u8, value: *bool, default: *const bool) void {
     imgui.igPushID_Str(label);
     drawDefaultButton(value, default);
@@ -1340,6 +1340,57 @@ test "general settings should function correctly" {
             try testing.expectEqual(123, current.rendering_3d.anti_aliasing);
             ctx.itemClick("3D Rendering/Anti-Aliasing/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.rendering_3d.anti_aliasing, current.rendering_3d.anti_aliasing);
+        }
+    };
+    Test.window = .init(testing.allocator);
+    defer Test.window.deinit();
+    Test.window.is_open = true;
+    const context = try sdk.ui.getTestingContext();
+    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+}
+
+test "automation settings should function correctly" {
+    const Test = struct {
+        const default_settings = model.Settings{};
+        var settings = default_settings;
+        var window: SettingsWindow = undefined;
+
+        fn guiFunction(_: sdk.ui.TestContext) !void {
+            window.draw(&testing_base_dir, &settings);
+        }
+
+        fn testFunction(ctx: sdk.ui.TestContext) !void {
+            const current = &settings.automation;
+            const default = &default_settings.automation;
+
+            ctx.setRef(SettingsWindow.name);
+            ctx.itemClick("**/Automation", imgui.ImGuiMouseButton_Left, 0);
+            ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
+
+            ctx.itemUncheck("Enabled", 0);
+            try testing.expectEqual(false, current.enabled);
+            ctx.itemClick("Enabled/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.enabled, current.enabled);
+            ctx.itemCheck("Enabled", 0);
+            try testing.expectEqual(true, current.enabled);
+
+            ctx.itemClick("Live Games", imgui.ImGuiMouseButton_Left, 0);
+            ctx.itemClick("//$FOCUSED/Do Not Record", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(.do_not_record, current.live_games);
+            ctx.itemClick("Live Games/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.live_games, current.live_games);
+
+            ctx.itemClick("Replays", imgui.ImGuiMouseButton_Left, 0);
+            ctx.itemClick("//$FOCUSED/Only Record", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(.only_record, current.replays);
+            ctx.itemClick("Replays/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.replays, current.replays);
+
+            ctx.itemClick("Save Format", imgui.ImGuiMouseButton_Left, 0);
+            ctx.itemClick("//$FOCUSED/###json", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(.json, current.save_format);
+            ctx.itemClick("Save Format/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.save_format, current.save_format);
         }
     };
     Test.window = .init(testing.allocator);
@@ -2191,57 +2242,6 @@ test "details table settings should function correctly" {
             }
             ctx.itemClick("Enabled Rows/Reset All To Default Value", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.rows_enabled, current.rows_enabled);
-        }
-    };
-    Test.window = .init(testing.allocator);
-    defer Test.window.deinit();
-    Test.window.is_open = true;
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
-}
-
-test "automation settings should function correctly" {
-    const Test = struct {
-        const default_settings = model.Settings{};
-        var settings = default_settings;
-        var window: SettingsWindow = undefined;
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            window.draw(&testing_base_dir, &settings);
-        }
-
-        fn testFunction(ctx: sdk.ui.TestContext) !void {
-            const current = &settings.automation;
-            const default = &default_settings.automation;
-
-            ctx.setRef(SettingsWindow.name);
-            ctx.itemClick("**/Automation", imgui.ImGuiMouseButton_Left, 0);
-            ctx.setRef(ctx.windowInfo("layout/content", 0).Window);
-
-            ctx.itemUncheck("Enabled", 0);
-            try testing.expectEqual(false, current.enabled);
-            ctx.itemClick("Enabled/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.enabled, current.enabled);
-            ctx.itemCheck("Enabled", 0);
-            try testing.expectEqual(true, current.enabled);
-
-            ctx.itemClick("Live Games", imgui.ImGuiMouseButton_Left, 0);
-            ctx.itemClick("//$FOCUSED/Do Not Record", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(.do_not_record, current.live_games);
-            ctx.itemClick("Live Games/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.live_games, current.live_games);
-
-            ctx.itemClick("Replays", imgui.ImGuiMouseButton_Left, 0);
-            ctx.itemClick("//$FOCUSED/Only Record", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(.only_record, current.replays);
-            ctx.itemClick("Replays/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.replays, current.replays);
-
-            ctx.itemClick("Save Format", imgui.ImGuiMouseButton_Left, 0);
-            ctx.itemClick("//$FOCUSED/###json", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(.json, current.save_format);
-            ctx.itemClick("Save Format/###default", imgui.ImGuiMouseButton_Left, 0);
-            try testing.expectEqual(default.save_format, current.save_format);
         }
     };
     Test.window = .init(testing.allocator);

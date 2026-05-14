@@ -42,7 +42,7 @@ pub const Rendering = struct {
     ) void {
         defer self.lines.clear();
         defer self.shapes.clear();
-        if (!settings.enabled) {
+        if (!settings.enabled or !isAllowedToRender(game_memory)) {
             return;
         }
 
@@ -95,5 +95,17 @@ pub const Rendering = struct {
         const projection = sdk.math.Mat4.fromPerspective(vertical_fov, aspect_ratio, 1, 100_000);
 
         return view.multiply(projection);
+    }
+
+    fn isAllowedToRender(game_memory: *const game.Memory(game_id)) bool {
+        const source = game.Capturer(game_id).captureSource(
+            game_memory.match.toConstPointer(),
+            game_memory.replay_mode.toConstPointer(),
+            &game_memory.functions,
+        ) orelse return false;
+        return switch (source) {
+            .practice, .replay_loading, .replay_playback => true,
+            .live_game => false,
+        };
     }
 };

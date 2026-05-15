@@ -12,7 +12,7 @@ pub fn drawIngameCamera(
     if (!settings.enabled) {
         return;
     }
-    if (shapes.* == ._2d and shapes._2d.direction != .top) {
+    if (shapes.* == ._2d and shapes._2d.direction == .front) {
         return;
     }
     const camera = if (frame.camera) |*c| c else return;

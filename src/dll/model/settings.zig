@@ -119,17 +119,17 @@ pub const HitLinesSettings = struct {
         },
         .outline = .{
             .colors = .init(.{
-                .not_attack = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .high = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .mid = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .low = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .special_low = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
+                .not_attack = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .high = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .mid = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .low = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .special_low = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
                 .unblockable_high = .fromArray(.{ 0.75, 0.0, 0.75, 1.0 }),
                 .unblockable_mid = .fromArray(.{ 0.75, 0.0, 0.75, 1.0 }),
                 .unblockable_low = .fromArray(.{ 0.75, 0.0, 0.75, 1.0 }),
-                .throw = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .projectile = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .antiair_only = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
+                .throw = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .projectile = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .antiair_only = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
             }),
             .thickness = 1.0,
         },
@@ -154,17 +154,17 @@ pub const HitLinesSettings = struct {
         },
         .outline = .{
             .colors = .init(.{
-                .not_attack = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .high = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .mid = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .low = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .special_low = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
+                .not_attack = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .high = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .mid = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .low = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .special_low = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
                 .unblockable_high = .fromArray(.{ 0.4, 0.3, 0.4, 1.0 }),
                 .unblockable_mid = .fromArray(.{ 0.4, 0.3, 0.4, 1.0 }),
                 .unblockable_low = .fromArray(.{ 0.4, 0.3, 0.4, 1.0 }),
-                .throw = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .projectile = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
-                .antiair_only = .fromArray(.{ 0.0, 0.0, 0.0, 0.0 }),
+                .throw = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .projectile = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
+                .antiair_only = .fromArray(.{ 0.0, 0.0, 0.0, 1.0 }),
             }),
             .thickness = 1.0,
         },
@@ -186,10 +186,10 @@ pub const HurtCylindersSettings = struct {
     enabled: bool = true,
     normal: Crushing = .{
         .enabled = true,
-        .normal = .{ .color = .fromArray(.{ 0.5, 0.5, 0.5, 0.5 }), .thickness = 1.0 },
-        .high_crushing = .{ .color = .fromArray(.{ 0.75, 0.0, 0.0, 0.5 }), .thickness = 1.0 },
-        .low_crushing = .{ .color = .fromArray(.{ 0.0, 0.375, 0.75, 0.5 }), .thickness = 1.0 },
-        .invincible = .{ .color = .fromArray(.{ 0.75, 0.0, 0.75, 0.5 }), .thickness = 1.0 },
+        .normal = .{ .color = .fromArray(.{ 0.25, 0.25, 0.25, 1.0 }), .thickness = 1.0 },
+        .high_crushing = .{ .color = .fromArray(.{ 0.375, 0.0, 0.0, 1.0 }), .thickness = 1.0 },
+        .low_crushing = .{ .color = .fromArray(.{ 0.0, 0.188, 0.375, 1.0 }), .thickness = 1.0 },
+        .invincible = .{ .color = .fromArray(.{ 0.375, 0.0, 0.375, 1.0 }), .thickness = 1.0 },
     },
     power_crushing: Crushing = .{
         .enabled = true,
@@ -200,13 +200,13 @@ pub const HurtCylindersSettings = struct {
     },
     connected: ColorThicknessAndDuration = .{
         .enabled = true,
-        .color = .fromArray(.{ 1.0, 0.75, 0.25, 0.5 }),
+        .color = .fromArray(.{ 0.5, 0.375, 0.125, 1.0 }),
         .thickness = 1.0,
         .duration = 1.0,
     },
     lingering: ColorThicknessAndDuration = .{
         .enabled = true,
-        .color = .fromArray(.{ 0.0, 0.75, 0.75, 0.5 }),
+        .color = .fromArray(.{ 0.0, 0.375, 0.375, 1.0 }),
         .thickness = 1.0,
         .duration = 1.0,
     },
@@ -232,7 +232,7 @@ pub const HurtCylindersSettings = struct {
 
 pub const CollisionSpheresSettings = struct {
     enabled: bool = false,
-    color: sdk.math.Vec4 = .fromArray(.{ 0.0, 0.0, 1.0, 0.5 }),
+    color: sdk.math.Vec4 = .fromArray(.{ 0.0, 0.0, 0.5, 1.0 }),
     thickness: f32 = 1.0,
 };
 
@@ -263,11 +263,11 @@ pub const StageSettings = struct {
         .thickness = 1.0,
     },
     background: ColorAndThickness = .{
-        .color = .fromArray(.{ 0.0, 1.0, 0.0, 0.3 }),
+        .color = .fromArray(.{ 0.0, 0.3, 0.0, 1.0 }),
         .thickness = 1.0,
     },
     broken: ColorAndThickness = .{
-        .color = .fromArray(.{ 0.5, 0.5, 0.5, 0.3 }),
+        .color = .fromArray(.{ 0.25, 0.25, 0.25, 1.0 }),
         .thickness = 1.0,
     },
     wall_gimmicks: std.EnumArray(model.WallGimmick, ColorAndThickness) = .init(.{
@@ -276,34 +276,34 @@ pub const StageSettings = struct {
             .thickness = 10.0,
         },
         .wall_break = .{
-            .color = .fromArray(.{ 0.5, 0.5, 0.5, 0.3 }),
+            .color = .fromArray(.{ 0.25, 0.25, 0.25, 1.0 }),
             .thickness = 10.0,
         },
         .balcony_break = .{
-            .color = .fromArray(.{ 0.0, 1.0, 1.0, 0.3 }),
+            .color = .fromArray(.{ 0.0, 0.3, 0.3, 1.0 }),
             .thickness = 10.0,
         },
         .wall_blast = .{
-            .color = .fromArray(.{ 1.0, 1.0, 0.0, 0.3 }),
+            .color = .fromArray(.{ 0.3, 0.3, 0.0, 1.0 }),
             .thickness = 10.0,
         },
         .wall_bound = .{
-            .color = .fromArray(.{ 1.0, 0.5, 0.0, 0.3 }),
+            .color = .fromArray(.{ 0.3, 0.15, 0.0, 1.0 }),
             .thickness = 10.0,
         },
     }),
     floor_gimmicks: std.EnumArray(model.FloorGimmickType, FloorGimmick) = .init(.{
         .floor_break = .{
-            .side_color = .fromArray(.{ 0.0, 1.0, 1.0, 0.3 }),
+            .side_color = .fromArray(.{ 0.0, 0.3, 0.3, 1.0 }),
             .side_thickness = 10.0,
-            .top_color = .fromArray(.{ 0.0, 1.0, 1.0, 0.02 }),
-            .top_hard_color = .fromArray(.{ 0.0, 1.0, 1.0, 0.01 }),
+            .top_color = .fromArray(.{ 0.0, 0.02, 0.02, 1.0 }),
+            .top_hard_color = .fromArray(.{ 0.0, 0.01, 0.01, 1.0 }),
         },
         .floor_blast = .{
-            .side_color = .fromArray(.{ 1.0, 0.5, 0.0, 0.3 }),
+            .side_color = .fromArray(.{ 0.3, 0.15, 0.0, 1.0 }),
             .side_thickness = 10.0,
-            .top_color = .fromArray(.{ 1.0, 0.5, 0.0, 0.02 }),
-            .top_hard_color = .fromArray(.{ 1.0, 0.5, 0.0, 0.01 }),
+            .top_color = .fromArray(.{ 0.02, 0.01, 0.0, 1.0 }),
+            .top_hard_color = .fromArray(.{ 0.01, 0.005, 0.0, 1.0 }),
         },
     }),
 
@@ -322,7 +322,7 @@ pub const StageSettings = struct {
 
 pub const IngameCameraSettings = struct {
     enabled: bool = false,
-    color: sdk.math.Vec4 = .fromArray(.{ 1.0, 1.0, 1.0, 0.05 }),
+    color: sdk.math.Vec4 = .fromArray(.{ 0.15, 0.15, 0.15, 1.0 }),
     length: f32 = 800.0,
     thickness: f32 = 1.0,
 };

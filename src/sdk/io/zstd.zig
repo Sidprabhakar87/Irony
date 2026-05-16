@@ -23,8 +23,7 @@ pub const ZstdEncoder = struct {
             return err;
         };
         errdefer allocator.destroy(zstd_allocator);
-        zstd_allocator.* = ZstdAllocator.init(allocator);
-        errdefer zstd_allocator.deinit();
+        zstd_allocator.* = .{ .allocator = allocator };
 
         const ctx = zstd.ZSTD_createCCtx_advanced(zstd_allocator.interface()) orelse {
             misc.error_context.new("Failed to create zstd compression context.", .{});
@@ -93,7 +92,6 @@ pub const ZstdEncoder = struct {
         if (resultToError(ctx_result)) |_| {
             std.log.err("Failed to free zstd compression context. Cause: {s}", .{resultToString(ctx_result)});
         }
-        self.zstd_allocator.deinit();
         self.allocator.destroy(self.zstd_allocator);
     }
 
@@ -200,8 +198,7 @@ pub const ZstdDecoder = struct {
             return err;
         };
         errdefer allocator.destroy(zstd_allocator);
-        zstd_allocator.* = ZstdAllocator.init(allocator);
-        errdefer zstd_allocator.deinit();
+        zstd_allocator.* = .{ .allocator = allocator };
 
         const ctx = zstd.ZSTD_createDCtx_advanced(zstd_allocator.interface()) orelse {
             misc.error_context.new("Failed to create zstd decompression context.", .{});
@@ -253,7 +250,6 @@ pub const ZstdDecoder = struct {
         if (resultToError(ctx_result)) |_| {
             std.log.err("Failed to free zstd decompression context. Cause: {s}", .{resultToString(ctx_result)});
         }
-        self.zstd_allocator.deinit();
         self.allocator.destroy(self.zstd_allocator);
     }
 
@@ -341,21 +337,10 @@ pub const ZstdDecoder = struct {
 
 const ZstdAllocator = struct {
     allocator: std.mem.Allocator,
-    map: std.AutoHashMap([*]align(alignment) u8, usize),
 
     const Self = @This();
     const alignment = @alignOf(std.c.max_align_t);
-
-    pub fn init(allocator: std.mem.Allocator) Self {
-        return .{
-            .allocator = allocator,
-            .map = .init(allocator),
-        };
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.map.deinit();
-    }
+    const header_size = std.mem.alignForward(usize, @sizeOf(usize), alignment);
 
     pub fn interface(self: *Self) zstd.ZSTD_customMem {
         return .{
@@ -367,14 +352,13 @@ const ZstdAllocator = struct {
 
     fn alloc(@"opaque": ?*anyopaque, size: usize) callconv(.c) ?*anyopaque {
         const self: *Self = @ptrCast(@alignCast(@"opaque"));
-        const slice = self.allocator.alignedAlloc(u8, std.mem.Alignment.fromByteUnits(alignment), size) catch {
+        const total_size = header_size + size;
+        const data = self.allocator.alignedAlloc(u8, std.mem.Alignment.fromByteUnits(alignment), total_size) catch {
             return null;
         };
-        self.map.put(slice.ptr, slice.len) catch {
-            self.allocator.free(slice);
-            return null;
-        };
-        return slice.ptr;
+        const header: *usize = @ptrCast(data.ptr);
+        header.* = size;
+        return &data[header_size];
     }
 
     fn free(@"opaque": ?*anyopaque, pointer: ?*anyopaque) callconv(.c) void {
@@ -382,14 +366,14 @@ const ZstdAllocator = struct {
         if (pointer == null) {
             return;
         }
-        const aligned: [*]align(alignment) u8 = @ptrCast(@alignCast(pointer));
-        const entry = self.map.fetchRemove(aligned) orelse {
-            std.log.err("XZ utils attempted to free a address that's not allocated: 0x{X}", .{@intFromPtr(pointer)});
+        if (@intFromPtr(pointer) % alignment != 0) {
+            std.log.err("ZSTD attempted to free a misaligned pointer: 0x{X}", .{@intFromPtr(pointer)});
             return;
-        };
-        const total_size = entry.value;
-        const slice = aligned[0..total_size];
-        self.allocator.free(slice);
+        }
+        const data: [*]align(alignment) u8 = @ptrFromInt(@intFromPtr(pointer) - header_size);
+        const header: *usize = @ptrCast(data);
+        const total_size = header_size + header.*;
+        self.allocator.free(data[0..total_size]);
     }
 };
 

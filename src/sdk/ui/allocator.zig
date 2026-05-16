@@ -1,78 +1,67 @@
 const std = @import("std");
 const imgui = @import("imgui");
 
-const AllocatorWrapper = struct {
+const ImguiAllocator = struct {
     allocator: std.mem.Allocator,
-    map: std.AutoHashMap([*]align(alignment) u8, usize),
 
     const Self = @This();
     const alignment = @alignOf(std.c.max_align_t);
+    const header_size = std.mem.alignForward(usize, @sizeOf(usize), alignment);
 
-    pub fn init(allocator: std.mem.Allocator) Self {
-        return .{
-            .allocator = allocator,
-            .map = .init(allocator),
+    fn alloc(size: usize, user_data: ?*anyopaque) callconv(.c) ?*anyopaque {
+        const self: *Self = @ptrCast(@alignCast(user_data));
+        const total_size = header_size + size;
+        const data = self.allocator.alignedAlloc(u8, std.mem.Alignment.fromByteUnits(alignment), total_size) catch {
+            std.log.err("Imgui failed to allocate {} bytes of memory.", .{size});
+            return null;
         };
+        const header: *usize = @ptrCast(data.ptr);
+        header.* = size;
+        return &data[header_size];
     }
 
-    pub fn deinit(self: *Self) void {
-        self.map.deinit();
-    }
-
-    pub fn alloc(self: *Self, size: usize) !*anyopaque {
-        const slice = try self.allocator.alignedAlloc(u8, std.mem.Alignment.fromByteUnits(alignment), size);
-        try self.map.put(slice.ptr, slice.len);
-        return slice.ptr;
-    }
-
-    pub fn free(self: *Self, ptr: *anyopaque) !void {
-        const aligned: [*]align(alignment) u8 = @ptrCast(@alignCast(ptr));
-        const len = (self.map.fetchRemove(aligned) orelse return error.AllocationNotFound).value;
-        const slice = aligned[0..len];
-        self.allocator.free(slice);
+    fn free(pointer: ?*anyopaque, user_data: ?*anyopaque) callconv(.c) void {
+        const self: *Self = @ptrCast(@alignCast(user_data));
+        if (pointer == null) {
+            return;
+        }
+        if (@intFromPtr(pointer) % alignment != 0) {
+            std.log.err("Imgui attempted to free a misaligned pointer: 0x{X}", .{@intFromPtr(pointer)});
+            return;
+        }
+        const data: [*]align(alignment) u8 = @ptrFromInt(@intFromPtr(pointer) - header_size);
+        const header: *usize = @ptrCast(data);
+        const total_size = header_size + header.*;
+        self.allocator.free(data[0..total_size]);
     }
 };
 
-var current_wrapper: ?AllocatorWrapper = null;
+var current_imgui_allocator: ?ImguiAllocator = null;
 
-pub fn setAllocator(allocator: ?std.mem.Allocator) void {
-    if (current_wrapper) |*wrapper| {
-        wrapper.deinit();
-    }
-    if (allocator) |a| {
-        current_wrapper = AllocatorWrapper.init(a);
+pub fn setAllocator(allocator_maybe: ?std.mem.Allocator) void {
+    if (allocator_maybe) |allocator| {
+        current_imgui_allocator = .{ .allocator = allocator };
+        imgui.igSetAllocatorFunctions(
+            ImguiAllocator.alloc,
+            ImguiAllocator.free,
+            @ptrCast(&current_imgui_allocator),
+        );
     } else {
-        current_wrapper = null;
+        current_imgui_allocator = null;
+        imgui.igSetAllocatorFunctions(cAlloc, cFree, null);
     }
-    imgui.igSetAllocatorFunctions(alloc, free, null);
 }
 
 pub fn getAllocator() ?std.mem.Allocator {
-    return if (current_wrapper) |*wrapper| wrapper.allocator else null;
+    return if (current_imgui_allocator) |*a| a.allocator else null;
 }
 
-fn alloc(size: usize, _: ?*anyopaque) callconv(.c) ?*anyopaque {
-    if (current_wrapper) |*wrapper| {
-        return wrapper.alloc(size) catch |err| {
-            std.log.err("Imgui failed to allocate memory. [{}]", .{err});
-            @panic("Imgui failed to allocate memory.");
-        };
-    } else {
-        return std.c.malloc(size);
-    }
+fn cAlloc(size: usize, _: ?*anyopaque) callconv(.c) ?*anyopaque {
+    return std.c.malloc(size);
 }
 
-fn free(ptr: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {
-    if (current_wrapper) |*wrapper| {
-        if (ptr) |pointer| {
-            wrapper.free(pointer) catch |err| {
-                std.log.err("Imgui failed to free memory. [{}]", .{err});
-                @panic("Imgui failed to free memory.");
-            };
-        }
-    } else {
-        std.c.free(ptr);
-    }
+fn cFree(pointer: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {
+    std.c.free(pointer);
 }
 
 const testing = std.testing;

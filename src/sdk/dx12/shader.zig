@@ -375,7 +375,7 @@ pub fn Shader(Vertex: type, Index: type, Constants: type) type {
             const buffer = buffer_maybe.* orelse block: {
                 errdefer misc.error_context.append("Failed to (re)allocate the buffer.", .{});
                 const size = switch (buffer_type) {
-                    .vertex, .index => std.math.ceilPowerOfTwo(u32, bytes_needed) catch std.math.maxInt(u32),
+                    .vertex, .index => std.math.ceilPowerOfTwo(u32, @max(bytes_needed, 1024)) catch std.math.maxInt(u32),
                     .constant => b: {
                         if (@sizeOf(Constants) > std.math.maxInt(u32) - 255) {
                             misc.error_context.new("Overflow while calculating size.", .{});

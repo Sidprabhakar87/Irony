@@ -206,9 +206,6 @@ pub const EventBuss = struct {
         memory_usage: usize,
     ) void {
         const delta_time = self.timer.measureDeltaTime();
-        if (game_memory_maybe) |game_memory| {
-            game_memory.updateAddresses();
-        }
         self.core.update(delta_time, self, processFrame);
         self.ui.update(delta_time, &self.core.controller);
 

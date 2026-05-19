@@ -84,8 +84,7 @@ pub const TestingContext = struct {
             .OutputWindow = window,
             .Windowed = 1,
             .SwapEffect = .DISCARD,
-            .Flags = @intFromEnum(w32.DXGI_SWAP_CHAIN_FLAG.ALLOW_MODE_SWITCH) |
-                @intFromEnum(w32.DXGI_SWAP_CHAIN_FLAG.ALLOW_TEARING),
+            .Flags = @intFromEnum(w32.DXGI_SWAP_CHAIN_FLAG.ALLOW_MODE_SWITCH),
         };
         var device: *w32.ID3D11Device = undefined;
         var swap_chain: *w32.IDXGISwapChain = undefined;
@@ -141,7 +140,7 @@ pub const TestingContext = struct {
     }
 
     pub fn present(self: *const Self) !void {
-        const result = self.swap_chain.Present(0, w32.DXGI_PRESENT_ALLOW_TEARING);
+        const result = self.swap_chain.Present(0, 0);
         if (dx11.Error.from(result)) |err| {
             misc.error_context.new("{f}", .{err});
             misc.error_context.append("IDXGISwapChain.Present returned a failure value.", .{});

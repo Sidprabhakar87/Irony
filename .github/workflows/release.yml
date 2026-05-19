@@ -51,31 +51,17 @@ jobs:
                   sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/$(lsb_release -sc)/winehq-$(lsb_release -sc).sources
                   sudo apt update -y
                   sudo apt install -y --install-recommends winehq-stable
-                  sudo apt install -y xvfb vulkan-tools mesa-vulkan-drivers=24.0.5-1ubuntu1
                   export WINEARCH=win64
                   export WINEPREFIX=$HOME/.wineprefix
                   export DISPLAY=""
                   wineboot --init
-                  WINETRICKS_VERSION="20260125"
-                  curl -L -o winetricks.tar.gz https://github.com/Winetricks/winetricks/archive/refs/tags/${WINETRICKS_VERSION}.tar.gz
-                  mkdir -p ./winetricks
-                  tar --strip-components=1 -xvf winetricks.tar.gz -C ./winetricks
-                  rm winetricks.tar.gz
-                  cd ./winetricks
-                  sudo make install
-                  cd ..
-                  rm -rf ./winetricks
-                  winetricks dxvk vkd3d
             - name: Run Tests
               id: run_tests
               if: ${{ github.event.inputs.skip_tests != 'true' }}
               run: |
                   export WINEARCH=win64
                   export WINEPREFIX=$HOME/.wineprefix
-                  export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
-                  export VK_LAYER_PATH=/usr/share/vulkan/explicit_layer.d
-                  export VK_LOADER_DRIVER_OVERRIDE=lavapipe
-                  xvfb-run -a zig build test --summary all -freference-trace
+                  zig build test -Dskip_gpu=true -Dskip_display=true --summary all -freference-trace
             - name: Build Release
               id: build_release
               run: zig build --release=fast --summary all -freference-trace

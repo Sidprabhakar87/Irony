@@ -206,8 +206,7 @@ test "should render without errors when rendering api is DX11" {
         const buffer_context = try context.beforeRender();
         lines.render(&context, buffer_context, world_to_clip, 1.8);
         try context.afterRender(buffer_context);
-        const result = context.swap_chain.Present(0, 0);
-        if (sdk.dx11.Error.from(result)) |_| return error.PresentFailed;
+        try testing_context.present();
     }
 }
 
@@ -249,7 +248,6 @@ test "should render without errors when rendering api is DX12" {
         const buffer_context = try context.beforeRender();
         lines.render(&context, buffer_context, world_to_clip, 1.8);
         try context.afterRender(buffer_context);
-        const result = context.swap_chain.Present(0, 0);
-        if (sdk.dx12.Error.from(result)) |_| return error.PresentFailed;
+        try testing_context.present();
     }
 }

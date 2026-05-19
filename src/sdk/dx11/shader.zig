@@ -781,8 +781,7 @@ test "should succeed in drawing a shader with only vertices" {
         try context.setDefaultViewportsAndScissors(buffer_context);
         try shader.draw(&context, buffer_context);
         try context.afterRender(buffer_context);
-        const result = context.swap_chain.Present(0, 0);
-        if (dx11.Error.from(result)) |_| return error.PresentFailed;
+        try testing_context.present();
     }
 }
 
@@ -848,8 +847,7 @@ test "should succeed in drawing a shader with vertices, indices and constants" {
         try context.setDefaultViewportsAndScissors(buffer_context);
         try shader.draw(&context, buffer_context);
         try context.afterRender(buffer_context);
-        const result = context.swap_chain.Present(0, 0);
-        if (dx11.Error.from(result)) |_| return error.PresentFailed;
+        try testing_context.present();
     }
 }
 

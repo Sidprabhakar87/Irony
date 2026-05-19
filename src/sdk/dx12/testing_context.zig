@@ -135,7 +135,8 @@ pub const TestingContext = struct {
             .OutputWindow = window,
             .Windowed = 1,
             .SwapEffect = .FLIP_DISCARD,
-            .Flags = @intFromEnum(w32.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH),
+            .Flags = @intFromEnum(w32.DXGI_SWAP_CHAIN_FLAG.ALLOW_MODE_SWITCH) |
+                @intFromEnum(w32.DXGI_SWAP_CHAIN_FLAG.ALLOW_TEARING),
         };
         var swap_chain: *w32.IDXGISwapChain = undefined;
         const swap_chain_result = factory.IDXGIFactory.CreateSwapChain(
@@ -173,6 +174,15 @@ pub const TestingContext = struct {
         _ = w32.DestroyWindow(self.window);
         _ = w32.UnregisterClassW(self.window_class.lpszClassName, self.window_class.hInstance);
         std.testing.allocator.destroy(self.test_allocation);
+    }
+
+    pub fn present(self: *const Self) !void {
+        const result = self.swap_chain.Present(0, w32.DXGI_PRESENT_ALLOW_TEARING);
+        if (dx12.Error.from(result)) |err| {
+            misc.error_context.new("{f}", .{err});
+            misc.error_context.append("IDXGISwapChain.Present returned a failure value.", .{});
+            return error.Dx12Error;
+        }
     }
 
     pub fn getHostContext(self: *const Self) dx12.HostContext {

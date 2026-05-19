@@ -420,8 +420,7 @@ test "Context beforeRender and afterRender should succeed" {
         const buffer_context = try context.beforeRender();
         try context.setDefaultViewportsAndScissors(buffer_context);
         try context.afterRender(buffer_context);
-        const result = context.swap_chain.Present(0, 0);
-        if (dx11.Error.from(result)) |_| return error.PresentFailed;
+        try testing_context.present();
     }
 }
 
@@ -439,8 +438,7 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
         const buffer_context = try context.beforeRender();
         try context.setDefaultViewportsAndScissors(buffer_context);
         try context.afterRender(buffer_context);
-        const result = context.swap_chain.Present(0, 0);
-        if (dx11.Error.from(result)) |_| return error.PresentFailed;
+        try testing_context.present();
     }
     managed_context.deinitBufferContexts();
     try managed_context.reinitBufferContexts(&host_context);
@@ -448,8 +446,7 @@ test "ManagedContext deinitBufferContexts and reinitBufferContexts should succee
         const buffer_context = try context.beforeRender();
         try context.setDefaultViewportsAndScissors(buffer_context);
         try context.afterRender(buffer_context);
-        const result = context.swap_chain.Present(0, 0);
-        if (dx11.Error.from(result)) |_| return error.PresentFailed;
+        try testing_context.present();
     }
 }
 

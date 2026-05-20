@@ -28,6 +28,7 @@ pub const drawStage = @import("stage.zig").drawStage;
 pub const Shapes = @import("shapes.zig").Shapes;
 pub const Shapes2D = @import("shapes.zig").Shapes2D;
 pub const Shapes3D = @import("shapes.zig").Shapes3D;
+pub const VoidShapes = @import("shapes.zig").VoidShapes;
 pub const testing_shapes = @import("shapes.zig").testing_shapes;
 pub const TestingShapes = @import("shapes.zig").TestingShapes;
 pub const drawSkeletons = @import("skeletons.zig").drawSkeletons;

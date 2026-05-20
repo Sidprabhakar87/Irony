@@ -35,133 +35,92 @@ pub fn drawIngameCamera(
 
 const testing = std.testing;
 
-test "should draw lines correctly when direction is not front" {
-    const Test = struct {
-        const settings = model.IngameCameraSettings{
-            .enabled = true,
-            .color = .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }),
-            .length = 5,
-            .thickness = 1,
-        };
-        const frame = model.Frame{ .camera = .{
-            .position = .fromArray(.{ 1, 2, 3 }),
-            .pitch = -0.25 * std.math.pi,
-            .yaw = 0.5 * std.math.pi,
-            .roll = 0,
-            .horizontal_fov = std.math.degreesToRadians(65.0),
-        } };
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            ui.testing_shapes.clear();
-            _ = imgui.igBegin("Window", null, 0);
-            defer imgui.igEnd();
-            const shapes = ui.Shapes{ ._2d = .{
-                .direction = .top,
-                .matrix = .identity,
-                .inverse_matrix = .identity,
-            } };
-            drawIngameCamera(&shapes, &settings, &frame);
-        }
-
-        fn testFunction(_: sdk.ui.TestContext) !void {
-            try testing.expectEqual(4, ui.testing_shapes.getAll().len);
-            const lines = [4]?*const ui.TestingShapes.Line{
-                ui.testing_shapes.findLineWithWorldPoints(
-                    .fromArray(.{ 1, 2, 3 }),
-                    .fromArray(.{ -1.572, 5.877, 1.169 }),
-                    0.001,
-                ),
-                ui.testing_shapes.findLineWithWorldPoints(
-                    .fromArray(.{ 1, 2, 3 }),
-                    .fromArray(.{ -1.572, 3.831, -0.8772 }),
-                    0.001,
-                ),
-                ui.testing_shapes.findLineWithWorldPoints(
-                    .fromArray(.{ 1, 2, 3 }),
-                    .fromArray(.{ -1.572, 3.831, -0.877 }),
-                    0.001,
-                ),
-                ui.testing_shapes.findLineWithWorldPoints(
-                    .fromArray(.{ 1, 2, 3 }),
-                    .fromArray(.{ 3.572, 3.831, -0.877 }),
-                    0.001,
-                ),
-            };
-            for (lines) |line| {
-                try testing.expect(line != null);
-                try testing.expectEqual(.{ 0.1, 0.2, 0.3, 0.4 }, line.?.color.array);
-                try testing.expectEqual(1, line.?.thickness);
-            }
-        }
-    };
+test "should draw lines correctly" {
     ui.testing_shapes.begin(testing.allocator);
     defer ui.testing_shapes.end();
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
-}
 
-test "should draw nothing when direction is front" {
-    const Test = struct {
-        const settings = model.IngameCameraSettings{ .enabled = true };
-        const frame = model.Frame{ .camera = .{
-            .position = .fromArray(.{ 1, 2, 3 }),
-            .pitch = -0.25 * std.math.pi,
-            .yaw = 0.5 * std.math.pi,
-            .roll = 0,
-            .horizontal_fov = std.math.degreesToRadians(65.0),
-        } };
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            ui.testing_shapes.clear();
-            _ = imgui.igBegin("Window", null, 0);
-            defer imgui.igEnd();
-            const shapes = ui.Shapes{ ._2d = .{
-                .direction = .front,
-                .matrix = .identity,
-                .inverse_matrix = .identity,
-            } };
-            drawIngameCamera(&shapes, &settings, &frame);
-        }
-
-        fn testFunction(_: sdk.ui.TestContext) !void {
-            try testing.expectEqual(0, ui.testing_shapes.getAll().len);
-        }
+    const shapes = ui.Shapes{ ._void = .{} };
+    const settings = model.IngameCameraSettings{
+        .enabled = true,
+        .color = .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }),
+        .length = 5,
+        .thickness = 1,
     };
-    ui.testing_shapes.begin(testing.allocator);
-    defer ui.testing_shapes.end();
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+    const frame = model.Frame{ .camera = .{
+        .position = .fromArray(.{ 1, 2, 3 }),
+        .pitch = -0.25 * std.math.pi,
+        .yaw = 0.5 * std.math.pi,
+        .roll = 0,
+        .horizontal_fov = std.math.degreesToRadians(65.0),
+    } };
+    drawIngameCamera(&shapes, &settings, &frame);
+
+    try testing.expectEqual(4, ui.testing_shapes.getAll().len);
+    const lines = [4]?*const ui.TestingShapes.Line{
+        ui.testing_shapes.findLineWithWorldPoints(
+            .fromArray(.{ 1, 2, 3 }),
+            .fromArray(.{ -1.572, 5.877, 1.169 }),
+            0.001,
+        ),
+        ui.testing_shapes.findLineWithWorldPoints(
+            .fromArray(.{ 1, 2, 3 }),
+            .fromArray(.{ -1.572, 3.831, -0.8772 }),
+            0.001,
+        ),
+        ui.testing_shapes.findLineWithWorldPoints(
+            .fromArray(.{ 1, 2, 3 }),
+            .fromArray(.{ -1.572, 3.831, -0.877 }),
+            0.001,
+        ),
+        ui.testing_shapes.findLineWithWorldPoints(
+            .fromArray(.{ 1, 2, 3 }),
+            .fromArray(.{ 3.572, 3.831, -0.877 }),
+            0.001,
+        ),
+    };
+    for (lines) |line| {
+        try testing.expect(line != null);
+        try testing.expectEqual(.{ 0.1, 0.2, 0.3, 0.4 }, line.?.color.array);
+        try testing.expectEqual(1, line.?.thickness);
+    }
 }
 
 test "should draw nothing when disabled in settings" {
-    const Test = struct {
-        const settings = model.IngameCameraSettings{ .enabled = false };
-        const frame = model.Frame{ .camera = .{
-            .position = .fromArray(.{ 1, 2, 3 }),
-            .pitch = -0.25 * std.math.pi,
-            .yaw = 0.5 * std.math.pi,
-            .roll = 0,
-            .horizontal_fov = std.math.degreesToRadians(65.0),
-        } };
-
-        fn guiFunction(_: sdk.ui.TestContext) !void {
-            ui.testing_shapes.clear();
-            _ = imgui.igBegin("Window", null, 0);
-            defer imgui.igEnd();
-            const shapes = ui.Shapes{ ._2d = .{
-                .direction = .top,
-                .matrix = .identity,
-                .inverse_matrix = .identity,
-            } };
-            drawIngameCamera(&shapes, &settings, &frame);
-        }
-
-        fn testFunction(_: sdk.ui.TestContext) !void {
-            try testing.expectEqual(0, ui.testing_shapes.getAll().len);
-        }
-    };
     ui.testing_shapes.begin(testing.allocator);
     defer ui.testing_shapes.end();
-    const context = try sdk.ui.getTestingContext();
-    try context.runTest(.{}, Test.guiFunction, Test.testFunction);
+
+    const shapes = ui.Shapes{ ._void = .{} };
+    const settings = model.IngameCameraSettings{ .enabled = false };
+    const frame = model.Frame{ .camera = .{
+        .position = .fromArray(.{ 1, 2, 3 }),
+        .pitch = -0.25 * std.math.pi,
+        .yaw = 0.5 * std.math.pi,
+        .roll = 0,
+        .horizontal_fov = std.math.degreesToRadians(65.0),
+    } };
+    drawIngameCamera(&shapes, &settings, &frame);
+
+    try testing.expectEqual(0, ui.testing_shapes.getAll().len);
+}
+
+test "should draw nothing when shapes are 2D and direction is front" {
+    ui.testing_shapes.begin(testing.allocator);
+    defer ui.testing_shapes.end();
+
+    const shapes = ui.Shapes{ ._2d = .{
+        .direction = .front,
+        .matrix = .identity,
+        .inverse_matrix = .identity,
+    } };
+    const settings = model.IngameCameraSettings{ .enabled = true };
+    const frame = model.Frame{ .camera = .{
+        .position = .fromArray(.{ 1, 2, 3 }),
+        .pitch = -0.25 * std.math.pi,
+        .yaw = 0.5 * std.math.pi,
+        .roll = 0,
+        .horizontal_fov = std.math.degreesToRadians(65.0),
+    } };
+    drawIngameCamera(&shapes, &settings, &frame);
+
+    try testing.expectEqual(0, ui.testing_shapes.getAll().len);
 }

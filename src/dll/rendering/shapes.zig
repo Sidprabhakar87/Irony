@@ -220,3 +220,180 @@ pub const Shapes = struct {
         }
     }
 };
+
+const testing = std.testing;
+
+const MockLines = struct {
+    allocator: std.mem.Allocator,
+    list: std.ArrayList(Line),
+
+    const Self = @This();
+    const Line = struct {
+        geometry: sdk.math.LineSegment3,
+        color: sdk.math.Vec4,
+        thickness: f32,
+    };
+
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return .{
+            .allocator = allocator,
+            .list = .empty,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.list.deinit(self.allocator);
+    }
+
+    pub fn add(
+        self: *Self,
+        line: sdk.math.LineSegment3,
+        color: sdk.math.Vec4,
+        thickness: f32,
+    ) void {
+        self.list.append(self.allocator, .{
+            .geometry = line,
+            .color = color,
+            .thickness = thickness,
+        }) catch @panic("Failed to add line to list.");
+    }
+};
+
+test "should render point correctly" {
+    var lines = MockLines.init(testing.allocator);
+    defer lines.deinit();
+    var shapes = Shapes.init(testing.allocator);
+    defer shapes.deinit();
+
+    shapes.addPoint(.fromArray(.{ 1, 2, 3 }), .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), 10);
+    shapes.render(&lines, .zero);
+
+    const items = lines.list.items;
+    try testing.expectEqual(1, items.len);
+    try testing.expectEqual(sdk.math.LineSegment3{
+        .point_1 = .fromArray(.{ 1, 2, 3 }),
+        .point_2 = .fromArray(.{ 1, 2, 3 }),
+    }, items[0].geometry);
+    try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), items[0].color);
+    try testing.expectEqual(10, items[0].thickness);
+}
+
+test "should render line correctly" {
+    var lines = MockLines.init(testing.allocator);
+    defer lines.deinit();
+    var shapes = Shapes.init(testing.allocator);
+    defer shapes.deinit();
+
+    shapes.addLine(
+        .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
+        .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }),
+        10,
+    );
+    shapes.render(&lines, .zero);
+
+    const items = lines.list.items;
+    try testing.expectEqual(1, items.len);
+    try testing.expectEqual(sdk.math.LineSegment3{
+        .point_1 = .fromArray(.{ 1, 2, 3 }),
+        .point_2 = .fromArray(.{ 4, 5, 6 }),
+    }, items[0].geometry);
+    try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), items[0].color);
+    try testing.expectEqual(10, items[0].thickness);
+}
+
+test "should render sphere correctly" {
+    var lines = MockLines.init(testing.allocator);
+    defer lines.deinit();
+    var shapes = Shapes.init(testing.allocator);
+    defer shapes.deinit();
+
+    const center = sdk.math.Vec3.fromArray(.{ 1, 2, 3 });
+    const camera = sdk.math.Vec3.fromArray(.{ 3, 4, 3 });
+    shapes.addSphere(.{ .center = center, .radius = 2 }, .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), 10);
+    shapes.render(&lines, camera);
+
+    const items = lines.list.items;
+    try testing.expectEqual(Shapes.circle_segments, items.len);
+    for (items) |*item| {
+        try testing.expectApproxEqAbs(2, item.geometry.point_1.distanceTo(center), 0.0001);
+        try testing.expectApproxEqAbs(2, item.geometry.point_2.distanceTo(center), 0.0001);
+        try testing.expectApproxEqAbs(2, item.geometry.point_1.distanceTo(camera), 0.0001);
+        try testing.expectApproxEqAbs(2, item.geometry.point_2.distanceTo(camera), 0.0001);
+        try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), item.color);
+        try testing.expectEqual(10, item.thickness);
+    }
+}
+
+test "should render nothing when camera is inside sphere" {
+    var lines = MockLines.init(testing.allocator);
+    defer lines.deinit();
+    var shapes = Shapes.init(testing.allocator);
+    defer shapes.deinit();
+
+    shapes.addSphere(.{ .center = .zero, .radius = 2 }, .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), 10);
+    shapes.render(&lines, .plus_x);
+
+    try testing.expectEqual(0, lines.list.items.len);
+}
+
+test "should render cylinder correctly" {
+    var lines = MockLines.init(testing.allocator);
+    defer lines.deinit();
+    var shapes = Shapes.init(testing.allocator);
+    defer shapes.deinit();
+
+    shapes.addCylinder(.{
+        .center = .fromArray(.{ 1, 2, 3 }),
+        .radius = 2,
+        .half_height = 1,
+    }, .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), 10);
+    shapes.render(&lines, .fromArray(.{ 3, 4, 3 }));
+
+    const items = lines.list.items;
+    try testing.expectEqual(2 * Shapes.circle_segments + 2, items.len);
+    for (items[0..2]) |*item| {
+        try testing.expectApproxEqAbs(2, item.geometry.point_1.distanceTo(.fromArray(.{ 1, 2, 4 })), 0.0001);
+        try testing.expectApproxEqAbs(2, item.geometry.point_2.distanceTo(.fromArray(.{ 1, 2, 2 })), 0.0001);
+        try testing.expectApproxEqAbs(2, item.geometry.point_1.distanceTo(.fromArray(.{ 3, 4, 4 })), 0.0001);
+        try testing.expectApproxEqAbs(2, item.geometry.point_2.distanceTo(.fromArray(.{ 3, 4, 2 })), 0.0001);
+        try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), item.color);
+        try testing.expectEqual(10, item.thickness);
+    }
+    for (items[2..items.len]) |*item| {
+        try testing.expectApproxEqAbs(2, @min(
+            item.geometry.point_1.distanceTo(.fromArray(.{ 1, 2, 4 })),
+            item.geometry.point_1.distanceTo(.fromArray(.{ 1, 2, 2 })),
+        ), 0.0001);
+        try testing.expectApproxEqAbs(2, @min(
+            item.geometry.point_2.distanceTo(.fromArray(.{ 1, 2, 4 })),
+            item.geometry.point_2.distanceTo(.fromArray(.{ 1, 2, 2 })),
+        ), 0.0001);
+        try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), item.color);
+        try testing.expectEqual(10, item.thickness);
+    }
+}
+
+test "should not render cylinder side lines when camera 2D projection is inside cylinder 2D projection" {
+    var lines = MockLines.init(testing.allocator);
+    defer lines.deinit();
+    var shapes = Shapes.init(testing.allocator);
+    defer shapes.deinit();
+
+    shapes.addCylinder(.{ .center = .zero, .radius = 2, .half_height = 1 }, .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), 10);
+    shapes.render(&lines, .fromArray(.{ 1, 0, 3 }));
+
+    const items = lines.list.items;
+    try testing.expectEqual(2 * Shapes.circle_segments, items.len);
+    for (items) |*item| {
+        try testing.expectApproxEqAbs(2, @min(
+            item.geometry.point_1.distanceTo(.fromArray(.{ 0, 0, 1 })),
+            item.geometry.point_1.distanceTo(.fromArray(.{ 0, 0, -1 })),
+        ), 0.0001);
+        try testing.expectApproxEqAbs(2, @min(
+            item.geometry.point_2.distanceTo(.fromArray(.{ 0, 0, 1 })),
+            item.geometry.point_2.distanceTo(.fromArray(.{ 0, 0, -1 })),
+        ), 0.0001);
+        try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), item.color);
+        try testing.expectEqual(10, item.thickness);
+    }
+}

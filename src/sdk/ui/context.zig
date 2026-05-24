@@ -88,11 +88,18 @@ pub fn Context(comptime rendering_api: build_info.RenderingApi) type {
                     }
                 },
                 .dx12 => {
+                    var swap_chain_desc: w32.DXGI_SWAP_CHAIN_DESC = undefined;
+                    const desc_result = dx_context.swap_chain.GetDesc(&swap_chain_desc);
+                    if (dx12.Error.from(desc_result)) |err| {
+                        misc.error_context.new("{f}", .{err});
+                        misc.error_context.append("IDXGISwapChain.GetDesc returned a failure value.", .{});
+                        return error.Dx12Error;
+                    }
                     const init_info = ui.backend.ImGui_ImplDX12_InitInfo{
                         .device = dx_context.device,
                         .command_queue = dx_context.command_queue,
                         .num_frames_in_flight = @intCast(dx_context.buffer_contexts.len),
-                        .rtv_format = w32.DXGI_FORMAT_R8G8B8A8_UNORM,
+                        .rtv_format = swap_chain_desc.BufferDesc.Format,
                         .dsv_format = w32.DXGI_FORMAT_UNKNOWN,
                         .cbv_srv_heap = dx_context.srv_descriptor_heap,
                         .user_data = dx_context.srv_allocator,

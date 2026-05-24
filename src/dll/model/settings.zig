@@ -296,14 +296,14 @@ pub const StageSettings = struct {
         .floor_break = .{
             .side_color = .fromArray(.{ 0.0, 0.3, 0.3, 1.0 }),
             .side_thickness = 10.0,
-            .top_color = .fromArray(.{ 0.0, 0.02, 0.02, 1.0 }),
-            .top_hard_color = .fromArray(.{ 0.0, 0.01, 0.01, 1.0 }),
+            .top_color = .fromArray(.{ 0.0, 1.0, 1.0, 0.02 }),
+            .top_hard_color = .fromArray(.{ 0.0, 1.0, 1.0, 0.01 }),
         },
         .floor_blast = .{
             .side_color = .fromArray(.{ 0.3, 0.15, 0.0, 1.0 }),
             .side_thickness = 10.0,
-            .top_color = .fromArray(.{ 0.02, 0.01, 0.0, 1.0 }),
-            .top_hard_color = .fromArray(.{ 0.01, 0.005, 0.0, 1.0 }),
+            .top_color = .fromArray(.{ 1.0, 0.5, 0.0, 0.02 }),
+            .top_hard_color = .fromArray(.{ 1.0, 0.5, 0.0, 0.01 }),
         },
     }),
 

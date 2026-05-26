@@ -1,5 +1,6 @@
 const std = @import("std");
 const build_info = @import("build_info");
+const w32 = @import("win32").everything;
 const sdk = @import("../../sdk/root.zig");
 const game = @import("root.zig");
 
@@ -478,6 +479,13 @@ pub const ReplayMode = enum(u8) {
     _,
 };
 
+pub fn DepthBuffer(comptime game_id: build_info.Game) type {
+    return switch (game_id) {
+        .t7 => w32.ID3D11Texture2D,
+        .t8 => w32.ID3D12Resource,
+    };
+}
+
 // UE: APlayerCameraManager
 pub fn CameraManager(comptime game_id: build_info.Game) type {
     const Float = switch (game_id) {
@@ -868,6 +876,9 @@ pub const FindUnrealObjectsOfClassFunction = fn (
     exclude_flags: UnrealObjectFlags,
     exclusion_internal_flags: UnrealInternalObjectFlags,
 ) callconv(.c) void;
+
+// UE5: FD3D12DescriptorCache::SetRenderTargets
+pub const SetRenderTargetsFunction = fn (this: usize, param_1: usize, param_2: u32, param_3: usize) callconv(.c) void;
 
 // T8
 pub const DecryptT8HealthFunction = fn (encrypted_health: *const Health(.t8)) callconv(.c) i64;

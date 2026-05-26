@@ -7,9 +7,13 @@ const game = @import("root.zig");
 pub fn Hooks(comptime game_id: build_info.Game, comptime onTick: *const fn () void) type {
     return struct {
         var tick_hook: ?TickHook = null;
+        var render_targets_hook: ?RenderTargetsHook = null;
         var active_hook_calls = std.atomic.Value(u8).init(0);
 
+        pub var depth_buffer_address: usize = 0;
+
         const TickHook = sdk.memory.Hook(game.TickFunction(game_id));
+        const RenderTargetsHook = sdk.memory.Hook(game.SetRenderTargetsFunction);
 
         pub fn init(game_functions: *const game.Memory(game_id).Functions) void {
             std.log.debug("Creating tick hook...", .{});
@@ -33,6 +37,26 @@ pub fn Hooks(comptime game_id: build_info.Game, comptime onTick: *const fn () vo
                 sdk.misc.error_context.logError(error.NotFound);
             }
 
+            if (game_id == .t8) {
+                std.log.debug("Creating render targets hook...", .{});
+                if (game_functions.setRenderTargets) |function| {
+                    const detour = onSetRenderTargets;
+                    if (RenderTargetsHook.create(function, detour)) |hook| {
+                        render_targets_hook = hook;
+                        std.log.info("Render targets hook created.", .{});
+                    } else |err| {
+                        if (!builtin.is_test) {
+                            sdk.misc.error_context.append("Failed to create render targets hook.", .{});
+                            sdk.misc.error_context.logError(err);
+                        }
+                    }
+                } else if (!builtin.is_test) {
+                    sdk.misc.error_context.new("SetRenderTargets function not found.", .{});
+                    sdk.misc.error_context.append("Failed to create render targets hook.", .{});
+                    sdk.misc.error_context.logError(error.NotFound);
+                }
+            }
+
             if (tick_hook) |*hook| {
                 std.log.debug("Enabling tick hook...", .{});
                 if (hook.enable()) {
@@ -42,9 +66,34 @@ pub fn Hooks(comptime game_id: build_info.Game, comptime onTick: *const fn () vo
                     sdk.misc.error_context.logError(err);
                 }
             }
+
+            if (render_targets_hook) |*hook| {
+                std.log.debug("Enabling render targets hook...", .{});
+                if (hook.enable()) {
+                    std.log.info("Render targets hook enabled.", .{});
+                } else |err| {
+                    sdk.misc.error_context.append("Failed to enable render targets hook.", .{});
+                    sdk.misc.error_context.logError(err);
+                }
+            }
         }
 
         pub fn deinit() void {
+            if (game_id == .t8) {
+                std.log.debug("Destroying render targets hook...", .{});
+                if (render_targets_hook) |*hook| {
+                    if (hook.destroy()) {
+                        std.log.info("Render targets hook destroyed.", .{});
+                        render_targets_hook = null;
+                    } else |err| {
+                        sdk.misc.error_context.append("Failed to destroy render targets hook.", .{});
+                        sdk.misc.error_context.logError(err);
+                    }
+                } else {
+                    std.log.debug("Nothing to destroy.", .{});
+                }
+            }
+
             std.log.debug("Destroying tick hook...", .{});
             if (tick_hook) |*hook| {
                 if (hook.destroy()) {
@@ -75,6 +124,17 @@ pub fn Hooks(comptime game_id: build_info.Game, comptime onTick: *const fn () vo
             defer _ = active_hook_calls.fetchSub(1, .seq_cst);
             tick_hook.?.original(param_1, param_2, param_3, param_4);
             onTick();
+        }
+
+        fn onSetRenderTargets(this: usize, param_1: usize, param_2: u32, param_3: usize) callconv(.c) void {
+            _ = active_hook_calls.fetchAdd(1, .seq_cst);
+            defer _ = active_hook_calls.fetchSub(1, .seq_cst);
+            render_targets_hook.?.original(this, param_1, param_2, param_3);
+            if (param_3 == 0) {
+                return;
+            }
+            const trail = sdk.memory.PointerTrail.fromArray(.{ param_3 +| 0x48, 0x20, 0x0 });
+            depth_buffer_address = trail.resolve() orelse 0;
         }
     };
 }
@@ -151,4 +211,66 @@ test "should call onTick and original when tick function is called in T8" {
     try testing.expectEqual(4, Tick.last_param_3);
     try testing.expectEqual(5, Tick.last_param_4);
     try testing.expectEqual(1, OnTick.times_called);
+}
+
+test "should set depth_buffer_address to correct value and call original when setRenderTargets function is called in T8" {
+    const SetRenderTargets = struct {
+        var times_called: usize = 0;
+        var last_this: ?usize = null;
+        var last_param_1: ?usize = null;
+        var last_param_2: ?u32 = null;
+        var last_param_3: ?usize = null;
+        fn call(this: usize, param_1: usize, param_2: u32, param_3: usize) callconv(.c) void {
+            times_called += 1;
+            last_this = this;
+            last_param_1 = param_1;
+            last_param_2 = param_2;
+            last_param_3 = param_3;
+        }
+    };
+    const OnTick = struct {
+        fn call() void {}
+    };
+    const hooks = Hooks(.t8, OnTick.call);
+
+    try sdk.memory.hooking.init();
+    defer sdk.memory.hooking.deinit() catch @panic("Failed to de-initialize hooking.");
+    hooks.init(&.{ .setRenderTargets = SetRenderTargets.call });
+    defer hooks.deinit();
+
+    const B = extern struct {
+        _padding: [0x20]u8 = undefined,
+        c: usize,
+    };
+    const A = extern struct {
+        _padding: [0x48]u8 = undefined,
+        b: *const B,
+    };
+    const a = &A{ .b = &.{ .c = 123 } };
+
+    try testing.expectEqual(0, SetRenderTargets.times_called);
+
+    SetRenderTargets.call(11, 12, 13, std.math.maxInt(usize));
+    try testing.expectEqual(1, SetRenderTargets.times_called);
+    try testing.expectEqual(11, SetRenderTargets.last_this);
+    try testing.expectEqual(12, SetRenderTargets.last_param_1);
+    try testing.expectEqual(13, SetRenderTargets.last_param_2);
+    try testing.expectEqual(std.math.maxInt(usize), SetRenderTargets.last_param_3);
+    try testing.expectEqual(0, hooks.depth_buffer_address);
+
+    SetRenderTargets.call(11, 12, 13, @intFromPtr(a));
+    try testing.expectEqual(2, SetRenderTargets.times_called);
+    try testing.expectEqual(11, SetRenderTargets.last_this);
+    try testing.expectEqual(12, SetRenderTargets.last_param_1);
+    try testing.expectEqual(13, SetRenderTargets.last_param_2);
+    try testing.expectEqual(@intFromPtr(a), SetRenderTargets.last_param_3);
+    try testing.expectEqual(123, hooks.depth_buffer_address);
+
+    SetRenderTargets.call(11, 12, 13, 0);
+    try testing.expectEqual(3, SetRenderTargets.times_called);
+    try testing.expectEqual(11, SetRenderTargets.last_this);
+    try testing.expectEqual(12, SetRenderTargets.last_param_1);
+    try testing.expectEqual(13, SetRenderTargets.last_param_2);
+    try testing.expectEqual(0, SetRenderTargets.last_param_3);
+    try testing.expectEqual(123, hooks.depth_buffer_address);
 }

@@ -13,6 +13,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         match: Pointer(game.Match(game_id)),
         ruleset: Pointer(game.Ruleset(game_id)),
         replay_mode: Proxy(game.ReplayMode),
+        depth_buffer: Proxy(game.DepthBuffer(game_id)),
         camera_manager: Pointer(game.CameraManager(game_id)) = .fromPointer(null),
         walls: Array(max_walls, Pointer(game.Wall(game_id)), .fromPointer(null), false) = .empty,
         floors: Array(max_floors, Pointer(game.Floor(game_id)), .fromPointer(null), false) = .empty,
@@ -36,6 +37,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 unrealFree: ?*const game.UnrealFreeFunction = null,
                 findUnrealClass: ?*const game.FindUnrealClassFunction = null,
                 findUnrealObjectsOfClass: ?*const game.FindUnrealObjectsOfClassFunction = null,
+                setRenderTargets: ?*const game.SetRenderTargetsFunction = null,
                 getGlobalsMap: ?*const game.GetGlobalsMapFunction = null,
                 findGlobalAddress: ?*const game.FindGlobalAddressFunction = null,
                 isReplay: ?*const game.IsReplayFunction = null,
@@ -54,7 +56,11 @@ pub fn Memory(comptime game_id: build_info.Game) type {
         pub const max_floors = 16;
         pub const max_player_starts = 32;
 
-        pub fn init(allocator: std.mem.Allocator, base_dir: ?*const sdk.misc.BaseDir) Self {
+        pub fn init(
+            allocator: std.mem.Allocator,
+            base_dir: ?*const sdk.misc.BaseDir,
+            comptime game_hooks: type,
+        ) Self {
             var cache = initPatternCache(allocator, base_dir, pattern_cache_file_name) catch |err| block: {
                 sdk.misc.error_context.append("Failed to initialize pattern cache.", .{});
                 sdk.misc.error_context.logError(err);
@@ -64,60 +70,13 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                 deinitPatternCache(pattern_cache, base_dir, pattern_cache_file_name);
             };
             return switch (game_id) {
-                .t7 => t7Init(&cache),
-                .t8 => t8Init(&cache),
+                .t7 => t7Init(&cache, game_hooks),
+                .t8 => t8Init(&cache, game_hooks),
             };
         }
 
-        pub fn testingInit(params: struct {
-            player_1: ?*const game.Player(game_id) = null,
-            player_2: ?*const game.Player(game_id) = null,
-            main_player_info: ?*const game.PlayerInfo(game_id) = null,
-            secondary_player_info: ?*const game.PlayerInfo(game_id) = null,
-            match: ?*const game.Match(game_id) = null,
-            ruleset: ?*const game.Ruleset(game_id) = null,
-            replay_mode: ?*const game.ReplayMode = null,
-            camera_manager: ?*const game.CameraManager(game_id) = null,
-            walls: []const game.Wall(game_id) = &.{},
-            floors: []const game.Floor(game_id) = &.{},
-            player_starts: []const game.PlayerStart(game_id) = &.{},
-            functions: Functions = .{},
-            unreal_classes: UnrealClasses = .{},
-        }) Self {
-            if (!builtin.is_test) {
-                @compileError("This function is only supposed to be called from inside tests.");
-            }
-            const makePointerArray = struct {
-                fn call(
-                    comptime Element: type,
-                    comptime capacity: usize,
-                    slice: []const Element,
-                ) Array(capacity, Pointer(Element), .fromPointer(null), false) {
-                    var result: Array(capacity, Pointer(Element), .fromPointer(null), false) = .empty;
-                    for (slice) |*element| {
-                        result.append(.fromPointer(element)) catch @panic("Slice does not fit into the array.");
-                    }
-                    return result;
-                }
-            }.call;
-            return .{
-                .player_1 = .fromPointer(params.player_1),
-                .player_2 = .fromPointer(params.player_2),
-                .main_player_info = .fromPointer(params.main_player_info),
-                .secondary_player_info = .fromPointer(params.secondary_player_info),
-                .match = .fromPointer(params.match),
-                .ruleset = .fromPointer(params.ruleset),
-                .replay_mode = .fromPointer(params.replay_mode),
-                .camera_manager = .fromPointer(params.camera_manager),
-                .walls = makePointerArray(game.Wall(game_id), max_walls, params.walls),
-                .floors = makePointerArray(game.Floor(game_id), max_floors, params.floors),
-                .player_starts = makePointerArray(game.PlayerStart(game_id), max_player_starts, params.player_starts),
-                .functions = params.functions,
-                .unreal_classes = params.unreal_classes,
-            };
-        }
-
-        fn t7Init(cache: *?sdk.memory.PatternCache) Self {
+        fn t7Init(cache: *?sdk.memory.PatternCache, comptime game_hooks: type) Self {
+            _ = game_hooks;
             return .{
                 .player_1 = proxy("player_1", game.Player(.t7), .{
                     relativeOffset(i32, add(0x3, pattern(cache, "48 8B 15 ?? ?? ?? ?? 44 8B C3"))),
@@ -166,6 +125,15 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x38,
                     0x58,
                 }),
+                .depth_buffer = proxy("depth_buffer", game.DepthBuffer(.t7), .{
+                    relativeOffset(i32, add(0x3, pattern(
+                        cache,
+                        "4C 8B 05 ?? ?? ?? ?? 48 8D 59 08",
+                    ))),
+                    0x8,
+                    0x98,
+                    0x0,
+                }),
                 .functions = .{
                     .tick = functionPointer(
                         "tick",
@@ -194,7 +162,7 @@ pub fn Memory(comptime game_id: build_info.Game) type {
             };
         }
 
-        fn t8Init(cache: *?sdk.memory.PatternCache) Self {
+        fn t8Init(cache: *?sdk.memory.PatternCache, comptime game_hooks: type) Self {
             return .{
                 .player_1 = proxy("player_1", game.Player(.t8), .{
                     relativeOffset(i32, add(0x3, pattern(cache, "4C 89 35 ?? ?? ?? ?? 41 88 5E 28"))),
@@ -233,6 +201,10 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                     0x98,
                     0x70,
                 }),
+                .depth_buffer = proxy("depth_buffer", game.DepthBuffer(.t8), .{
+                    @intFromPtr(&game_hooks.depth_buffer_address),
+                    0x0,
+                }),
                 .functions = .{
                     .tick = functionPointer(
                         "tick",
@@ -253,6 +225,11 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                         "findUnrealObjectsOfClass",
                         game.FindUnrealObjectsOfClassFunction,
                         relativeOffset(i32, add(0x1, pattern(cache, "E8 ?? ?? ?? ?? 90 48 89 6C 24 30"))),
+                    ),
+                    .setRenderTargets = functionPointer(
+                        "setRenderTargets",
+                        game.SetRenderTargetsFunction,
+                        pattern(cache, "4C 8B DC 53 55 56 57 41 55 41 57"),
                     ),
                     .getGlobalsMap = functionPointer(
                         "getGlobalsMap",
@@ -276,6 +253,56 @@ pub fn Memory(comptime game_id: build_info.Game) type {
                         pattern(cache, "48 89 5C 24 08 57 48 83 EC 20 C6 01 00"),
                     ),
                 },
+            };
+        }
+
+        pub fn testingInit(params: struct {
+            player_1: ?*const game.Player(game_id) = null,
+            player_2: ?*const game.Player(game_id) = null,
+            main_player_info: ?*const game.PlayerInfo(game_id) = null,
+            secondary_player_info: ?*const game.PlayerInfo(game_id) = null,
+            match: ?*const game.Match(game_id) = null,
+            ruleset: ?*const game.Ruleset(game_id) = null,
+            replay_mode: ?*const game.ReplayMode = null,
+            depth_buffer: ?*const game.DepthBuffer(game_id) = null,
+            camera_manager: ?*const game.CameraManager(game_id) = null,
+            walls: []const game.Wall(game_id) = &.{},
+            floors: []const game.Floor(game_id) = &.{},
+            player_starts: []const game.PlayerStart(game_id) = &.{},
+            functions: Functions = .{},
+            unreal_classes: UnrealClasses = .{},
+        }) Self {
+            if (!builtin.is_test) {
+                @compileError("This function is only supposed to be called from inside tests.");
+            }
+            const makePointerArray = struct {
+                fn call(
+                    comptime Element: type,
+                    comptime capacity: usize,
+                    slice: []const Element,
+                ) Array(capacity, Pointer(Element), .fromPointer(null), false) {
+                    var result: Array(capacity, Pointer(Element), .fromPointer(null), false) = .empty;
+                    for (slice) |*element| {
+                        result.append(.fromPointer(element)) catch @panic("Slice does not fit into the array.");
+                    }
+                    return result;
+                }
+            }.call;
+            return .{
+                .player_1 = .fromPointer(params.player_1),
+                .player_2 = .fromPointer(params.player_2),
+                .main_player_info = .fromPointer(params.main_player_info),
+                .secondary_player_info = .fromPointer(params.secondary_player_info),
+                .match = .fromPointer(params.match),
+                .ruleset = .fromPointer(params.ruleset),
+                .replay_mode = .fromPointer(params.replay_mode),
+                .depth_buffer = .fromPointer(params.depth_buffer),
+                .camera_manager = .fromPointer(params.camera_manager),
+                .walls = makePointerArray(game.Wall(game_id), max_walls, params.walls),
+                .floors = makePointerArray(game.Floor(game_id), max_floors, params.floors),
+                .player_starts = makePointerArray(game.PlayerStart(game_id), max_player_starts, params.player_starts),
+                .functions = params.functions,
+                .unreal_classes = params.unreal_classes,
             };
         }
 

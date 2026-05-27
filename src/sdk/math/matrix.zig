@@ -640,6 +640,66 @@ pub fn Matrix(comptime size: usize, comptime Element: type) type {
             return self.multiply(matrix);
         }
 
+        pub fn fromZInfiniteFrustum(
+            left: Element,
+            right: Element,
+            bottom: Element,
+            top: Element,
+            near: Element,
+        ) Self {
+            if (size != 4) {
+                @compileError("This operation is only defined for 4x4 matrices.");
+            }
+            const fallback = Self.fromArray(.{
+                .{ 0.0, 0.0, 0.0, 0.0 },
+                .{ 0.0, 0.0, 0.0, 0.0 },
+                .{ 0.0, 0.0, 0.0, 1.0 },
+                .{ 0.0, 0.0, near, 0.0 },
+            });
+            if (left == right) {
+                std.log.warn(
+                    "When creating a frustum matrix, the supplied left value {} was equal to right {}. " ++
+                        "Returning fallback value.",
+                    .{ left, right },
+                );
+                return fallback;
+            }
+            if (bottom == top) {
+                std.log.warn(
+                    "When creating a frustum matrix, the supplied bottom value {} was equal to top {}. " ++
+                        "Returning fallback value.",
+                    .{ bottom, top },
+                );
+                return fallback;
+            }
+            const width = right - left;
+            const height = top - bottom;
+
+            const a = (2.0 * near) / width;
+            const b = (2.0 * near) / height;
+            const c = (right + left) / width;
+            const d = (top + bottom) / height;
+
+            return Self.fromArray(.{
+                .{ a, 0.0, 0.0, 0.0 },
+                .{ 0.0, b, 0.0, 0.0 },
+                .{ c, d, 0.0, 1.0 },
+                .{ 0.0, 0.0, near, 0.0 },
+            });
+        }
+
+        pub fn zInfiniteFrustum(
+            self: Self,
+            left: Element,
+            right: Element,
+            bottom: Element,
+            top: Element,
+            near: Element,
+        ) Self {
+            const matrix = Self.fromZInfiniteFrustum(left, right, bottom, top, near);
+            return self.multiply(matrix);
+        }
+
         pub fn fromPerspective(
             vertical_fov: Element,
             aspect_ratio: Element,
@@ -672,6 +732,30 @@ pub fn Matrix(comptime size: usize, comptime Element: type) type {
             far: Element,
         ) Self {
             const matrix = Self.fromPerspective(vertical_fov, aspect_ratio, near, far);
+            return self.multiply(matrix);
+        }
+
+        pub fn fromZInfinitePerspective(vertical_fov: Element, aspect_ratio: Element, near: Element) Self {
+            const min_fov = 1 * std.math.rad_per_deg;
+            const max_fov = 179 * std.math.rad_per_deg;
+            const fov = if (vertical_fov >= min_fov and vertical_fov <= max_fov) vertical_fov else block: {
+                std.log.warn(
+                    "When creating a perspective matrix, the supplied vertical fov {} was out of bounds. " ++
+                        "Clamping the fov back into bounds.",
+                    .{vertical_fov},
+                );
+                break :block std.math.clamp(vertical_fov, min_fov, max_fov);
+            };
+            const half_tan = std.math.tan(fov / 2);
+            const top = near * half_tan;
+            const bottom = -top;
+            const right = top * aspect_ratio;
+            const left = -right;
+            return Self.fromZInfiniteFrustum(left, right, bottom, top, near);
+        }
+
+        pub fn zInfinitePerspective(self: Self, vertical_fov: Element, aspect_ratio: Element, near: Element) Self {
+            const matrix = Self.fromZInfinitePerspective(vertical_fov, aspect_ratio, near);
             return self.multiply(matrix);
         }
 
@@ -1216,6 +1300,15 @@ test "frustum should return correct value" {
     try testing.expectApproxEqAbs(15.0 / 16.0, transformed.z(), 0.00001);
 }
 
+test "zInfiniteFrustum should return correct value" {
+    const vec = math.Vector(3, f32).fromArray(.{ 1, 2, 4 });
+    const matrix = Matrix(4, f32).identity.zInfiniteFrustum(-2, 2, -1, 1, 1);
+    const transformed = vec.pointTransform(matrix);
+    try testing.expectApproxEqAbs(0.125, transformed.x(), 0.00001);
+    try testing.expectApproxEqAbs(0.5, transformed.y(), 0.00001);
+    try testing.expectApproxEqAbs(0.25, transformed.z(), 0.00001);
+}
+
 test "perspective should return correct value" {
     const vec = math.Vector(3, f32).fromArray(.{ 1, 2, 4 });
     const matrix = Matrix(4, f32).identity.perspective(0.5 * std.math.pi, 2, 1, 5);
@@ -1223,6 +1316,15 @@ test "perspective should return correct value" {
     try testing.expectApproxEqAbs(0.125, transformed.x(), 0.00001);
     try testing.expectApproxEqAbs(0.5, transformed.y(), 0.00001);
     try testing.expectApproxEqAbs(15.0 / 16.0, transformed.z(), 0.00001);
+}
+
+test "zInfinitePerspective should return correct value" {
+    const vec = math.Vector(3, f32).fromArray(.{ 1, 2, 4 });
+    const matrix = Matrix(4, f32).identity.zInfinitePerspective(0.5 * std.math.pi, 2, 1);
+    const transformed = vec.pointTransform(matrix);
+    try testing.expectApproxEqAbs(0.125, transformed.x(), 0.00001);
+    try testing.expectApproxEqAbs(0.5, transformed.y(), 0.00001);
+    try testing.expectApproxEqAbs(0.25, transformed.z(), 0.00001);
 }
 
 test "should format correctly" {

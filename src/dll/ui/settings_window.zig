@@ -271,6 +271,10 @@ const GeneralSettings = struct {
                 imgui.igBeginDisabled(!v.enabled);
                 defer imgui.igEndDisabled();
 
+                drawBool("Enable Depth", &v.enable_depth, &d.enable_depth);
+                if (imgui.igIsItemHovered(0)) {
+                    imgui.igSetTooltip("For depth rendering to work, rendering scale needs to be set to 100.");
+                }
                 drawScale("Thickness Scale", &v.thickness_scale, &d.thickness_scale);
                 drawThickness("Anti-Aliasing", &v.anti_aliasing, &d.anti_aliasing);
             }
@@ -1331,6 +1335,13 @@ test "general settings should function correctly" {
             try testing.expectEqual(default.rendering_3d.enabled, current.rendering_3d.enabled);
             ctx.itemCheck("3D Rendering/Enabled", 0);
             try testing.expectEqual(true, current.rendering_3d.enabled);
+
+            ctx.itemUncheck("3D Rendering/Enable Depth", 0);
+            try testing.expectEqual(false, current.rendering_3d.enable_depth);
+            ctx.itemCheck("3D Rendering/Enable Depth", 0);
+            try testing.expectEqual(true, current.rendering_3d.enable_depth);
+            ctx.itemClick("3D Rendering/Enable Depth/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.rendering_3d.enable_depth, current.rendering_3d.enable_depth);
 
             ctx.itemInputValueFloat("3D Rendering/Thickness Scale", 123);
             try testing.expectEqual(123, current.rendering_3d.thickness_scale);

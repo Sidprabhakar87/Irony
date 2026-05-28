@@ -540,7 +540,7 @@ pub const Context = struct {
                 "Depth buffer size {f} does not match the back buffer size {f}.",
                 .{ depth_buffer_size, back_buffer_size },
             );
-            return error.Dx12Error;
+            return error.SizeMismatch;
         }
 
         self.device.CreateDepthStencilView(depth_buffer, null, buffer_context.dsv_descriptor_handle);

@@ -224,7 +224,7 @@ pub const Context = struct {
                 "Depth buffer size {f} does not match the back buffer size {f}.",
                 .{ depth_buffer_size, back_buffer_size },
             );
-            return error.Dx11Error;
+            return error.SizeMismatch;
         }
 
         var depth_stencil_view: *w32.ID3D11DepthStencilView = undefined;

@@ -79,6 +79,7 @@ pub const GeneralSettings = struct {
     };
     pub const Rendering3D = struct {
         enabled: bool = true,
+        enable_depth: bool = true,
         thickness_scale: f32 = 2,
         anti_aliasing: f32 = 1.8,
     };

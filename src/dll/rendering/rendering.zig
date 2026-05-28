@@ -51,10 +51,19 @@ pub const Rendering = struct {
             sdk.misc.error_context.logError(err);
             return;
         };
-        const depth_buffer = game_memory.depth_buffer.toMutablePointer();
-        context.setDepthBuffer(buffer_context, depth_buffer) catch |err| {
-            sdk.misc.error_context.append("Failed to set depth buffer.", .{});
-            sdk.misc.error_context.logError(err);
+        const depth_buffer = switch (settings.enable_depth) {
+            true => game_memory.depth_buffer.toMutablePointer(),
+            false => null,
+        };
+        context.setDepthBuffer(buffer_context, depth_buffer) catch |err_1| switch (err_1) {
+            error.SizeMismatch => context.setDepthBuffer(buffer_context, null) catch |err_2| {
+                sdk.misc.error_context.append("Failed to unset depth buffer.", .{});
+                sdk.misc.error_context.logError(err_2);
+            },
+            else => {
+                sdk.misc.error_context.append("Failed to set depth buffer.", .{});
+                sdk.misc.error_context.logError(err_1);
+            },
         };
 
         const camera = game_memory.camera_manager.toConstPointer() orelse return;

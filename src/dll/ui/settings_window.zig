@@ -760,6 +760,7 @@ fn drawForwardDirectionsSettings(
     drawColor("Color", &value.color, &default.color);
     drawLength("Length", &value.length, &default.length);
     drawThickness("Thickness", &value.thickness, &default.thickness);
+    drawFloat("Height", &value.height, &default.height, 0.1, 0, 200, "%.1f cm", 0);
 }
 
 fn drawStageSettings(value: *model.StageSettings, default: *const model.StageSettings) void {
@@ -1784,6 +1785,11 @@ test "forward directions settings should function correctly" {
             try testing.expectEqual(123, current.thickness);
             ctx.itemClick("Thickness/###default", imgui.ImGuiMouseButton_Left, 0);
             try testing.expectEqual(default.thickness, current.thickness);
+
+            ctx.itemInputValueFloat("Height", 123);
+            try testing.expectEqual(123, current.height);
+            ctx.itemClick("Height/###default", imgui.ImGuiMouseButton_Left, 0);
+            try testing.expectEqual(default.height, current.height);
         }
     };
     Test.window = .init(testing.allocator);

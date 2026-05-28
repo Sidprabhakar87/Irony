@@ -254,6 +254,7 @@ pub const ForwardDirectionSettings = struct {
     color: sdk.math.Vec4 = .fromArray(.{ 1.0, 0.0, 1.0, 1.0 }),
     length: f32 = 100.0,
     thickness: f32 = 1.0,
+    height: f32 = 5.0,
 };
 
 pub const StageSettings = struct {

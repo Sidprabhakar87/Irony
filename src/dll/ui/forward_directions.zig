@@ -21,7 +21,7 @@ pub fn drawForwardDirections(
         const position = player.getPosition() orelse continue;
         const rotation = player.rotation orelse continue;
         const floor_z = frame.floor_z orelse position.z();
-        const floor_position = position.swizzle("xy").extend(floor_z);
+        const floor_position = position.swizzle("xy").extend(floor_z + player_settings.height);
         const delta = sdk.math.Vec3.plus_x.scale(player_settings.length).rotateZ(rotation);
         const line = sdk.math.LineSegment3{
             .point_1 = floor_position,
@@ -41,12 +41,24 @@ test "should draw lines correctly when direction is top" {
     const settings = model.PlayerSettings(model.ForwardDirectionSettings){
         .mode = .id_separated,
         .players = .{
-            .{ .enabled = true, .color = .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), .length = 1, .thickness = 2 },
-            .{ .enabled = true, .color = .fromArray(.{ 0.5, 0.6, 0.7, 0.8 }), .length = 3, .thickness = 4 },
+            .{
+                .enabled = true,
+                .color = .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }),
+                .length = 1,
+                .thickness = 2,
+                .height = 10,
+            },
+            .{
+                .enabled = true,
+                .color = .fromArray(.{ 0.5, 0.6, 0.7, 0.8 }),
+                .length = 3,
+                .thickness = 4,
+                .height = 20,
+            },
         },
     };
     const frame = model.Frame{
-        .floor_z = -1,
+        .floor_z = 30,
         .players = .{
             .{
                 .collision_spheres = .initFill(.{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 0 }),
@@ -62,13 +74,13 @@ test "should draw lines correctly when direction is top" {
 
     try testing.expectEqual(2, ui.testing_shapes.getAll().len);
     const line_1 = ui.testing_shapes.findLineWithWorldPoints(
-        .fromArray(.{ 1, 2, -1 }),
-        .fromArray(.{ 2, 2, -1 }),
+        .fromArray(.{ 1, 2, 40 }),
+        .fromArray(.{ 2, 2, 40 }),
         0.0001,
     );
     const line_2 = ui.testing_shapes.findLineWithWorldPoints(
-        .fromArray(.{ 4, 5, -1 }),
-        .fromArray(.{ 4, 8, -1 }),
+        .fromArray(.{ 4, 5, 50 }),
+        .fromArray(.{ 4, 8, 50 }),
         0.0001,
     );
     try testing.expect(line_1 != null);
@@ -123,10 +135,13 @@ test "should not draw the line for the player disabled in settings" {
     const shapes = ui.Shapes{ ._void = .{} };
     const settings = model.PlayerSettings(model.ForwardDirectionSettings){
         .mode = .id_separated,
-        .players = .{ .{ .enabled = true, .length = 1 }, .{ .enabled = false, .length = 1 } },
+        .players = .{
+            .{ .enabled = true, .length = 1, .height = 0 },
+            .{ .enabled = false, .length = 1, .height = 0 },
+        },
     };
     const frame = model.Frame{
-        .floor_z = -1,
+        .floor_z = 0,
         .players = .{
             .{
                 .collision_spheres = .initFill(.{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 0 }),
@@ -142,13 +157,13 @@ test "should not draw the line for the player disabled in settings" {
 
     try testing.expectEqual(1, ui.testing_shapes.getAll().len);
     const line_1 = ui.testing_shapes.findLineWithWorldPoints(
-        .fromArray(.{ 1, 2, -1 }),
-        .fromArray(.{ 2, 2, -1 }),
+        .fromArray(.{ 1, 2, 0 }),
+        .fromArray(.{ 2, 2, 0 }),
         0.0001,
     );
     const line_2 = ui.testing_shapes.findLineWithWorldPoints(
-        .fromArray(.{ 4, 5, -1 }),
-        .fromArray(.{ 5, 5, -1 }),
+        .fromArray(.{ 4, 5, 0 }),
+        .fromArray(.{ 5, 5, 0 }),
         0.0001,
     );
     try testing.expect(line_1 != null);

@@ -195,6 +195,50 @@ pub const Context = struct {
             .bottom = @intCast(size.y()),
         }});
     }
+
+    pub fn setDepthBuffer(
+        self: *const Self,
+        buffer_context: *const dx11.BufferContext,
+        depth_buffer_maybe: ?*w32.ID3D11Texture2D,
+    ) !void {
+        const depth_buffer = depth_buffer_maybe orelse {
+            var render_target_views = [1]?*w32.ID3D11RenderTargetView{buffer_context.render_target_view};
+            self.device_context.OMSetRenderTargets(render_target_views.len, &render_target_views, null);
+            return;
+        };
+
+        var depth_buffer_desc: w32.D3D11_TEXTURE2D_DESC = undefined;
+        depth_buffer.GetDesc(&depth_buffer_desc);
+        const depth_buffer_size = math.Vector(2, u32).fromArray(.{
+            depth_buffer_desc.Width,
+            depth_buffer_desc.Height,
+        });
+
+        const back_buffer_size = self.getBackBufferSize() catch |err| {
+            misc.error_context.append("Failed to get back buffer size.", .{});
+            return err;
+        };
+
+        if (!std.meta.eql(depth_buffer_size, back_buffer_size)) {
+            misc.error_context.new(
+                "Depth buffer size {f} does not match the back buffer size {f}.",
+                .{ depth_buffer_size, back_buffer_size },
+            );
+            return error.Dx11Error;
+        }
+
+        var depth_stencil_view: *w32.ID3D11DepthStencilView = undefined;
+        const result = self.device.CreateDepthStencilView(&depth_buffer.ID3D11Resource, null, &depth_stencil_view);
+        if (dx11.Error.from(result)) |err| {
+            misc.error_context.new("{f}", .{err});
+            misc.error_context.append("ID3D11Device.CreateDepthStencilView returned a failure value.", .{});
+            return error.Dx11Error;
+        }
+        defer _ = depth_stencil_view.IUnknown.Release();
+
+        var render_target_views = [1]?*w32.ID3D11RenderTargetView{buffer_context.render_target_view};
+        self.device_context.OMSetRenderTargets(render_target_views.len, &render_target_views, depth_stencil_view);
+    }
 };
 
 const GpuState = struct {

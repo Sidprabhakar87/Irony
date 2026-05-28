@@ -51,11 +51,18 @@ pub const Rendering = struct {
             sdk.misc.error_context.logError(err);
             return;
         };
+        const depth_buffer = game_memory.depth_buffer.toMutablePointer();
+        context.setDepthBuffer(buffer_context, depth_buffer) catch |err| {
+            sdk.misc.error_context.append("Failed to set depth buffer.", .{});
+            sdk.misc.error_context.logError(err);
+        };
+
         const camera = game_memory.camera_manager.toConstPointer() orelse return;
         const world_to_clip = calculateWorldToClip(context, camera) orelse return;
+        const clip_to_world = world_to_clip.inverse() orelse return;
 
         self.shapes.render(&self.lines, camera.position.convert());
-        self.lines.render(context, buffer_context, world_to_clip, settings.anti_aliasing);
+        self.lines.render(context, buffer_context, world_to_clip, clip_to_world, settings.anti_aliasing);
     }
 
     fn calculateWorldToClip(context: *const dx.Context, camera: *const game.CameraManager(game_id)) ?sdk.math.Mat4 {
@@ -92,7 +99,7 @@ pub const Rendering = struct {
             return null; // Camera not fully initialized.
         }
         const vertical_fov = 2 * std.math.atan2(std.math.tan(0.5 * horizontal_fov), aspect_ratio);
-        const projection = sdk.math.Mat4.fromPerspective(vertical_fov, aspect_ratio, 1, 100_000);
+        const projection = sdk.math.Mat4.fromZInfinitePerspective(vertical_fov, aspect_ratio, 10);
 
         return view.multiply(projection);
     }

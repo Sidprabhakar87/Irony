@@ -16,6 +16,7 @@ pub const HostContext = struct {
 pub const ManagedContext = struct {
     allocator: std.mem.Allocator,
     rtv_descriptor_heap: *w32.ID3D12DescriptorHeap,
+    dsv_descriptor_heap: *w32.ID3D12DescriptorHeap,
     srv_descriptor_heap: *w32.ID3D12DescriptorHeap,
     srv_allocator: *dx12.DescriptorHeapAllocator(svr_heap_size),
     buffer_contexts_buffer: [max_buffer_count]BufferContext,
@@ -59,6 +60,21 @@ pub const ManagedContext = struct {
         }
         errdefer _ = rtv_descriptor_heap.IUnknown.Release();
 
+        var dsv_descriptor_heap: *w32.ID3D12DescriptorHeap = undefined;
+        const dsv_result = host_context.device.CreateDescriptorHeap(&.{
+            .Type = .DSV,
+            .NumDescriptors = buffer_count,
+            .Flags = .{},
+            .NodeMask = 0,
+        }, w32.IID_ID3D12DescriptorHeap, @ptrCast(&dsv_descriptor_heap));
+        if (dx12.Error.from(dsv_result)) |err| {
+            misc.error_context.new("{f}", .{err});
+            misc.error_context.append("ID3D12Device.CreateDescriptorHeap returned a failure value.", .{});
+            misc.error_context.append("Failed to create DSV descriptor heap.", .{});
+            return error.Dx12Error;
+        }
+        errdefer _ = rtv_descriptor_heap.IUnknown.Release();
+
         var srv_descriptor_heap: *w32.ID3D12DescriptorHeap = undefined;
         const srv_result = host_context.device.CreateDescriptorHeap(&.{
             .Type = .CBV_SRV_UAV,
@@ -95,6 +111,7 @@ pub const ManagedContext = struct {
                 host_context.device,
                 host_context.swap_chain,
                 rtv_descriptor_heap,
+                dsv_descriptor_heap,
                 @intCast(index),
             ) catch |err| {
                 misc.error_context.append("Failed to create buffer context with index: {}", .{index});
@@ -108,6 +125,7 @@ pub const ManagedContext = struct {
         return .{
             .allocator = allocator,
             .rtv_descriptor_heap = rtv_descriptor_heap,
+            .dsv_descriptor_heap = dsv_descriptor_heap,
             .srv_descriptor_heap = srv_descriptor_heap,
             .srv_allocator = srv_allocator,
             .buffer_contexts_buffer = buffer_contexts_buffer,
@@ -123,6 +141,7 @@ pub const ManagedContext = struct {
 
         self.allocator.destroy(self.srv_allocator);
         _ = self.srv_descriptor_heap.IUnknown.Release();
+        _ = self.dsv_descriptor_heap.IUnknown.Release();
         _ = self.rtv_descriptor_heap.IUnknown.Release();
 
         if (builtin.is_test) {
@@ -142,6 +161,7 @@ pub const ManagedContext = struct {
                 host_context.device,
                 host_context.swap_chain,
                 self.rtv_descriptor_heap,
+                self.dsv_descriptor_heap,
                 @intCast(index),
             ) catch |err| {
                 misc.error_context.append("Failed to reinitialize buffer context with index: {}", .{index});
@@ -160,6 +180,7 @@ pub const BufferContext = struct {
     command_list: *w32.ID3D12GraphicsCommandList,
     resource: *w32.ID3D12Resource,
     rtv_descriptor_handle: w32.D3D12_CPU_DESCRIPTOR_HANDLE,
+    dsv_descriptor_handle: w32.D3D12_CPU_DESCRIPTOR_HANDLE,
     fence: *w32.ID3D12Fence,
     fence_value: u64,
     fence_event: w32.HANDLE,
@@ -171,6 +192,7 @@ pub const BufferContext = struct {
         device: *const w32.ID3D12Device,
         swap_chain: *const w32.IDXGISwapChain,
         rtv_descriptor_heap: *w32.ID3D12DescriptorHeap,
+        dsv_descriptor_heap: *w32.ID3D12DescriptorHeap,
         index: u32,
     ) !Self {
         var command_allocator: *w32.ID3D12CommandAllocator = undefined;
@@ -225,9 +247,15 @@ pub const BufferContext = struct {
         const rtv_heap_start = dx12.getCpuDescriptorHandleForHeapStart(rtv_descriptor_heap);
         const rtv_increment_size = device.GetDescriptorHandleIncrementSize(.RTV);
         const rtv_descriptor_handle = w32.D3D12_CPU_DESCRIPTOR_HANDLE{
-            .ptr = rtv_heap_start.ptr + index * rtv_increment_size,
+            .ptr = rtv_heap_start.ptr + (index * rtv_increment_size),
         };
         device.CreateRenderTargetView(resource, null, rtv_descriptor_handle);
+
+        const dsv_heap_start = dx12.getCpuDescriptorHandleForHeapStart(dsv_descriptor_heap);
+        const dsv_increment_size = device.GetDescriptorHandleIncrementSize(.DSV);
+        const dsv_descriptor_handle = w32.D3D12_CPU_DESCRIPTOR_HANDLE{
+            .ptr = dsv_heap_start.ptr + (index * dsv_increment_size),
+        };
 
         var fence: *w32.ID3D12Fence = undefined;
         const fence_result = device.CreateFence(0, .{}, w32.IID_ID3D12Fence, @ptrCast(&fence));
@@ -260,6 +288,7 @@ pub const BufferContext = struct {
             .command_allocator = command_allocator,
             .command_list = command_list,
             .rtv_descriptor_handle = rtv_descriptor_handle,
+            .dsv_descriptor_handle = dsv_descriptor_handle,
             .resource = resource,
             .fence = fence,
             .fence_value = 0,
@@ -467,6 +496,60 @@ pub const Context = struct {
             .right = @intCast(size.x()),
             .bottom = @intCast(size.y()),
         }});
+    }
+
+    pub fn setDepthBuffer(
+        self: *const Self,
+        buffer_context: *const dx12.BufferContext,
+        depth_buffer_maybe: ?*w32.ID3D12Resource,
+    ) !void {
+        const depth_buffer = depth_buffer_maybe orelse {
+            buffer_context.command_list.OMSetRenderTargets(
+                1,
+                &buffer_context.rtv_descriptor_handle,
+                0,
+                null,
+            );
+            return;
+        };
+
+        // Bypass for this issue: https://github.com/marlersoft/zigwin32/issues/6
+        const getResourceDesc: *const fn (
+            self: *const w32.ID3D12Resource,
+            out: *w32.D3D12_RESOURCE_DESC,
+        ) callconv(.winapi) void = @ptrCast(depth_buffer.vtable.GetDesc);
+        var depth_buffer_desc: w32.D3D12_RESOURCE_DESC = undefined;
+        getResourceDesc(depth_buffer, &depth_buffer_desc);
+        if (depth_buffer_desc.Dimension != .TEXTURE2D) {
+            misc.error_context.new(
+                "Expected depth buffer to be a 2D texture but got: {s}",
+                .{@tagName(depth_buffer_desc.Dimension)},
+            );
+            return error.Dx12Error;
+        }
+        const depth_buffer_size = math.Vector(2, u32).fromArray(.{
+            @intCast(depth_buffer_desc.Width),
+            depth_buffer_desc.Height,
+        });
+        const back_buffer_size = self.getBackBufferSize() catch |err| {
+            misc.error_context.append("Failed to get back buffer size.", .{});
+            return err;
+        };
+        if (!std.meta.eql(depth_buffer_size, back_buffer_size)) {
+            misc.error_context.new(
+                "Depth buffer size {f} does not match the back buffer size {f}.",
+                .{ depth_buffer_size, back_buffer_size },
+            );
+            return error.Dx12Error;
+        }
+
+        self.device.CreateDepthStencilView(depth_buffer, null, buffer_context.dsv_descriptor_handle);
+        buffer_context.command_list.OMSetRenderTargets(
+            1,
+            &buffer_context.rtv_descriptor_handle,
+            0,
+            &buffer_context.dsv_descriptor_handle,
+        );
     }
 };
 

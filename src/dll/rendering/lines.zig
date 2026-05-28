@@ -27,6 +27,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
         const Index = u16;
         const Constants = extern struct {
             world_to_clip: sdk.math.Mat4,
+            clip_to_world: sdk.math.Mat4,
             viewport_size: sdk.math.Vec2,
             anti_aliasing: f32,
         };
@@ -127,6 +128,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             context: *const dx.Context,
             buffer_context: *const dx.BufferContext,
             world_to_clip: sdk.math.Mat4,
+            clip_to_world: sdk.math.Mat4,
             anti_aliasing: f32,
         ) void {
             const shader: *Shader = if (self.shader) |*s| s else return;
@@ -145,6 +147,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             };
             shader.setConstants(context, &.{
                 .world_to_clip = world_to_clip,
+                .clip_to_world = clip_to_world,
                 .viewport_size = .fromArray(.{
                     @floatFromInt(back_buffer_size.x()),
                     @floatFromInt(back_buffer_size.y()),
@@ -203,8 +206,9 @@ test "should render without errors when rendering api is DX11" {
         const world_to_clip = sdk.math.Mat4.identity
             .lookAt(.fromArray(.{ @floatFromInt(index), 1, 1 }), .zero, .plus_z)
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
+        const clip_to_world = world_to_clip.inverse() orelse return error.InverseFailed;
         const buffer_context = try context.beforeRender();
-        lines.render(&context, buffer_context, world_to_clip, 1.8);
+        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 1.8);
         try context.afterRender(buffer_context);
         try testing_context.present();
     }
@@ -245,8 +249,9 @@ test "should render without errors when rendering api is DX12" {
         const world_to_clip = sdk.math.Mat4.identity
             .lookAt(.fromArray(.{ @floatFromInt(index), 1, 1 }), .zero, .plus_z)
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
+        const clip_to_world = world_to_clip.inverse() orelse return error.InverseFailed;
         const buffer_context = try context.beforeRender();
-        lines.render(&context, buffer_context, world_to_clip, 1.8);
+        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 1.8);
         try context.afterRender(buffer_context);
         try testing_context.present();
     }

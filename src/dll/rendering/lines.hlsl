@@ -6,17 +6,24 @@ struct Vertex {
 	float4 color : color;
 };
 
-struct Pixel {
-	float4 position: SV_POSITION;
-	float4 color : COLOR;
-	float2 screen_position : SCREEN_POSITION;
-	float2 screen_start : SCREEN_START;
-	float2 screen_end : SCREEN_END;
-	float half_thickness : RADIUS;
+struct PixelInput {
+	float4 position: SV_Position;
+	float4 color : color;
+	float2 screen_position : screen_position;
+	float2 screen_start : screen_start;
+	float2 screen_end : screen_end;
+	float half_thickness : half_thickness;
+	float screen_to_depth : screen_to_depth;
+};
+
+struct PixelOutput {
+	float4 color : SV_Target;
+	float depth : SV_Depth;
 };
 
 cbuffer Constants : register(b0) {
 	float4x4 world_to_clip;
+	float4x4 clip_to_world;
 	float2 viewport_size;
 	float anti_aliasing;
 }
@@ -24,7 +31,7 @@ cbuffer Constants : register(b0) {
 float2 safeNormalize(float2 the_vector);
 float pointLineDistance(float2 the_point, float2 line_start, float2 line_end);
 
-Pixel vs_main(Vertex vertex) {
+PixelInput vs_main(Vertex vertex) {
 	float half_thickness = 0.5 * (vertex.thickness + (sign(vertex.thickness) * anti_aliasing));
 	float abs_half_thickness = abs(half_thickness);
 
@@ -42,28 +49,50 @@ Pixel vs_main(Vertex vertex) {
 	float2 clip_offset = 2 * screen_offset / viewport_size;
 
 	float3 world_position = lerp(vertex.start, vertex.end, vertex.t);
-	float4 clip_position = mul(float4(world_position, 1.0), world_to_clip);
-	clip_position.xy += clip_offset * clip_position.w;
+	float4 position = mul(float4(world_position, 1.0), world_to_clip);
+	position.xy += clip_offset * position.w;
+	float3 clip_position = position.xyz / position.w;
 
-	Pixel pixel;
-	pixel.position = clip_position;
+	float screen_to_clip = 2.0 / viewport_size.x;
+	float4 right_offset_world_position = mul(float4(clip_position + float3(screen_to_clip, 0, 0), 1), clip_to_world);
+	right_offset_world_position /= right_offset_world_position.w;
+	float screen_to_world = length(right_offset_world_position.xyz - world_position);
+	float4 forward_offset_world_position = mul(float4(clip_position + float3(0, 0, 1), 1), clip_to_world);
+	forward_offset_world_position /= forward_offset_world_position.w;
+	float3 forward_world_direction = normalize(forward_offset_world_position.xyz - world_position);
+	float3 depth_offset_world_position = world_position + (screen_to_world * forward_world_direction);
+	float4 depth_offset_clip_position = mul(float4(depth_offset_world_position, 1), world_to_clip);
+	depth_offset_clip_position /= depth_offset_clip_position.w;
+	float screen_to_depth = depth_offset_clip_position.z - clip_position.z;
+
+	PixelInput pixel;
+	pixel.position = position;
 	pixel.color = vertex.color;
-	pixel.screen_position = (clip_position.xy / clip_position.w) * 0.5 * viewport_size;
+	pixel.screen_position = clip_position.xy * 0.5 * viewport_size;
 	pixel.screen_start = screen_start;
 	pixel.screen_end = screen_end;
 	pixel.half_thickness = abs_half_thickness;
+	pixel.screen_to_depth = screen_to_depth;
 	return pixel;
 }
 
-float4 ps_main(Pixel pixel) : SV_TARGET {
-	float distance = pointLineDistance(pixel.screen_position, pixel.screen_start, pixel.screen_end);
-	float alpha = 1.0 - smoothstep(pixel.half_thickness - anti_aliasing, pixel.half_thickness, distance);
-	return float4(pixel.color.rgb, pixel.color.a * alpha);
+PixelOutput ps_main(PixelInput input) {
+	float distance = pointLineDistance(input.screen_position, input.screen_start, input.screen_end);
+	if (distance > input.half_thickness) {
+	    discard;
+	}
+	float alpha = 1.0 - smoothstep(input.half_thickness - anti_aliasing, input.half_thickness, distance);
+	float screen_depth = sqrt((input.half_thickness * input.half_thickness) - (distance * distance));
+
+	PixelOutput output;
+	output.color = float4(input.color.rgb, input.color.a * alpha);
+	output.depth = input.position.z + (input.screen_to_depth * screen_depth);
+	return output;
 }
 
 float2 safeNormalize(float2 the_vector) {
-    float length_squared = dot(the_vector, the_vector);
-    return (length_squared >= 1e-8) ? (the_vector * rsqrt(length_squared)) : float2(1, 0);
+	float length_squared = dot(the_vector, the_vector);
+	return (length_squared >= 1e-8) ? (the_vector * rsqrt(length_squared)) : float2(1, 0);
 }
 
 float pointLineDistance(float2 the_point, float2 line_start, float2 line_end) {

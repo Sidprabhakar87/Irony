@@ -34,6 +34,20 @@ pub const Shapes = union(enum) {
         }
     }
 
+    pub fn drawOutline(
+        self: *const Self,
+        line: sdk.math.LineSegment3,
+        color: sdk.math.Vec4,
+        thickness: f32,
+        offset: f32,
+    ) void {
+        switch (self.*) {
+            ._2d => |*s| s.drawOutline(line, color, thickness, offset),
+            ._3d => |*s| s.drawOutline(line, color, thickness),
+            ._void => |*s| s.drawOutline(line, color, thickness),
+        }
+    }
+
     pub fn drawSphere(self: *const Self, sphere: sdk.math.Sphere, color: sdk.math.Vec4, thickness: f32) void {
         switch (self.*) {
             ._2d => |*s| s.drawSphere(sphere, color, thickness),
@@ -108,6 +122,45 @@ pub const Shapes2D = struct {
 
         if (builtin.is_test) {
             testing_shapes.append(.{ .line = .{
+                .world_line = line,
+                .screen_line = .{ .point_1 = offset_point_1, .point_2 = offset_point_2 },
+                .color = color,
+                .thickness = scaled_thickness,
+            } });
+        }
+    }
+
+    pub fn drawOutline(
+        self: *const Self,
+        line: sdk.math.LineSegment3,
+        color: sdk.math.Vec4,
+        thickness: f32,
+        offset: f32,
+    ) void {
+        const draw_list = imgui.igGetWindowDrawList();
+        const point_1 = line.point_1.pointTransform(self.matrix).swizzle("xy");
+        const point_2 = line.point_2.pointTransform(self.matrix).swizzle("xy");
+        const rotate_90 = comptime sdk.math.Mat2.fromZRotation(0.5 * std.math.pi);
+        const difference = point_2.subtract(point_1);
+        const offset_vector = switch (difference.isZero(1e-6)) {
+            true => sdk.math.Vec2.zero,
+            false => difference.normalize().multiply(rotate_90).scale(offset),
+        };
+        const offset_point_1 = point_1.add(offset_vector);
+        const offset_point_2 = point_2.add(offset_vector);
+        const u32_color = imgui.igGetColorU32_Vec4(color.toImVec());
+        const scaled_thickness = self.thickness_scale * thickness;
+
+        imgui.ImDrawList_AddLine(
+            draw_list,
+            offset_point_1.toImVec(),
+            offset_point_2.toImVec(),
+            u32_color,
+            scaled_thickness,
+        );
+
+        if (builtin.is_test) {
+            testing_shapes.append(.{ .outline = .{
                 .world_line = line,
                 .screen_line = .{ .point_1 = offset_point_1, .point_2 = offset_point_2 },
                 .color = color,
@@ -225,6 +278,19 @@ pub const Shapes3D = struct {
         }
     }
 
+    pub fn drawOutline(self: *const Self, line: sdk.math.LineSegment3, color: sdk.math.Vec4, thickness: f32) void {
+        const scaled_thickness = self.thickness_scale * thickness;
+        self.renderer.addOutline(line, color, scaled_thickness);
+        if (builtin.is_test) {
+            testing_shapes.append(.{ .outline = .{
+                .world_line = line,
+                .screen_line = null,
+                .color = color,
+                .thickness = scaled_thickness,
+            } });
+        }
+    }
+
     pub fn drawSphere(self: *const Self, sphere: sdk.math.Sphere, color: sdk.math.Vec4, thickness: f32) void {
         const scaled_thickness = self.thickness_scale * thickness;
         self.renderer.addSphere(sphere, color, scaled_thickness);
@@ -282,6 +348,18 @@ pub const VoidShapes = struct {
         }
     }
 
+    pub fn drawOutline(self: *const Self, line: sdk.math.LineSegment3, color: sdk.math.Vec4, thickness: f32) void {
+        _ = self;
+        if (builtin.is_test) {
+            testing_shapes.append(.{ .outline = .{
+                .world_line = line,
+                .screen_line = null,
+                .color = color,
+                .thickness = thickness,
+            } });
+        }
+    }
+
     pub fn drawSphere(self: *const Self, sphere: sdk.math.Sphere, color: sdk.math.Vec4, thickness: f32) void {
         _ = self;
         if (builtin.is_test) {
@@ -326,6 +404,7 @@ pub const TestingShapes = struct {
     pub const Shape = union(enum) {
         point: Point,
         line: Line,
+        outline: Line,
         sphere: Sphere,
         cylinder: Cylinder,
     };
@@ -443,35 +522,21 @@ pub const TestingShapes = struct {
         return null;
     }
 
-    pub const LinePair = struct {
-        thinner: *const Line,
-        thicker: *const Line,
-    };
-
-    pub fn findLinePairWithWorldPoints(
+    pub fn findOutlineWithWorldPoints(
         self: *const Self,
         point_1: sdk.math.Vec3,
         point_2: sdk.math.Vec3,
         tolerance: f32,
-    ) ?LinePair {
-        var first: ?*const Line = null;
+    ) ?*const Line {
         for (self.list.items) |*shape| {
             switch (shape.*) {
-                .line => |*line| {
-                    const l = &line.world_line;
+                .outline => |*outline| {
+                    const l = &outline.world_line;
                     const t = tolerance;
                     const is_equal = (l.point_1.equals(point_1, t) and l.point_2.equals(point_2, t)) or
                         (l.point_1.equals(point_2, t) and l.point_2.equals(point_1, t));
                     if (is_equal) {
-                        if (first) |first_line| {
-                            if (first_line.thickness <= line.thickness) {
-                                return .{ .thinner = first_line, .thicker = line };
-                            } else {
-                                return .{ .thinner = line, .thicker = first_line };
-                            }
-                        } else {
-                            first = line;
-                        }
+                        return outline;
                     }
                 },
                 else => continue,
@@ -551,6 +616,12 @@ test "should put correct shapes into testing shapes when 2D shapes" {
                 11,
                 0,
             );
+            shapes.drawOutline(
+                .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
+                .fromArray(.{ 7, 8, 9, 10 }),
+                11,
+                0,
+            );
             shapes.drawSphere(
                 .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4 },
                 .fromArray(.{ 5, 6, 7, 8 }),
@@ -571,7 +642,7 @@ test "should put correct shapes into testing shapes when 2D shapes" {
 
         fn testFunction(_: sdk.ui.TestContext) !void {
             const items = testing_shapes.getAll();
-            try testing.expectEqual(items.len, 5);
+            try testing.expectEqual(items.len, 6);
             try testing.expectEqual(TestingShapes.Shape{ .point = .{
                 .world_position = .fromArray(.{ 1, 2, 3 }),
                 .screen_position = .fromArray(.{ 5, 9 }),
@@ -584,13 +655,19 @@ test "should put correct shapes into testing shapes when 2D shapes" {
                 .color = .fromArray(.{ 7, 8, 9, 10 }),
                 .thickness = 22,
             } }, items[1]);
+            try testing.expectEqual(TestingShapes.Shape{ .outline = .{
+                .world_line = .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
+                .screen_line = .{ .point_1 = .fromArray(.{ 5, 9 }), .point_2 = .fromArray(.{ 8, 15 }) },
+                .color = .fromArray(.{ 7, 8, 9, 10 }),
+                .thickness = 22,
+            } }, items[2]);
             try testing.expectEqual(TestingShapes.Shape{ .sphere = .{
                 .world_sphere = .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4 },
                 .screen_center = .fromArray(.{ 5, 9 }),
                 .screen_half_size = .fromArray(.{ 4, 8 }),
                 .color = .fromArray(.{ 5, 6, 7, 8 }),
                 .thickness = 18,
-            } }, items[2]);
+            } }, items[3]);
             try testing.expectEqual(TestingShapes.Shape{ .cylinder = .{
                 .world_cylinder = .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4, .half_height = 5 },
                 .screen_shape = .rectangle,
@@ -598,7 +675,7 @@ test "should put correct shapes into testing shapes when 2D shapes" {
                 .screen_half_size = .fromArray(.{ 4, 10 }),
                 .color = .fromArray(.{ 6, 7, 8, 9 }),
                 .thickness = 20,
-            } }, items[3]);
+            } }, items[4]);
             try testing.expectEqual(TestingShapes.Shape{ .cylinder = .{
                 .world_cylinder = .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4, .half_height = 5 },
                 .screen_shape = .ellipse,
@@ -606,7 +683,7 @@ test "should put correct shapes into testing shapes when 2D shapes" {
                 .screen_half_size = .fromArray(.{ 4, 8 }),
                 .color = .fromArray(.{ 6, 7, 8, 9 }),
                 .thickness = 20,
-            } }, items[4]);
+            } }, items[5]);
         }
     };
     testing_shapes.begin(testing.allocator);
@@ -637,6 +714,12 @@ test "should put correct shapes into testing shapes when 3D shapes" {
         11,
         0,
     );
+    shapes.drawOutline(
+        .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
+        .fromArray(.{ 7, 8, 9, 10 }),
+        11,
+        0,
+    );
     shapes.drawSphere(
         .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4 },
         .fromArray(.{ 5, 6, 7, 8 }),
@@ -649,7 +732,7 @@ test "should put correct shapes into testing shapes when 3D shapes" {
     );
 
     const items = testing_shapes.getAll();
-    try testing.expectEqual(items.len, 4);
+    try testing.expectEqual(items.len, 5);
     try testing.expectEqual(TestingShapes.Shape{ .point = .{
         .world_position = .fromArray(.{ 1, 2, 3 }),
         .screen_position = null,
@@ -662,13 +745,19 @@ test "should put correct shapes into testing shapes when 3D shapes" {
         .color = .fromArray(.{ 7, 8, 9, 10 }),
         .thickness = 22,
     } }, items[1]);
+    try testing.expectEqual(TestingShapes.Shape{ .outline = .{
+        .world_line = .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
+        .screen_line = null,
+        .color = .fromArray(.{ 7, 8, 9, 10 }),
+        .thickness = 22,
+    } }, items[2]);
     try testing.expectEqual(TestingShapes.Shape{ .sphere = .{
         .world_sphere = .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4 },
         .screen_center = null,
         .screen_half_size = null,
         .color = .fromArray(.{ 5, 6, 7, 8 }),
         .thickness = 18,
-    } }, items[2]);
+    } }, items[3]);
     try testing.expectEqual(TestingShapes.Shape{ .cylinder = .{
         .world_cylinder = .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4, .half_height = 5 },
         .screen_shape = null,
@@ -676,7 +765,7 @@ test "should put correct shapes into testing shapes when 3D shapes" {
         .screen_half_size = null,
         .color = .fromArray(.{ 6, 7, 8, 9 }),
         .thickness = 20,
-    } }, items[3]);
+    } }, items[4]);
 }
 
 test "should put correct shapes into testing shapes when void shapes" {
@@ -695,6 +784,12 @@ test "should put correct shapes into testing shapes when void shapes" {
         11,
         0,
     );
+    shapes.drawOutline(
+        .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
+        .fromArray(.{ 7, 8, 9, 10 }),
+        11,
+        0,
+    );
     shapes.drawSphere(
         .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4 },
         .fromArray(.{ 5, 6, 7, 8 }),
@@ -707,7 +802,7 @@ test "should put correct shapes into testing shapes when void shapes" {
     );
 
     const items = testing_shapes.getAll();
-    try testing.expectEqual(items.len, 4);
+    try testing.expectEqual(items.len, 5);
     try testing.expectEqual(TestingShapes.Shape{ .point = .{
         .world_position = .fromArray(.{ 1, 2, 3 }),
         .screen_position = null,
@@ -720,13 +815,19 @@ test "should put correct shapes into testing shapes when void shapes" {
         .color = .fromArray(.{ 7, 8, 9, 10 }),
         .thickness = 11,
     } }, items[1]);
+    try testing.expectEqual(TestingShapes.Shape{ .outline = .{
+        .world_line = .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
+        .screen_line = null,
+        .color = .fromArray(.{ 7, 8, 9, 10 }),
+        .thickness = 11,
+    } }, items[2]);
     try testing.expectEqual(TestingShapes.Shape{ .sphere = .{
         .world_sphere = .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4 },
         .screen_center = null,
         .screen_half_size = null,
         .color = .fromArray(.{ 5, 6, 7, 8 }),
         .thickness = 9,
-    } }, items[2]);
+    } }, items[3]);
     try testing.expectEqual(TestingShapes.Shape{ .cylinder = .{
         .world_cylinder = .{ .center = .fromArray(.{ 1, 2, 3 }), .radius = 4, .half_height = 5 },
         .screen_shape = null,
@@ -734,5 +835,5 @@ test "should put correct shapes into testing shapes when void shapes" {
         .screen_half_size = null,
         .color = .fromArray(.{ 6, 7, 8, 9 }),
         .thickness = 10,
-    } }, items[3]);
+    } }, items[4]);
 }

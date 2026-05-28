@@ -3,6 +3,7 @@ struct Vertex {
 	float thickness : thickness;
 	float3 end : end;
 	float t : t;
+	float depth_factor : depth_factor;
 	float4 color : color;
 };
 
@@ -72,7 +73,7 @@ PixelInput vs_main(Vertex vertex) {
 	pixel.screen_start = screen_start;
 	pixel.screen_end = screen_end;
 	pixel.half_thickness = abs_half_thickness;
-	pixel.screen_to_depth = screen_to_depth;
+	pixel.screen_to_depth = vertex.depth_factor * screen_to_depth;
 	return pixel;
 }
 

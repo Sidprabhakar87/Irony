@@ -17,6 +17,7 @@ pub const Shapes = struct {
     pub const Geometry = union(enum) {
         point: sdk.math.Vec3,
         line: sdk.math.LineSegment3,
+        outline: sdk.math.LineSegment3,
         sphere: sdk.math.Sphere,
         cylinder: sdk.math.Cylinder,
     };
@@ -54,6 +55,14 @@ pub const Shapes = struct {
         });
     }
 
+    pub fn addOutline(self: *Self, line: sdk.math.LineSegment3, color: sdk.math.Vec4, thickness: f32) void {
+        self.add(.{
+            .geometry = .{ .outline = line },
+            .color = color,
+            .thickness = thickness,
+        });
+    }
+
     pub fn addSphere(self: *Self, sphere: sdk.math.Sphere, color: sdk.math.Vec4, thickness: f32) void {
         self.add(.{
             .geometry = .{ .sphere = sphere },
@@ -84,6 +93,7 @@ pub const Shapes = struct {
             switch (shape.geometry) {
                 .point => |point| renderPoint(point, shape.color, shape.thickness, lines),
                 .line => |line| renderLine(line, shape.color, shape.thickness, lines),
+                .outline => |line| renderOutline(line, shape.color, shape.thickness, lines),
                 .sphere => |sphere| renderSphere(sphere, shape.color, shape.thickness, lines, camera_position),
                 .cylinder => |cylinder| renderCylinder(cylinder, shape.color, shape.thickness, lines, camera_position),
             }
@@ -96,7 +106,7 @@ pub const Shapes = struct {
         thickness: f32,
         lines: anytype,
     ) void {
-        lines.add(.{ .point_1 = point, .point_2 = point }, color, thickness);
+        lines.add(.{ .point_1 = point, .point_2 = point }, color, thickness, 1);
     }
 
     fn renderLine(
@@ -105,7 +115,16 @@ pub const Shapes = struct {
         thickness: f32,
         lines: anytype,
     ) void {
-        lines.add(line, color, thickness);
+        lines.add(line, color, thickness, 1);
+    }
+
+    fn renderOutline(
+        line: sdk.math.LineSegment3,
+        color: sdk.math.Vec4,
+        thickness: f32,
+        lines: anytype,
+    ) void {
+        lines.add(line, color, thickness, 0.01);
     }
 
     fn renderSphere(
@@ -145,7 +164,7 @@ pub const Shapes = struct {
                 .add(up.scale(std.math.sin(angle_2)))
                 .scale(circle_radius)
                 .add(circle_center);
-            lines.add(.{ .point_1 = point_1, .point_2 = point_2 }, color, thickness);
+            lines.add(.{ .point_1 = point_1, .point_2 = point_2 }, color, thickness, 1);
         }
     }
 
@@ -181,8 +200,8 @@ pub const Shapes = struct {
                 .point_1 = base.subtract(offset).extend(center.z() + half_height),
                 .point_2 = base.subtract(offset).extend(center.z() - half_height),
             };
-            lines.add(line_1, color, thickness);
-            lines.add(line_2, color, thickness);
+            lines.add(line_1, color, thickness, 1);
+            lines.add(line_2, color, thickness, 1);
         }
 
         for (0..circle_segments) |index| {
@@ -215,8 +234,8 @@ pub const Shapes = struct {
                     -half_height,
                 })),
             };
-            lines.add(line_1, color, thickness);
-            lines.add(line_2, color, thickness);
+            lines.add(line_1, color, thickness, 1);
+            lines.add(line_2, color, thickness, 1);
         }
     }
 };
@@ -232,6 +251,7 @@ const MockLines = struct {
         geometry: sdk.math.LineSegment3,
         color: sdk.math.Vec4,
         thickness: f32,
+        depth_factor: f16,
     };
 
     pub fn init(allocator: std.mem.Allocator) Self {
@@ -250,11 +270,13 @@ const MockLines = struct {
         line: sdk.math.LineSegment3,
         color: sdk.math.Vec4,
         thickness: f32,
+        depth_factor: f16,
     ) void {
         self.list.append(self.allocator, .{
             .geometry = line,
             .color = color,
             .thickness = thickness,
+            .depth_factor = depth_factor,
         }) catch @panic("Failed to add line to list.");
     }
 };
@@ -276,6 +298,7 @@ test "should render point correctly" {
     }, items[0].geometry);
     try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), items[0].color);
     try testing.expectEqual(10, items[0].thickness);
+    try testing.expectEqual(1, items[0].depth_factor);
 }
 
 test "should render line correctly" {
@@ -299,6 +322,31 @@ test "should render line correctly" {
     }, items[0].geometry);
     try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), items[0].color);
     try testing.expectEqual(10, items[0].thickness);
+    try testing.expectEqual(1, items[0].depth_factor);
+}
+
+test "should render outline correctly" {
+    var lines = MockLines.init(testing.allocator);
+    defer lines.deinit();
+    var shapes = Shapes.init(testing.allocator);
+    defer shapes.deinit();
+
+    shapes.addOutline(
+        .{ .point_1 = .fromArray(.{ 1, 2, 3 }), .point_2 = .fromArray(.{ 4, 5, 6 }) },
+        .fromArray(.{ 0.1, 0.2, 0.3, 0.4 }),
+        10,
+    );
+    shapes.render(&lines, .zero);
+
+    const items = lines.list.items;
+    try testing.expectEqual(1, items.len);
+    try testing.expectEqual(sdk.math.LineSegment3{
+        .point_1 = .fromArray(.{ 1, 2, 3 }),
+        .point_2 = .fromArray(.{ 4, 5, 6 }),
+    }, items[0].geometry);
+    try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), items[0].color);
+    try testing.expectEqual(10, items[0].thickness);
+    try testing.expectEqual(0.01, items[0].depth_factor);
 }
 
 test "should render sphere correctly" {
@@ -321,6 +369,7 @@ test "should render sphere correctly" {
         try testing.expectApproxEqAbs(2, item.geometry.point_2.distanceTo(camera), 0.0001);
         try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), item.color);
         try testing.expectEqual(10, item.thickness);
+        try testing.expectEqual(1, item.depth_factor);
     }
 }
 
@@ -358,6 +407,7 @@ test "should render cylinder correctly" {
         try testing.expectApproxEqAbs(2, item.geometry.point_2.distanceTo(.fromArray(.{ 3, 4, 2 })), 0.0001);
         try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), item.color);
         try testing.expectEqual(10, item.thickness);
+        try testing.expectEqual(1, item.depth_factor);
     }
     for (items[2..items.len]) |*item| {
         try testing.expectApproxEqAbs(2, @min(
@@ -370,6 +420,7 @@ test "should render cylinder correctly" {
         ), 0.0001);
         try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), item.color);
         try testing.expectEqual(10, item.thickness);
+        try testing.expectEqual(1, item.depth_factor);
     }
 }
 
@@ -395,5 +446,6 @@ test "should not render cylinder side lines when camera 2D projection is inside 
         ), 0.0001);
         try testing.expectEqual(sdk.math.Vec4.fromArray(.{ 0.1, 0.2, 0.3, 0.4 }), item.color);
         try testing.expectEqual(10, item.thickness);
+        try testing.expectEqual(1, item.depth_factor);
     }
 }

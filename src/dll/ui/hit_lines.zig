@@ -89,7 +89,7 @@ pub const HitLines = struct {
                 const line = hit_line.line;
                 const color = line_settings.outline.colors.get(player.attack_type orelse .not_attack);
                 const thickness = line_settings.fill.thickness + (2.0 * line_settings.outline.thickness);
-                shapes.drawLine(line, color, thickness, 0);
+                shapes.drawOutline(line, color, thickness, 0);
             }
         }
         for (model.PlayerId.all) |player_id| {
@@ -150,7 +150,7 @@ pub const HitLines = struct {
             color.asColor().a *= 1.0 - (completion * completion * completion * completion);
             const thickness = line_settings.fill.thickness + (2.0 * line_settings.outline.thickness);
 
-            shapes.drawLine(line, color, thickness, 0);
+            shapes.drawOutline(line, color, thickness, 0);
         }
         for (0..self.lingering.len) |index| {
             const hit_line = self.lingering.get(index) catch unreachable;
@@ -225,24 +225,31 @@ test "should draw regular lines correctly" {
     hit_lines.draw(&shapes, &settings, &frame);
 
     try testing.expectEqual(8, ui.testing_shapes.getAll().len);
-    const pairs = [4]?ui.TestingShapes.LinePair{
-        ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001),
-        ui.testing_shapes.findLinePairWithWorldPoints(.fill(3), .fill(4), 0.0001),
-        ui.testing_shapes.findLinePairWithWorldPoints(.fill(-1), .fill(-2), 0.0001),
-        ui.testing_shapes.findLinePairWithWorldPoints(.fill(-3), .fill(-4), 0.0001),
+    const lines = [4](?*const ui.TestingShapes.Line){
+        ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001),
+        ui.testing_shapes.findLineWithWorldPoints(.fill(3), .fill(4), 0.0001),
+        ui.testing_shapes.findLineWithWorldPoints(.fill(-1), .fill(-2), 0.0001),
+        ui.testing_shapes.findLineWithWorldPoints(.fill(-3), .fill(-4), 0.0001),
     };
-    for (pairs, 0..) |pair, index| {
-        try testing.expect(pair != null);
+    const outlines = [4](?*const ui.TestingShapes.Line){
+        ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001),
+        ui.testing_shapes.findOutlineWithWorldPoints(.fill(3), .fill(4), 0.0001),
+        ui.testing_shapes.findOutlineWithWorldPoints(.fill(-1), .fill(-2), 0.0001),
+        ui.testing_shapes.findOutlineWithWorldPoints(.fill(-3), .fill(-4), 0.0001),
+    };
+    for (lines, outlines, 0..) |line, outline, index| {
+        try testing.expect(line != null);
+        try testing.expect(outline != null);
         if (index < 2) {
-            try testing.expectEqual(sdk.math.Vec4.fill(0.1), pair.?.thinner.color);
-            try testing.expectEqual(1, pair.?.thinner.thickness);
-            try testing.expectEqual(sdk.math.Vec4.fill(0.2), pair.?.thicker.color);
-            try testing.expectEqual(5, pair.?.thicker.thickness);
+            try testing.expectEqual(sdk.math.Vec4.fill(0.1), line.?.color);
+            try testing.expectEqual(1, line.?.thickness);
+            try testing.expectEqual(sdk.math.Vec4.fill(0.2), outline.?.color);
+            try testing.expectEqual(5, outline.?.thickness);
         } else {
-            try testing.expectEqual(sdk.math.Vec4.fill(0.3), pair.?.thinner.color);
-            try testing.expectEqual(3, pair.?.thinner.thickness);
-            try testing.expectEqual(sdk.math.Vec4.fill(0.4), pair.?.thicker.color);
-            try testing.expectEqual(11, pair.?.thicker.thickness);
+            try testing.expectEqual(sdk.math.Vec4.fill(0.3), line.?.color);
+            try testing.expectEqual(3, line.?.thickness);
+            try testing.expectEqual(sdk.math.Vec4.fill(0.4), outline.?.color);
+            try testing.expectEqual(11, outline.?.thickness);
         }
     }
 }
@@ -278,35 +285,39 @@ test "should draw lingering lines correctly" {
     ui.testing_shapes.clear();
     hit_lines.draw(&shapes, &settings, &frame);
     try testing.expectEqual(2, ui.testing_shapes.getAll().len);
-    var pair = ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001);
-    try testing.expect(pair != null);
-    try testing.expectApproxEqAbs(0.1, pair.?.thinner.color.r(), 0.0001);
-    try testing.expectApproxEqAbs(0.1, pair.?.thinner.color.g(), 0.0001);
-    try testing.expectApproxEqAbs(0.1, pair.?.thinner.color.b(), 0.0001);
-    try testing.expectApproxEqAbs(0.1, pair.?.thinner.color.a(), 0.0001);
-    try testing.expectEqual(1, pair.?.thinner.thickness);
-    try testing.expectApproxEqAbs(0.2, pair.?.thicker.color.r(), 0.0001);
-    try testing.expectApproxEqAbs(0.2, pair.?.thicker.color.g(), 0.0001);
-    try testing.expectApproxEqAbs(0.2, pair.?.thicker.color.b(), 0.0001);
-    try testing.expectApproxEqAbs(0.2, pair.?.thicker.color.a(), 0.0001);
-    try testing.expectEqual(5, pair.?.thicker.thickness);
+    var line = ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    var outline = ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    try testing.expect(line != null);
+    try testing.expectApproxEqAbs(0.1, line.?.color.r(), 0.0001);
+    try testing.expectApproxEqAbs(0.1, line.?.color.g(), 0.0001);
+    try testing.expectApproxEqAbs(0.1, line.?.color.b(), 0.0001);
+    try testing.expectApproxEqAbs(0.1, line.?.color.a(), 0.0001);
+    try testing.expectEqual(1, line.?.thickness);
+    try testing.expect(outline != null);
+    try testing.expectApproxEqAbs(0.2, outline.?.color.r(), 0.0001);
+    try testing.expectApproxEqAbs(0.2, outline.?.color.g(), 0.0001);
+    try testing.expectApproxEqAbs(0.2, outline.?.color.b(), 0.0001);
+    try testing.expectApproxEqAbs(0.2, outline.?.color.a(), 0.0001);
+    try testing.expectEqual(5, outline.?.thickness);
 
     ui.testing_shapes.clear();
     hit_lines.update(8);
     hit_lines.draw(&shapes, &settings, &frame);
     try testing.expectEqual(2, ui.testing_shapes.getAll().len);
-    pair = ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001);
-    try testing.expect(pair != null);
-    try testing.expectApproxEqAbs(0.1, pair.?.thinner.color.r(), 0.0001);
-    try testing.expectApproxEqAbs(0.1, pair.?.thinner.color.g(), 0.0001);
-    try testing.expectApproxEqAbs(0.1, pair.?.thinner.color.b(), 0.0001);
-    try testing.expectApproxEqAbs(0.05, pair.?.thinner.color.a(), 0.04);
-    try testing.expectEqual(1, pair.?.thinner.thickness);
-    try testing.expectApproxEqAbs(0.2, pair.?.thicker.color.r(), 0.0001);
-    try testing.expectApproxEqAbs(0.2, pair.?.thicker.color.g(), 0.0001);
-    try testing.expectApproxEqAbs(0.2, pair.?.thicker.color.b(), 0.0001);
-    try testing.expectApproxEqAbs(0.1, pair.?.thicker.color.a(), 0.08);
-    try testing.expectEqual(5, pair.?.thicker.thickness);
+    line = ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    outline = ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    try testing.expect(line != null);
+    try testing.expectApproxEqAbs(0.1, line.?.color.r(), 0.0001);
+    try testing.expectApproxEqAbs(0.1, line.?.color.g(), 0.0001);
+    try testing.expectApproxEqAbs(0.1, line.?.color.b(), 0.0001);
+    try testing.expectApproxEqAbs(0.05, line.?.color.a(), 0.04);
+    try testing.expectEqual(1, line.?.thickness);
+    try testing.expect(outline != null);
+    try testing.expectApproxEqAbs(0.2, outline.?.color.r(), 0.0001);
+    try testing.expectApproxEqAbs(0.2, outline.?.color.g(), 0.0001);
+    try testing.expectApproxEqAbs(0.2, outline.?.color.b(), 0.0001);
+    try testing.expectApproxEqAbs(0.1, outline.?.color.a(), 0.08);
+    try testing.expectEqual(5, outline.?.thickness);
 
     ui.testing_shapes.clear();
     hit_lines.update(3);
@@ -341,20 +352,28 @@ test "should not draw lines for the player disabled in settings" {
     ui.testing_shapes.clear();
     hit_lines.draw(&shapes, &settings, &frame);
     try testing.expectEqual(4, ui.testing_shapes.getAll().len);
-    try testing.expect(ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001) != null);
-    try testing.expect(ui.testing_shapes.findLinePairWithWorldPoints(.fill(3), .fill(4), 0.0001) != null);
-    try testing.expectEqual(null, ui.testing_shapes.findLinePairWithWorldPoints(.fill(-1), .fill(-2), 0.0001));
-    try testing.expectEqual(null, ui.testing_shapes.findLinePairWithWorldPoints(.fill(-3), .fill(-4), 0.0001));
+    try testing.expect(ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001) != null);
+    try testing.expect(ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001) != null);
+    try testing.expect(ui.testing_shapes.findLineWithWorldPoints(.fill(3), .fill(4), 0.0001) != null);
+    try testing.expect(ui.testing_shapes.findOutlineWithWorldPoints(.fill(3), .fill(4), 0.0001) != null);
+    try testing.expectEqual(null, ui.testing_shapes.findLineWithWorldPoints(.fill(-1), .fill(-2), 0.0001));
+    try testing.expectEqual(null, ui.testing_shapes.findOutlineWithWorldPoints(.fill(-1), .fill(-2), 0.0001));
+    try testing.expectEqual(null, ui.testing_shapes.findLineWithWorldPoints(.fill(-3), .fill(-4), 0.0001));
+    try testing.expectEqual(null, ui.testing_shapes.findOutlineWithWorldPoints(.fill(-3), .fill(-4), 0.0001));
 
     ui.testing_shapes.clear();
     hit_lines.processFrame(&settings, &frame);
     frame.players[0].hit_lines.len = 0;
     hit_lines.draw(&shapes, &settings, &frame);
     try testing.expectEqual(4, ui.testing_shapes.getAll().len);
-    try testing.expect(ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001) != null);
-    try testing.expect(ui.testing_shapes.findLinePairWithWorldPoints(.fill(3), .fill(4), 0.0001) != null);
-    try testing.expectEqual(null, ui.testing_shapes.findLinePairWithWorldPoints(.fill(-1), .fill(-2), 0.0001));
-    try testing.expectEqual(null, ui.testing_shapes.findLinePairWithWorldPoints(.fill(-3), .fill(-4), 0.0001));
+    try testing.expect(ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001) != null);
+    try testing.expect(ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001) != null);
+    try testing.expect(ui.testing_shapes.findLineWithWorldPoints(.fill(3), .fill(4), 0.0001) != null);
+    try testing.expect(ui.testing_shapes.findOutlineWithWorldPoints(.fill(3), .fill(4), 0.0001) != null);
+    try testing.expectEqual(null, ui.testing_shapes.findLineWithWorldPoints(.fill(-1), .fill(-2), 0.0001));
+    try testing.expectEqual(null, ui.testing_shapes.findOutlineWithWorldPoints(.fill(-1), .fill(-2), 0.0001));
+    try testing.expectEqual(null, ui.testing_shapes.findLineWithWorldPoints(.fill(-3), .fill(-4), 0.0001));
+    try testing.expectEqual(null, ui.testing_shapes.findOutlineWithWorldPoints(.fill(-3), .fill(-4), 0.0001));
 }
 
 test "should draw with correct color and thickness depending on attack type, inactivity and crushing" {
@@ -451,42 +470,50 @@ test "should draw with correct color and thickness depending on attack type, ina
     ui.testing_shapes.clear();
     frame.players[0].attack_type = .mid;
     hit_lines.draw(&shapes, &settings, &frame);
-    var pair = ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001);
-    try testing.expect(pair != null);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.03), pair.?.thinner.color);
-    try testing.expectEqual(1, pair.?.thinner.thickness);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.14), pair.?.thicker.color);
-    try testing.expectEqual(5, pair.?.thicker.thickness);
+    var line = ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    var outline = ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    try testing.expect(line != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.03), line.?.color);
+    try testing.expectEqual(1, line.?.thickness);
+    try testing.expect(outline != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.14), outline.?.color);
+    try testing.expectEqual(5, outline.?.thickness);
 
     ui.testing_shapes.clear();
     frame.players[0].hit_lines.asSlice()[0].flags.is_inactive = true;
     hit_lines.draw(&shapes, &settings, &frame);
-    pair = ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001);
-    try testing.expect(pair != null);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.25), pair.?.thinner.color);
-    try testing.expectEqual(3, pair.?.thinner.thickness);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.36), pair.?.thicker.color);
-    try testing.expectEqual(11, pair.?.thicker.thickness);
+    line = ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    outline = ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    try testing.expect(line != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.25), line.?.color);
+    try testing.expectEqual(3, line.?.thickness);
+    try testing.expect(outline != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.36), outline.?.color);
+    try testing.expectEqual(11, outline.?.thickness);
 
     ui.testing_shapes.clear();
     frame.players[0].attack_type = .high;
     hit_lines.draw(&shapes, &settings, &frame);
-    pair = ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001);
-    try testing.expect(pair != null);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.24), pair.?.thinner.color);
-    try testing.expectEqual(3, pair.?.thinner.thickness);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.35), pair.?.thicker.color);
-    try testing.expectEqual(11, pair.?.thicker.thickness);
+    line = ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    outline = ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    try testing.expect(line != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.24), line.?.color);
+    try testing.expectEqual(3, line.?.thickness);
+    try testing.expect(outline != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.35), outline.?.color);
+    try testing.expectEqual(11, outline.?.thickness);
 
     ui.testing_shapes.clear();
     frame.players[0].hit_lines.buffer[0].flags.is_inactive = false;
     hit_lines.draw(&shapes, &settings, &frame);
-    pair = ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001);
-    try testing.expect(pair != null);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.02), pair.?.thinner.color);
-    try testing.expectEqual(1, pair.?.thinner.thickness);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.13), pair.?.thicker.color);
-    try testing.expectEqual(5, pair.?.thicker.thickness);
+    line = ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    outline = ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    try testing.expect(line != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.02), line.?.color);
+    try testing.expectEqual(1, line.?.thickness);
+    try testing.expect(outline != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.13), outline.?.color);
+    try testing.expectEqual(5, outline.?.thickness);
 
     ui.testing_shapes.clear();
     frame.players[0].attack_type = .low;
@@ -494,12 +521,14 @@ test "should draw with correct color and thickness depending on attack type, ina
     hit_lines.processFrame(&settings, &frame);
     frame.players[0].hit_lines.len = 0;
     hit_lines.draw(&shapes, &settings, &frame);
-    pair = ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001);
-    try testing.expect(pair != null);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.04), pair.?.thinner.color);
-    try testing.expectEqual(1, pair.?.thinner.thickness);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.15), pair.?.thicker.color);
-    try testing.expectEqual(5, pair.?.thicker.thickness);
+    line = ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    outline = ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    try testing.expect(line != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.04), line.?.color);
+    try testing.expectEqual(1, line.?.thickness);
+    try testing.expect(outline != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.15), outline.?.color);
+    try testing.expectEqual(5, outline.?.thickness);
 
     ui.testing_shapes.clear();
     hit_lines.update(100);
@@ -508,10 +537,12 @@ test "should draw with correct color and thickness depending on attack type, ina
     hit_lines.processFrame(&settings, &frame);
     frame.players[0].hit_lines.len = 0;
     hit_lines.draw(&shapes, &settings, &frame);
-    pair = ui.testing_shapes.findLinePairWithWorldPoints(.fill(1), .fill(2), 0.0001);
-    try testing.expect(pair != null);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.26), pair.?.thinner.color);
-    try testing.expectEqual(3, pair.?.thinner.thickness);
-    try testing.expectEqual(sdk.math.Vec4.fill(0.37), pair.?.thicker.color);
-    try testing.expectEqual(11, pair.?.thicker.thickness);
+    line = ui.testing_shapes.findLineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    outline = ui.testing_shapes.findOutlineWithWorldPoints(.fill(1), .fill(2), 0.0001);
+    try testing.expect(line != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.26), line.?.color);
+    try testing.expectEqual(3, line.?.thickness);
+    try testing.expect(outline != null);
+    try testing.expectEqual(sdk.math.Vec4.fill(0.37), outline.?.color);
+    try testing.expectEqual(11, outline.?.thickness);
 }

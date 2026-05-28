@@ -21,7 +21,8 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             start: sdk.math.Vec3,
             thickness: f32,
             end: sdk.math.Vec3,
-            t: f32,
+            t: f16,
+            depth_factor: f16,
             color: sdk.math.Vec4,
         };
         const Index = u16;
@@ -65,6 +66,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             line: sdk.math.LineSegment3,
             color: sdk.math.Vec4,
             thickness: f32,
+            depth_factor: f16,
         ) void {
             self.vertices.appendSlice(self.allocator, &.{
                 .{
@@ -73,6 +75,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                     .color = color,
                     .thickness = thickness,
                     .t = 0,
+                    .depth_factor = depth_factor,
                 },
                 .{
                     .start = line.point_1,
@@ -80,6 +83,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                     .color = color,
                     .thickness = -thickness,
                     .t = 0,
+                    .depth_factor = depth_factor,
                 },
                 .{
                     .start = line.point_1,
@@ -87,6 +91,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                     .color = color,
                     .thickness = thickness,
                     .t = 1,
+                    .depth_factor = depth_factor,
                 },
                 .{
                     .start = line.point_1,
@@ -94,6 +99,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                     .color = color,
                     .thickness = -thickness,
                     .t = 1,
+                    .depth_factor = depth_factor,
                 },
             }) catch |err| {
                 sdk.misc.error_context.append("Failed to add vertices to vertex to list.", .{});
@@ -191,16 +197,19 @@ test "should render without errors when rendering api is DX11" {
             .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_x.scale(@floatFromInt(index + 1)) },
             .fromArray(.{ 1, 0, 0, 1 }),
             10,
+            1,
         );
         lines.add(
             .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_y.scale(@floatFromInt(index + 1)) },
             .fromArray(.{ 0, 1, 0, 1 }),
             10,
+            0,
         );
         lines.add(
             .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_z.scale(@floatFromInt(index + 1)) },
             .fromArray(.{ 0, 0, 1, 1 }),
             10,
+            -1,
         );
 
         const world_to_clip = sdk.math.Mat4.identity
@@ -234,16 +243,19 @@ test "should render without errors when rendering api is DX12" {
             .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_x.scale(@floatFromInt(index + 1)) },
             .fromArray(.{ 1, 0, 0, 1 }),
             10,
+            1,
         );
         lines.add(
             .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_y.scale(@floatFromInt(index + 1)) },
             .fromArray(.{ 0, 1, 0, 1 }),
             10,
+            0,
         );
         lines.add(
             .{ .point_1 = .zero, .point_2 = sdk.math.Vec3.plus_z.scale(@floatFromInt(index + 1)) },
             .fromArray(.{ 0, 0, 1, 1 }),
             10,
+            -1,
         );
 
         const world_to_clip = sdk.math.Mat4.identity

@@ -573,6 +573,7 @@ fn Row(
 
         const Self = @This();
         pub const display_name = name;
+        pub const display_description = description;
 
         pub fn processFrame(
             self: *Self,

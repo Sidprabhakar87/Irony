@@ -971,6 +971,9 @@ fn drawDetailsSettings(value: *model.DetailsSettings, default: *const model.Deta
             defer imgui.igUnindent(0);
             inline for (@typeInfo(ui.Details).@"struct".fields) |*field| {
                 drawBool(field.type.display_name, &@field(v, field.name), &@field(d, field.name));
+                if (imgui.igIsItemHovered(0)) {
+                    imgui.igSetTooltip(field.type.display_description);
+                }
             }
             if (imgui.igButton("Enable All", .{})) {
                 inline for (@typeInfo(ui.Details).@"struct".fields) |*field| {

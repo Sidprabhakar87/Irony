@@ -52,6 +52,7 @@ pub const MainWindow = struct {
         latest_version: ui.LatestVersion,
         memory_usage: usize,
     ) void {
+        const style = imgui.igGetStyle();
         const display_size = imgui.igGetIO_Nil().*.DisplaySize;
         imgui.igSetNextWindowPos(
             .{ .x = 0.5 * display_size.x, .y = 0.5 * display_size.y },
@@ -59,6 +60,11 @@ pub const MainWindow = struct {
             .{ .x = 0.5, .y = 0.5 },
         );
         imgui.igSetNextWindowSize(.{ .x = 960, .y = 640 }, imgui.ImGuiCond_FirstUseEver);
+        imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_WindowMinSize, .{
+            .x = 240,
+            .y = self.controls_height + (2 * imgui.igGetFrameHeight()) + (2 * style.*.WindowPadding.y),
+        });
+        defer imgui.igPopStyleVar(1);
 
         var title_buffer: [260]u8 = undefined;
         const asterisk = if (controller.contains_unsaved_changes) "*" else "";
@@ -85,6 +91,14 @@ pub const MainWindow = struct {
             memory_usage,
         );
 
+        var available_size: imgui.ImVec2 = undefined;
+        imgui.igGetContentRegionAvail(&available_size);
+        available_size.y -= style.*.ItemSpacing.y;
+        const views_height = available_size.y - self.match_bar_height - self.controls_height;
+        if (views_height < 0) {
+            imgui.igSetCursorPosY(imgui.igGetCursorPosY() + views_height);
+        }
+
         if (settings.match_bar.enabled) {
             if (imgui.igBeginChild_Str("match_bar", .{ .y = self.match_bar_height }, 0, 0)) {
                 const start_y = imgui.igGetCursorPosY();
@@ -92,21 +106,25 @@ pub const MainWindow = struct {
                 self.match_bar_height = imgui.igGetCursorPosY() - start_y;
             }
             imgui.igEndChild();
+        } else {
+            self.match_bar_height = -style.*.ItemSpacing.y;
         }
-        if (imgui.igBeginChild_Str("views", .{ .y = -self.controls_height }, 0, imgui.ImGuiWindowFlags_NoScrollbar)) {
-            const context = QuadrantContext{
-                .self = self,
-                .settings = settings,
-                .frame = controller.getCurrentFrame(),
-            };
-            self.quadrant_layout.draw(context, &.{
-                .top_left = .{ .id = "front", .content = drawFrontView, .window_flags = imgui.ImGuiWindowFlags_NoMove },
-                .top_right = .{ .id = "side", .content = drawSideView, .window_flags = imgui.ImGuiWindowFlags_NoMove },
-                .bottom_left = .{ .id = "top", .content = drawTopView, .window_flags = imgui.ImGuiWindowFlags_NoMove },
-                .bottom_right = .{ .id = "details", .content = drawDetails },
-            });
+        if (views_height > 3) {
+            if (imgui.igBeginChild_Str("views", .{ .y = views_height }, 0, imgui.ImGuiWindowFlags_NoScrollbar)) {
+                const context = QuadrantContext{
+                    .self = self,
+                    .settings = settings,
+                    .frame = controller.getCurrentFrame(),
+                };
+                self.quadrant_layout.draw(context, &.{
+                    .top_left = .{ .id = "front", .content = drawFrontView, .window_flags = imgui.ImGuiWindowFlags_NoMove },
+                    .top_right = .{ .id = "side", .content = drawSideView, .window_flags = imgui.ImGuiWindowFlags_NoMove },
+                    .bottom_left = .{ .id = "top", .content = drawTopView, .window_flags = imgui.ImGuiWindowFlags_NoMove },
+                    .bottom_right = .{ .id = "details", .content = drawDetails },
+                });
+            }
+            imgui.igEndChild();
         }
-        imgui.igEndChild();
         if (imgui.igBeginChild_Str("controls", .{}, 0, 0)) {
             const start_y = imgui.igGetCursorPosY();
             self.controls.draw(controller);

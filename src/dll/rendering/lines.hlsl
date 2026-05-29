@@ -27,6 +27,7 @@ cbuffer Constants : register(b0) {
 	float4x4 clip_to_world;
 	float2 viewport_size;
 	float anti_aliasing;
+	float global_alpha;
 }
 
 float2 safeNormalize(float2 the_vector);
@@ -69,6 +70,7 @@ PixelInput vs_main(Vertex vertex) {
 	PixelInput pixel;
 	pixel.position = position;
 	pixel.color = vertex.color;
+	pixel.color.a *= global_alpha;
 	pixel.screen_position = clip_position.xy * 0.5 * viewport_size;
 	pixel.screen_start = screen_start;
 	pixel.screen_end = screen_end;

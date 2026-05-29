@@ -11,7 +11,8 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
     };
     return struct {
         allocator: std.mem.Allocator,
-        shader: ?Shader,
+        visible_shader: ?Shader,
+        occluded_shader: ?Shader,
         current_index: Index,
         vertices: std.ArrayList(Vertex),
         indices: std.ArrayList(Index),
@@ -31,20 +32,39 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             clip_to_world: sdk.math.Mat4,
             viewport_size: sdk.math.Vec2,
             anti_aliasing: f32,
+            global_alpha: f32,
         };
         const Shader = dx.Shader(Vertex, Index, Constants);
 
         pub fn init(allocator: std.mem.Allocator, context_maybe: ?*const dx.Context) Self {
-            const shader = if (context_maybe) |context| Shader.init(context, &.{
+            const visible_shader = if (context_maybe) |context| Shader.init(context, &.{
                 .source_code = source_code,
+                .depth = .{
+                    .enable_testing = true,
+                    .testing_function = .greater_equal,
+                    .enable_writing = true,
+                },
             }) catch |err| block: {
-                sdk.misc.error_context.append("Failed to initialize line rendering shader.", .{});
+                sdk.misc.error_context.append("Failed to initialize visible line rendering shader.", .{});
+                sdk.misc.error_context.logError(err);
+                break :block null;
+            } else null;
+            const occluded_shader = if (context_maybe) |context| Shader.init(context, &.{
+                .source_code = source_code,
+                .depth = .{
+                    .enable_testing = true,
+                    .testing_function = .less,
+                    .enable_writing = false,
+                },
+            }) catch |err| block: {
+                sdk.misc.error_context.append("Failed to initialize occluded line rendering shader.", .{});
                 sdk.misc.error_context.logError(err);
                 break :block null;
             } else null;
             return .{
                 .allocator = allocator,
-                .shader = shader,
+                .visible_shader = visible_shader,
+                .occluded_shader = occluded_shader,
                 .current_index = 0,
                 .vertices = .empty,
                 .indices = .empty,
@@ -55,7 +75,10 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             self.indices.deinit(self.allocator);
             self.vertices.deinit(self.allocator);
             if (context_maybe) |context| {
-                if (self.shader) |*shader| {
+                if (self.occluded_shader) |*shader| {
+                    shader.deinit(context);
+                }
+                if (self.visible_shader) |*shader| {
                     shader.deinit(context);
                 }
             }
@@ -138,42 +161,77 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             anti_aliasing: f32,
             is_depth_enabled: bool,
         ) void {
-            const shader: *Shader = if (self.shader) |*s| s else return;
             const back_buffer_size = context.getBackBufferSize() catch return;
+            const viewport_size = sdk.math.Vec2.fromArray(.{
+                @floatFromInt(back_buffer_size.x()),
+                @floatFromInt(back_buffer_size.y()),
+            });
             if (is_depth_enabled) {
                 self.sortByDepth(world_to_clip);
+                if (self.occluded_shader) |*shader| {
+                    drawShader(
+                        context,
+                        buffer_context,
+                        shader,
+                        self.vertices.items,
+                        self.indices.items,
+                        &.{
+                            .world_to_clip = world_to_clip,
+                            .clip_to_world = clip_to_world,
+                            .viewport_size = viewport_size,
+                            .anti_aliasing = anti_aliasing,
+                            .global_alpha = 0.1,
+                        },
+                    ) catch |err| {
+                        sdk.misc.error_context.append("Failed to render occluded lines.", .{});
+                        sdk.misc.error_context.logError(err);
+                    };
+                }
             }
-            shader.setVertices(context, self.vertices.items) catch |err| {
+            if (self.visible_shader) |*shader| {
+                drawShader(
+                    context,
+                    buffer_context,
+                    shader,
+                    self.vertices.items,
+                    self.indices.items,
+                    &.{
+                        .world_to_clip = world_to_clip,
+                        .clip_to_world = clip_to_world,
+                        .viewport_size = viewport_size,
+                        .anti_aliasing = anti_aliasing,
+                        .global_alpha = 1,
+                    },
+                ) catch |err| {
+                    sdk.misc.error_context.append("Failed to render visible lines.", .{});
+                    sdk.misc.error_context.logError(err);
+                };
+            }
+        }
+
+        fn drawShader(
+            context: *const dx.Context,
+            buffer_context: *const dx.BufferContext,
+            shader: *Shader,
+            vetices: []const Vertex,
+            indices: []const Index,
+            constants: *const Constants,
+        ) !void {
+            shader.setVertices(context, vetices) catch |err| {
                 sdk.misc.error_context.append("Failed to set shader vertices.", .{});
-                sdk.misc.error_context.append("Failed to render lines.", .{});
-                sdk.misc.error_context.logError(err);
-                return;
+                return err;
             };
-            shader.setIndices(context, self.indices.items) catch |err| {
+            shader.setIndices(context, indices) catch |err| {
                 sdk.misc.error_context.append("Failed to set shader indices.", .{});
-                sdk.misc.error_context.append("Failed to render lines.", .{});
-                sdk.misc.error_context.logError(err);
-                return;
+                return err;
             };
-            shader.setConstants(context, &.{
-                .world_to_clip = world_to_clip,
-                .clip_to_world = clip_to_world,
-                .viewport_size = .fromArray(.{
-                    @floatFromInt(back_buffer_size.x()),
-                    @floatFromInt(back_buffer_size.y()),
-                }),
-                .anti_aliasing = anti_aliasing,
-            }) catch |err| {
+            shader.setConstants(context, constants) catch |err| {
                 sdk.misc.error_context.append("Failed to set shader constants.", .{});
-                sdk.misc.error_context.append("Failed to render lines.", .{});
-                sdk.misc.error_context.logError(err);
-                return;
+                return err;
             };
             shader.draw(context, buffer_context) catch |err| {
                 sdk.misc.error_context.append("Failed to execute shader draw.", .{});
-                sdk.misc.error_context.append("Failed to render lines.", .{});
-                sdk.misc.error_context.logError(err);
-                return;
+                return err;
             };
         }
 

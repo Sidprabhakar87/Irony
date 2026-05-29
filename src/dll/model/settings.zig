@@ -81,6 +81,7 @@ pub const GeneralSettings = struct {
         enabled: bool = true,
         enable_depth: bool = true,
         thickness_scale: f32 = 2,
+        occluded_alpha: f32 = 0.1,
         anti_aliasing: f32 = 1.8,
     };
 };

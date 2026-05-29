@@ -80,6 +80,7 @@ pub const Rendering = struct {
             buffer_context,
             world_to_clip,
             clip_to_world,
+            settings.occluded_alpha,
             settings.anti_aliasing,
             is_depth_enabled,
         );

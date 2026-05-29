@@ -158,6 +158,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             buffer_context: *const dx.BufferContext,
             world_to_clip: sdk.math.Mat4,
             clip_to_world: sdk.math.Mat4,
+            occluded_alpha: f32,
             anti_aliasing: f32,
             is_depth_enabled: bool,
         ) void {
@@ -168,6 +169,8 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             });
             if (is_depth_enabled) {
                 self.sortByDepth(world_to_clip);
+            }
+            if (is_depth_enabled and occluded_alpha > 0) {
                 if (self.occluded_shader) |*shader| {
                     drawShader(
                         context,
@@ -180,7 +183,7 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                             .clip_to_world = clip_to_world,
                             .viewport_size = viewport_size,
                             .anti_aliasing = anti_aliasing,
-                            .global_alpha = 0.1,
+                            .global_alpha = occluded_alpha,
                         },
                     ) catch |err| {
                         sdk.misc.error_context.append("Failed to render occluded lines.", .{});
@@ -317,7 +320,7 @@ test "should render without errors when rendering api is DX11" {
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
         const clip_to_world = world_to_clip.inverse() orelse return error.InverseFailed;
         const buffer_context = try context.beforeRender();
-        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 1.8, true);
+        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 0.1, 1.8, true);
         try context.afterRender(buffer_context);
         try testing_context.present();
     }
@@ -363,7 +366,7 @@ test "should render without errors when rendering api is DX12" {
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
         const clip_to_world = world_to_clip.inverse() orelse return error.InverseFailed;
         const buffer_context = try context.beforeRender();
-        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 1.8, true);
+        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 0.1, 1.8, true);
         try context.afterRender(buffer_context);
         try testing_context.present();
     }

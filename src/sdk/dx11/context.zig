@@ -227,8 +227,23 @@ pub const Context = struct {
             return error.SizeMismatch;
         }
 
+        const dsv_desc = w32.D3D11_DEPTH_STENCIL_VIEW_DESC{
+            .Format = switch (depth_buffer_desc.Format) {
+                .R32G8X24_TYPELESS => .D32_FLOAT_S8X24_UINT,
+                .R24G8_TYPELESS => .D24_UNORM_S8_UINT,
+                .R32_TYPELESS => .D32_FLOAT,
+                .R16_TYPELESS => .D16_UNORM,
+                else => {
+                    misc.error_context.new("Unexpected depth buffer format: {s}", .{@tagName(depth_buffer_desc.Format)});
+                    return error.Dx11Error;
+                },
+            },
+            .ViewDimension = .TEXTURE2D,
+            .Flags = 0,
+            .Anonymous = .{ .Texture2D = .{ .MipSlice = 0 } },
+        };
         var depth_stencil_view: *w32.ID3D11DepthStencilView = undefined;
-        const result = self.device.CreateDepthStencilView(&depth_buffer.ID3D11Resource, null, &depth_stencil_view);
+        const result = self.device.CreateDepthStencilView(&depth_buffer.ID3D11Resource, &dsv_desc, &depth_stencil_view);
         if (dx11.Error.from(result)) |err| {
             misc.error_context.new("{f}", .{err});
             misc.error_context.append("ID3D11Device.CreateDepthStencilView returned a failure value.", .{});

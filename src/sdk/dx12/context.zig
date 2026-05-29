@@ -543,7 +543,22 @@ pub const Context = struct {
             return error.SizeMismatch;
         }
 
-        self.device.CreateDepthStencilView(depth_buffer, null, buffer_context.dsv_descriptor_handle);
+        const dsv_desc = w32.D3D12_DEPTH_STENCIL_VIEW_DESC{
+            .Format = switch (depth_buffer_desc.Format) {
+                .R32G8X24_TYPELESS => .D32_FLOAT_S8X24_UINT,
+                .R24G8_TYPELESS => .D24_UNORM_S8_UINT,
+                .R32_TYPELESS => .D32_FLOAT,
+                .R16_TYPELESS => .D16_UNORM,
+                else => {
+                    misc.error_context.new("Unexpected depth buffer format: {s}", .{@tagName(depth_buffer_desc.Format)});
+                    return error.Dx12Error;
+                },
+            },
+            .ViewDimension = .TEXTURE2D,
+            .Flags = .{},
+            .Anonymous = .{ .Texture2D = .{ .MipSlice = 0 } },
+        };
+        self.device.CreateDepthStencilView(depth_buffer, &dsv_desc, buffer_context.dsv_descriptor_handle);
         buffer_context.command_list.OMSetRenderTargets(
             1,
             &buffer_context.rtv_descriptor_handle,

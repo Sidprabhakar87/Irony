@@ -55,15 +55,19 @@ pub const Rendering = struct {
             true => game_memory.depth_buffer.toMutablePointer(),
             false => null,
         };
-        context.setDepthBuffer(buffer_context, depth_buffer) catch |err_1| switch (err_1) {
-            error.SizeMismatch => context.setDepthBuffer(buffer_context, null) catch |err_2| {
-                sdk.misc.error_context.append("Failed to unset depth buffer.", .{});
-                sdk.misc.error_context.logError(err_2);
-            },
-            else => {
-                sdk.misc.error_context.append("Failed to set depth buffer.", .{});
-                sdk.misc.error_context.logError(err_1);
-            },
+        var is_depth_enabled = depth_buffer != null;
+        context.setDepthBuffer(buffer_context, depth_buffer) catch |err_1| {
+            is_depth_enabled = false;
+            switch (err_1) {
+                error.SizeMismatch => context.setDepthBuffer(buffer_context, null) catch |err_2| {
+                    sdk.misc.error_context.append("Failed to unset depth buffer.", .{});
+                    sdk.misc.error_context.logError(err_2);
+                },
+                else => {
+                    sdk.misc.error_context.append("Failed to set depth buffer.", .{});
+                    sdk.misc.error_context.logError(err_1);
+                },
+            }
         };
 
         const camera = game_memory.camera_manager.toConstPointer() orelse return;
@@ -71,7 +75,14 @@ pub const Rendering = struct {
         const clip_to_world = world_to_clip.inverse() orelse return;
 
         self.shapes.render(&self.lines, camera.position.convert());
-        self.lines.render(context, buffer_context, world_to_clip, clip_to_world, settings.anti_aliasing);
+        self.lines.render(
+            context,
+            buffer_context,
+            world_to_clip,
+            clip_to_world,
+            settings.anti_aliasing,
+            is_depth_enabled,
+        );
     }
 
     fn calculateWorldToClip(context: *const dx.Context, camera: *const game.CameraManager(game_id)) ?sdk.math.Mat4 {

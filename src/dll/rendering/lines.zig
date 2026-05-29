@@ -136,9 +136,13 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
             world_to_clip: sdk.math.Mat4,
             clip_to_world: sdk.math.Mat4,
             anti_aliasing: f32,
+            is_depth_enabled: bool,
         ) void {
             const shader: *Shader = if (self.shader) |*s| s else return;
             const back_buffer_size = context.getBackBufferSize() catch return;
+            if (is_depth_enabled) {
+                self.sortByDepth(world_to_clip);
+            }
             shader.setVertices(context, self.vertices.items) catch |err| {
                 sdk.misc.error_context.append("Failed to set shader vertices.", .{});
                 sdk.misc.error_context.append("Failed to render lines.", .{});
@@ -171,6 +175,44 @@ pub fn Lines(comptime rendering_api: build_info.RenderingApi) type {
                 sdk.misc.error_context.logError(err);
                 return;
             };
+        }
+
+        fn sortByDepth(self: *Self, world_to_clip: sdk.math.Mat4) void {
+            const Context = struct {
+                vertices: []const Vertex,
+                world_to_clip: sdk.math.Mat4,
+            };
+            const group6 = struct {
+                fn call(indices: []Index) [][6]Index {
+                    std.debug.assert(indices.len % 6 == 0);
+                    const ptr: [*][6]Index = @ptrCast(indices.ptr);
+                    return ptr[0 .. indices.len / 6];
+                }
+            }.call;
+            const lessThanFn = struct {
+                fn call(context: Context, lhs: [6]Index, rhs: [6]Index) bool {
+                    const lhs_vertex = context.vertices[lhs[0]];
+                    const rhs_vertex = context.vertices[rhs[0]];
+                    const lhs_depth = lhs_vertex.start.add(lhs_vertex.end).scale(0.5)
+                        .pointTransform(context.world_to_clip).z();
+                    const rhs_depth = rhs_vertex.start.add(rhs_vertex.end).scale(0.5)
+                        .pointTransform(context.world_to_clip).z();
+                    if (lhs_depth != rhs_depth) {
+                        return lhs_depth < rhs_depth;
+                    } else {
+                        return lhs_vertex.depth_factor < rhs_vertex.depth_factor;
+                    }
+                }
+            }.call;
+            std.mem.sort(
+                [6]Index,
+                group6(self.indices.items),
+                Context{
+                    .vertices = self.vertices.items,
+                    .world_to_clip = world_to_clip,
+                },
+                lessThanFn,
+            );
         }
     };
 }
@@ -217,7 +259,7 @@ test "should render without errors when rendering api is DX11" {
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
         const clip_to_world = world_to_clip.inverse() orelse return error.InverseFailed;
         const buffer_context = try context.beforeRender();
-        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 1.8);
+        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 1.8, true);
         try context.afterRender(buffer_context);
         try testing_context.present();
     }
@@ -263,7 +305,7 @@ test "should render without errors when rendering api is DX12" {
             .perspective(0.25 * std.math.pi, 16.0 / 9.0, 1, 1000);
         const clip_to_world = world_to_clip.inverse() orelse return error.InverseFailed;
         const buffer_context = try context.beforeRender();
-        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 1.8);
+        lines.render(&context, buffer_context, world_to_clip, clip_to_world, 1.8, true);
         try context.afterRender(buffer_context);
         try testing_context.present();
     }

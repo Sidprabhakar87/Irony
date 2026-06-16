@@ -1,7 +1,11 @@
 pub const AutomationConfig = @import("automation.zig").AutomationConfig;
 pub const Automation = @import("automation.zig").Automation;
+pub const Coach = @import("coach.zig").Coach;
+pub const CoachReport = @import("coach_report.zig").CoachReport;
 pub const Controller = @import("controller.zig").Controller;
 pub const Core = @import("core.zig").Core;
 pub const HitDetector = @import("hit_detector.zig").HitDetector;
+pub const MatchStats = @import("match_stats.zig").MatchStats;
 pub const MoveMeasurer = @import("move_measurer.zig").MoveMeasurer;
 pub const MoveDetector = @import("move_detector.zig").MoveDetector;
+pub const Referee = @import("referee.zig").Referee;

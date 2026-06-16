@@ -6,6 +6,8 @@ const ui = @import("../ui/root.zig");
 pub const Settings = struct {
     general: GeneralSettings = .{},
     automation: AutomationSettings = .{},
+    referee: RefereeSettings = .{},
+    coach: CoachSettings = .{},
     hit_lines: PlayerSettings(HitLinesSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
     hurt_cylinders: PlayerSettings(HurtCylindersSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
     collision_spheres: PlayerSettings(CollisionSpheresSettings) = .{ .mode = .same, .players = .{ .{}, .{} } },
@@ -96,6 +98,40 @@ pub const AutomationSettings = struct {
         do_not_record,
         only_record,
         record_and_save,
+    };
+};
+
+pub const RefereeSettings = struct {
+    enabled: bool = false,
+    strictness: Strictness = .normal,
+    api_endpoint: []const u8 = "",
+    api_key: []const u8 = "",
+    match_id: []const u8 = "",
+    violation_thresholds: ViolationThresholds = .{},
+
+    pub const Strictness = enum {
+        lenient,
+        normal,
+        strict,
+    };
+
+    pub const ViolationThresholds = struct {
+        min_input_interval: u32 = 1,
+        max_macro_similarity: f32 = 0.8,
+        check_exploits: bool = true,
+    };
+};
+
+pub const CoachSettings = struct {
+    enabled: bool = false,
+    api_endpoint: []const u8 = "",
+    api_key: []const u8 = "",
+    analysis_depth: AnalysisDepth = .detailed,
+
+    pub const AnalysisDepth = enum {
+        basic,
+        detailed,
+        comprehensive,
     };
 };
 

@@ -16,7 +16,7 @@ pub const Coach = struct {
         var player_tendency = PlayerTendency{};
         var opponent_tendency = PlayerTendency{};
         var match_stats = MatchStats{};
-        var missed_punishments = std.ArrayList(PunishOpportunity).init(allocator);
+        var missed_punishments: std.ArrayList(PunishOpportunity) = .empty;
 
         var iter = FrameIterator.init(frames, player_id);
         while (iter.next()) |state| {
@@ -27,12 +27,12 @@ pub const Coach = struct {
             // Check if opponent is in recovery and player missed a punish
             if (state.opponent.move_phase == .recovery) {
                 if (findMissedPunishment(state.frame, state.player, state.opponent)) |punish| {
-                    missed_punishments.append(punish) catch {};
+                    missed_punishments.append(allocator, punish) catch {};
                 }
             }
         }
 
-        analysis.missed_punishments = missed_punishments.toOwnedSlice() catch &.{};
+        analysis.missed_punishments = missed_punishments.toOwnedSlice(allocator) catch &.{};
         analysis.player_tendency = player_tendency;
         analysis.opponent_tendency = opponent_tendency;
         analysis.match_stats = match_stats;
@@ -136,7 +136,7 @@ pub const Coach = struct {
         frames: []const model.Frame,
         player_id: model.PlayerId,
     ) []const PunishOpportunity {
-        var opportunities = std.ArrayList(PunishOpportunity).init(allocator);
+        var opportunities: std.ArrayList(PunishOpportunity) = .empty;
 
         var iter = FrameIterator.init(frames, player_id);
         while (iter.next()) |state| {
@@ -149,7 +149,7 @@ pub const Coach = struct {
             const frame_adv = state.opponent.getFrameAdvantage(state.player);
             const optimal_move = findOptimalPunishMove(recovery.actual.?);
 
-            opportunities.append(.{
+            opportunities.append(allocator, .{
                 .frame_number = state.frame.frames_since_round_start orelse 0,
                 .opponent_frame_advantage = frame_adv,
                 .opponent_recovery_frames = recovery,
@@ -159,7 +159,7 @@ pub const Coach = struct {
             }) catch {};
         }
 
-        return opportunities.toOwnedSlice() catch &.{};
+        return opportunities.toOwnedSlice(allocator) catch &.{};
     }
 
     fn findOptimalPunishMove(recovery_frames: u32) ?u32 {
@@ -220,14 +220,14 @@ pub const Coach = struct {
         frames: []const model.Frame,
         player_id: model.PlayerId,
     ) []const StrategyRecommendation {
-        var recommendations = std.ArrayList(StrategyRecommendation).init(allocator);
+        var recommendations: std.ArrayList(StrategyRecommendation) = .empty;
 
         const opponent_tendency = profileOpponentStyle(allocator, frames, player_id);
 
         // Generate recommendations based on playstyle
         switch (opponent_tendency.playstyle) {
             .aggressive => {
-                recommendations.append(.{
+                recommendations.append(allocator, .{
                     .situation = "Opponent plays aggressively with frequent attacks",
                     .counter = "Use backdash into whiff punish or power crush moves",
                     .risk = .medium,
@@ -236,7 +236,7 @@ pub const Coach = struct {
                 }) catch {};
             },
             .defensive => {
-                recommendations.append(.{
+                recommendations.append(allocator, .{
                     .situation = "Opponent blocks frequently and waits for punishes",
                     .counter = "Use throws and frame traps to open them up",
                     .risk = .low,
@@ -245,7 +245,7 @@ pub const Coach = struct {
                 }) catch {};
             },
             .poke_heavy => {
-                recommendations.append(.{
+                recommendations.append(allocator, .{
                     .situation = "Opponent relies on pokes and crush moves",
                     .counter = "Use mids to beat high crushes, block and punish lows",
                     .risk = .low,
@@ -254,7 +254,7 @@ pub const Coach = struct {
                 }) catch {};
             },
             .neutral => {
-                recommendations.append(.{
+                recommendations.append(allocator, .{
                     .situation = "Opponent plays balanced/neutral game",
                     .counter = "Focus on fundamentals: spacing, whiff punish, and frame advantage",
                     .risk = .medium,
@@ -266,22 +266,20 @@ pub const Coach = struct {
 
         // Add move-specific recommendations based on opponent's favorite moves
         const favorite_moves = getFavoriteMoves(&opponent_tendency);
-        for (favorite_moves) |move_id| {
-            if (move_id == 0) break;
-            const optimal = findOptimalPunishMove(15) orelse 15;
-            recommendations.append(.{
+        for (favorite_moves) |_| {
+            recommendations.append(allocator, .{
                 .situation = "Opponent frequently uses this move pattern",
                 .counter = "Prepare punish with fastest available option",
                 .risk = .medium,
                 .frame_advantage_on_hit = "+varies",
-                .reason = std.fmt.comptimePrint("Opponent favors move id {d} - use i{d} punish", .{ move_id, optimal }),
+                .reason = "Opponent frequently uses this move - prepare a punish",
             }) catch {};
         }
 
-        return recommendations.toOwnedSlice() catch &.{};
+        return recommendations.toOwnedSlice(allocator) catch &.{};
     }
 
-    fn getFavoriteMoves(tendency: *const PlayerTendency) [5]u32 {
+    pub fn getFavoriteMoves(tendency: *const PlayerTendency) [5]u32 {
         var result: [5]u32 = .{ 0, 0, 0, 0, 0 };
         var result_counts: [5]u32 = .{ 0, 0, 0, 0, 0 };
 

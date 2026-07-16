@@ -5,20 +5,20 @@ const model = @import("../model/root.zig");
 pub const Referee = struct {
     player_1_state: PlayerState = .{},
     player_2_state: PlayerState = .{},
-    violations: std.ArrayList(ViolationEvent),
+    violations: std.ArrayList(ViolationEvent) = .empty,
     settings: model.RefereeSettings = .{},
+    match_id: []const u8 = "",
     violation_counter: u64 = 0,
 
     const Self = @This();
 
     pub fn init(allocator: std.mem.Allocator) Self {
-        return .{
-            .violations = std.ArrayList(ViolationEvent).init(allocator),
-        };
+        _ = allocator;
+        return .{};
     }
 
     pub fn deinit(self: *Self) void {
-        self.violations.deinit();
+        self.violations.deinit(std.heap.page_allocator);
     }
 
     pub fn tick(self: *Self, frame: *const model.Frame) void {
@@ -51,7 +51,7 @@ pub const Referee = struct {
                     // Multiple distinct inputs in the same frame - physically impossible
                     self.logViolation(.{
                         .event_id = self.nextViolationId(),
-                        .match_id = self.settings.match_id,
+                        .match_id = self.match_id,
                         .player_id = @tagName(player_id),
                         .timestamp = std.time.timestamp(),
                         .violation = .{
@@ -143,7 +143,7 @@ pub const Referee = struct {
 
                 self.logViolation(.{
                     .event_id = self.nextViolationId(),
-                    .match_id = self.settings.match_id,
+                    .match_id = self.match_id,
                     .player_id = @tagName(player_id),
                     .timestamp = std.time.timestamp(),
                     .violation = .{
@@ -199,7 +199,7 @@ pub const Referee = struct {
                 {
                     self.logViolation(.{
                         .event_id = self.nextViolationId(),
-                        .match_id = self.settings.match_id,
+                        .match_id = self.match_id,
                         .player_id = @tagName(player_id),
                         .timestamp = std.time.timestamp(),
                         .violation = .{
@@ -221,7 +221,7 @@ pub const Referee = struct {
     }
 
     fn logViolation(self: *Self, violation: ViolationEvent) void {
-        self.violations.append(violation) catch {};
+        self.violations.append(std.heap.page_allocator, violation) catch {};
     }
 
     fn nextViolationId(self: *Self) [36]u8 {
@@ -246,11 +246,11 @@ pub const Referee = struct {
     }
 
     pub fn exportReport(self: *const Self, allocator: std.mem.Allocator) []const u8 {
-        var buffer = std.ArrayList(u8).init(allocator);
-        const writer = buffer.writer();
+        var buffer: std.ArrayList(u8) = .empty;
+        const writer = buffer.writer(allocator);
 
         writer.print("{{\n", .{}) catch return "";
-        writer.print("  \"match_id\": \"{s}\",\n", .{self.settings.match_id}) catch return "";
+        writer.print("  \"match_id\": \"{s}\",\n", .{self.match_id}) catch return "";
         writer.print("  \"violation_count\": {d},\n", .{self.violations.items.len}) catch return "";
         writer.print("  \"violations\": [\n", .{}) catch return "";
 
@@ -274,7 +274,7 @@ pub const Referee = struct {
         writer.print("  ]\n", .{}) catch return "";
         writer.print("}}\n", .{}) catch return "";
 
-        return buffer.toOwnedSlice() catch "";
+        return buffer.toOwnedSlice(allocator) catch "";
     }
 
     pub fn getViolationCount(self: *const Self) usize {

@@ -4,6 +4,8 @@ import asyncio
 from contextlib import asynccontextmanager
 
 import structlog
+import fastapi
+import fastapi.responses
 from fastapi import FastAPI
 
 from synaptyx_intelligence.api.platform_client import PlatformClient
@@ -136,6 +138,11 @@ def create_app() -> FastAPI:
             "frames_received": _ipc_client.frames_received if _ipc_client else 0,
             "referee_violations": _referee.get_violation_count() if _referee else 0,
         }
+
+    @app.get("/admin", response_class=fastapi.responses.HTMLResponse)
+    async def admin_panel():
+        from synaptyx_intelligence.admin import ADMIN_HTML
+        return ADMIN_HTML
 
     @app.get("/referee/status")
     async def referee_status():

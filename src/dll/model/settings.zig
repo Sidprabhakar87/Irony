@@ -104,9 +104,6 @@ pub const AutomationSettings = struct {
 pub const RefereeSettings = struct {
     enabled: bool = false,
     strictness: Strictness = .normal,
-    api_endpoint: []const u8 = "",
-    api_key: []const u8 = "",
-    match_id: []const u8 = "",
     violation_thresholds: ViolationThresholds = .{},
 
     pub const Strictness = enum {
@@ -124,8 +121,6 @@ pub const RefereeSettings = struct {
 
 pub const CoachSettings = struct {
     enabled: bool = false,
-    api_endpoint: []const u8 = "",
-    api_key: []const u8 = "",
     analysis_depth: AnalysisDepth = .detailed,
 
     pub const AnalysisDepth = enum {

@@ -1,22 +1,26 @@
 const std = @import("std");
+const w32 = @import("win32").everything;
 const sdk = @import("../../sdk/root.zig");
 
+/// HTTP API client for communicating with the tournament SaaS platform.
+/// Uses Win32 WinHTTP for network requests since we're running as a Windows DLL.
 pub const ApiClient = struct {
     allocator: std.mem.Allocator,
     endpoint: []const u8,
     api_key: []const u8,
-    http_client: HttpClient,
     pending_queue: std.ArrayList(PendingRequest),
     is_connected: bool = false,
+    last_error: ?ApiError = null,
 
     const Self = @This();
+    const max_retries: u32 = 3;
+    const request_timeout_ms: u32 = 5000;
 
     pub fn init(allocator: std.mem.Allocator, endpoint: []const u8, api_key: []const u8) Self {
         return .{
             .allocator = allocator,
             .endpoint = endpoint,
             .api_key = api_key,
-            .http_client = HttpClient{},
             .pending_queue = std.ArrayList(PendingRequest).init(allocator),
         };
     }
@@ -25,43 +29,40 @@ pub const ApiClient = struct {
         self.pending_queue.deinit();
     }
 
+    /// Authenticates with the tournament platform API.
     pub fn authenticate(self: *Self) !bool {
-        var request = Request{
-            .method = .post,
-            .path = "/api/auth/verify",
-            .headers = &.{
-                .{ .key = "Authorization", .value = self.api_key },
-                .{ .key = "Content-Type", .value = "application/json" },
-            },
-            .body = null,
+        const response = self.sendHttpRequest(.post, "/api/auth/verify", null) catch |err| {
+            self.last_error = .{ .kind = .network_error, .message = "Authentication failed" };
+            return err;
         };
-
-        const response = try self.sendRequest(&request);
-        self.is_connected = response.status == 200;
+        self.is_connected = (response.status >= 200 and response.status < 300);
         return self.is_connected;
     }
 
+    /// Sends a heartbeat to maintain connection.
     pub fn heartbeat(self: *Self) !bool {
         if (!self.is_connected) {
-            self.is_connected = try self.authenticate();
+            return self.authenticate();
         }
+
+        const response = self.sendHttpRequest(.get, "/api/health", null) catch |err| {
+            self.is_connected = false;
+            self.last_error = .{ .kind = .network_error, .message = "Heartbeat failed" };
+            return err;
+        };
+
+        self.is_connected = (response.status >= 200 and response.status < 300);
         return self.is_connected;
     }
 
+    /// Sends a violation alert to the tournament platform (real-time).
+    /// If the request fails, it's queued for retry.
     pub fn sendViolationAlert(self: *Self, violation_json: []const u8) !void {
-        var request = Request{
-            .method = .post,
-            .path = "/api/violations",
-            .headers = &.{
-                .{ .key = "Authorization", .value = self.api_key },
-                .{ .key = "Content-Type", .value = "application/json" },
-            },
-            .body = violation_json,
-        };
-
-        const response = self.sendRequest(&request) catch |err| {
-            try self.queueRequest(.{
-                .request = request,
+        const response = self.sendHttpRequest(.post, "/api/violations", violation_json) catch |err| {
+            self.queueRequest(.{
+                .method = .post,
+                .path = "/api/violations",
+                .body = violation_json,
                 .retry_count = 0,
                 .created_at = std.time.timestamp(),
             });
@@ -69,27 +70,36 @@ pub const ApiClient = struct {
         };
 
         if (response.status >= 400) {
+            self.last_error = .{ .kind = .server_error, .message = "Violation alert rejected" };
             return error.RequestFailed;
         }
     }
 
+    /// Submits a coaching report to the tournament platform (post-match).
     pub fn submitCoachingReport(self: *Self, report_json: []const u8) !void {
-        var request = Request{
-            .method = .post,
-            .path = "/api/coaching",
-            .headers = &.{
-                .{ .key = "Authorization", .value = self.api_key },
-                .{ .key = "Content-Type", .value = "application/json" },
-            },
-            .body = report_json,
-        };
-
-        const response = self.sendRequest(&request) catch |err| {
-            try self.queueRequest(.{
-                .request = request,
+        const response = self.sendHttpRequest(.post, "/api/coaching", report_json) catch |err| {
+            self.queueRequest(.{
+                .method = .post,
+                .path = "/api/coaching",
+                .body = report_json,
                 .retry_count = 0,
                 .created_at = std.time.timestamp(),
             });
+            return err;
+        };
+
+        if (response.status >= 400) {
+            self.last_error = .{ .kind = .server_error, .message = "Coaching report rejected" };
+            return error.RequestFailed;
+        }
+    }
+
+    /// Submits match result data.
+    pub fn submitMatchResult(self: *Self, match_id: []const u8, result_json: []const u8) !void {
+        var path_buf: [256]u8 = undefined;
+        const path = std.fmt.bufPrint(&path_buf, "/api/matches/{s}/result", .{match_id}) catch return error.PathTooLong;
+
+        const response = self.sendHttpRequest(.post, path, result_json) catch |err| {
             return err;
         };
 
@@ -98,113 +108,241 @@ pub const ApiClient = struct {
         }
     }
 
-    pub fn getMatchData(self: *Self, match_id: []const u8) ![]const u8 {
-        var request = Request{
-            .method = .get,
-            .path = try std.fmt.allocPrint(self.allocator, "/api/matches/{s}", .{match_id}),
-            .headers = &.{
-                .{ .key = "Authorization", .value = self.api_key },
-            },
-            .body = null,
-        };
-        defer self.allocator.free(request.path);
-
-        const response = try self.sendRequest(&request);
-        return response.body;
-    }
-
-    pub fn submitMatchResult(self: *Self, match_id: []const u8, result_json: []const u8) !void {
-        var request = Request{
-            .method = .post,
-            .path = try std.fmt.allocPrint(self.allocator, "/api/matches/{s}/result", .{match_id}),
-            .headers = &.{
-                .{ .key = "Authorization", .value = self.api_key },
-                .{ .key = "Content-Type", .value = "application/json" },
-            },
-            .body = result_json,
-        };
-        defer self.allocator.free(request.path);
-
-        const response = try self.sendRequest(&request);
-        if (response.status >= 400) {
-            return error.RequestFailed;
-        }
-    }
-
-    fn sendRequest(self: *Self, request: *const Request) !Response {
-        var url_buffer: [512]u8 = undefined;
-        const url = try std.fmt.bufPrint(&url_buffer, "{s}{s}", .{ self.endpoint, request.path });
-
-        var headers_buffer: [256]u8 = undefined;
-        var headers_str: []u8 = &.{};
-        for (request.headers) |header| {
-            const header_line = try std.fmt.bufPrint(&headers_buffer, "{s}: {s}\r\n", .{
-                header.key, header.value,
-            });
-            headers_str = try std.mem.concat(self.allocator, u8, &.{ headers_str, header_line });
-        }
-
-        _ = url;
-        _ = headers_str;
-        _ = request;
-
-        return Response{
-            .status = 200,
-            .body = "",
-        };
-    }
-
-    fn queueRequest(self: *Self, pending: PendingRequest) !void {
-        try self.pending_queue.append(pending);
-    }
-
-    pub fn processPendingRequests(self: *Self) !u32 {
+    /// Processes queued requests that previously failed.
+    /// Returns the number of successfully processed requests.
+    pub fn processPendingRequests(self: *Self) u32 {
         var processed: u32 = 0;
-        var failed_indices = std.ArrayList(usize).init(self.allocator);
-        defer failed_indices.deinit();
+        var i: usize = 0;
 
-        for (self.pending_queue.items, 0..) |*pending, i| {
+        while (i < self.pending_queue.items.len) {
+            var pending = &self.pending_queue.items[i];
+
             if (pending.retry_count >= max_retries) {
+                // Remove after max retries exceeded
+                _ = self.pending_queue.orderedRemove(i);
                 continue;
             }
 
-            const response = self.sendRequest(&pending.request) catch {
+            const response = self.sendHttpRequest(pending.method, pending.path, pending.body) catch {
                 pending.retry_count += 1;
-                failed_indices.append(i) catch {};
+                i += 1;
                 continue;
             };
 
             if (response.status < 400) {
                 processed += 1;
+                _ = self.pending_queue.orderedRemove(i);
             } else {
                 pending.retry_count += 1;
-                failed_indices.append(i) catch {};
+                i += 1;
             }
-        }
-
-        var offset: usize = 0;
-        for (failed_indices.items) |idx| {
-            self.pending_queue.delete(idx - offset);
-            offset += 1;
         }
 
         return processed;
     }
 
-    const max_retries = 3;
+    /// Returns the number of pending (queued) requests.
+    pub fn getPendingCount(self: *const Self) usize {
+        return self.pending_queue.items.len;
+    }
+
+    /// Returns the last error, if any.
+    pub fn getLastError(self: *const Self) ?ApiError {
+        return self.last_error;
+    }
+
+    // ========================================================================
+    // Internal HTTP implementation using Win32 WinHTTP
+    // ========================================================================
+
+    fn sendHttpRequest(self: *Self, method: HttpMethod, path: []const u8, body: ?[]const u8) !Response {
+        // Parse endpoint URL to extract host and port
+        const parsed = parseUrl(self.endpoint) orelse return error.InvalidUrl;
+
+        // Convert strings to wide (UTF-16) for WinHTTP
+        var host_wide: [256]u16 = undefined;
+        const host_len = std.unicode.utf8ToUtf16Le(&host_wide, parsed.host) catch return error.InvalidUrl;
+        host_wide[host_len] = 0;
+
+        var path_wide: [512]u16 = undefined;
+        const path_len = std.unicode.utf8ToUtf16Le(&path_wide, path) catch return error.InvalidUrl;
+        path_wide[path_len] = 0;
+
+        const method_str = switch (method) {
+            .get => "GET",
+            .post => "POST",
+            .put => "PUT",
+            .delete => "DELETE",
+            .patch => "PATCH",
+        };
+        var method_wide: [16]u16 = undefined;
+        const method_len = std.unicode.utf8ToUtf16Le(&method_wide, method_str) catch return error.InvalidUrl;
+        method_wide[method_len] = 0;
+
+        // WinHTTP session
+        const user_agent = std.unicode.utf8ToUtf16LeStringLiteral("Irony-AI-Client/1.0");
+        const h_session = w32.WinHttpOpen(
+            user_agent,
+            w32.WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+            null, // proxy
+            null, // proxy bypass
+            0, // flags
+        ) orelse return error.SessionOpenFailed;
+        defer _ = w32.WinHttpCloseHandle(h_session);
+
+        // Connect to server
+        const h_connect = w32.WinHttpConnect(
+            h_session,
+            @ptrCast(&host_wide),
+            parsed.port,
+            0, // reserved
+        ) orelse return error.ConnectionFailed;
+        defer _ = w32.WinHttpCloseHandle(h_connect);
+
+        // Create request
+        const flags: u32 = if (parsed.is_https) w32.WINHTTP_FLAG_SECURE else 0;
+        const h_request = w32.WinHttpOpenRequest(
+            h_connect,
+            @ptrCast(&method_wide),
+            @ptrCast(&path_wide),
+            null, // version (HTTP/1.1)
+            null, // referrer
+            null, // accept types
+            flags,
+        ) orelse return error.RequestCreationFailed;
+        defer _ = w32.WinHttpCloseHandle(h_request);
+
+        // Set timeout
+        _ = w32.WinHttpSetTimeouts(h_request, request_timeout_ms, request_timeout_ms, request_timeout_ms, request_timeout_ms);
+
+        // Add authorization header
+        var auth_header_buf: [512]u8 = undefined;
+        const auth_header = std.fmt.bufPrint(&auth_header_buf, "Authorization: Bearer {s}\r\nContent-Type: application/json\r\n", .{self.api_key}) catch return error.HeaderTooLong;
+        var auth_header_wide: [1024]u16 = undefined;
+        const auth_header_len = std.unicode.utf8ToUtf16Le(&auth_header_wide, auth_header) catch return error.HeaderTooLong;
+        auth_header_wide[auth_header_len] = 0;
+
+        _ = w32.WinHttpAddRequestHeaders(
+            h_request,
+            @ptrCast(&auth_header_wide),
+            @intCast(auth_header_len),
+            w32.WINHTTP_ADDREQ_FLAG_ADD,
+        );
+
+        // Send request
+        const body_ptr: ?*const anyopaque = if (body) |b| @ptrCast(b.ptr) else null;
+        const body_len: u32 = if (body) |b| @intCast(b.len) else 0;
+
+        if (w32.WinHttpSendRequest(
+            h_request,
+            null, // additional headers
+            0, // additional headers length
+            body_ptr,
+            body_len,
+            body_len,
+            0, // context
+        ) == 0) {
+            return error.SendFailed;
+        }
+
+        // Receive response
+        if (w32.WinHttpReceiveResponse(h_request, null) == 0) {
+            return error.ReceiveFailed;
+        }
+
+        // Get status code
+        var status_code: u32 = 0;
+        var status_size: u32 = @sizeOf(u32);
+        _ = w32.WinHttpQueryHeaders(
+            h_request,
+            w32.WINHTTP_QUERY_STATUS_CODE | w32.WINHTTP_QUERY_FLAG_NUMBER,
+            null,
+            @ptrCast(&status_code),
+            &status_size,
+            null,
+        );
+
+        // Read response body (up to 64KB)
+        var response_body = std.ArrayList(u8).init(self.allocator);
+        var bytes_available: u32 = 0;
+        while (true) {
+            _ = w32.WinHttpQueryDataAvailable(h_request, &bytes_available);
+            if (bytes_available == 0) break;
+
+            const read_size = @min(bytes_available, 8192);
+            var read_buf: [8192]u8 = undefined;
+            var bytes_read: u32 = 0;
+
+            if (w32.WinHttpReadData(h_request, &read_buf, read_size, &bytes_read) == 0) break;
+            if (bytes_read == 0) break;
+
+            response_body.appendSlice(read_buf[0..bytes_read]) catch break;
+
+            if (response_body.items.len > 65536) break; // Cap at 64KB
+        }
+
+        return Response{
+            .status = @intCast(status_code),
+            .body = response_body.toOwnedSlice() catch "",
+        };
+    }
+
+    fn queueRequest(self: *Self, pending: PendingRequest) void {
+        self.pending_queue.append(pending) catch {};
+    }
+
+    fn parseUrl(url: []const u8) ?ParsedUrl {
+        var result = ParsedUrl{
+            .host = "",
+            .port = 443,
+            .is_https = true,
+        };
+
+        var remaining = url;
+
+        if (std.mem.startsWith(u8, remaining, "https://")) {
+            remaining = remaining[8..];
+            result.is_https = true;
+            result.port = 443;
+        } else if (std.mem.startsWith(u8, remaining, "http://")) {
+            remaining = remaining[7..];
+            result.is_https = false;
+            result.port = 80;
+        } else {
+            return null;
+        }
+
+        // Find host (up to : or / or end)
+        var host_end: usize = remaining.len;
+        for (remaining, 0..) |c, i| {
+            if (c == ':' or c == '/') {
+                host_end = i;
+                break;
+            }
+        }
+        result.host = remaining[0..host_end];
+
+        // Parse optional port
+        if (host_end < remaining.len and remaining[host_end] == ':') {
+            const port_start = host_end + 1;
+            var port_end: usize = remaining.len;
+            for (remaining[port_start..], 0..) |c, i| {
+                if (c == '/') {
+                    port_end = port_start + i;
+                    break;
+                }
+            }
+            result.port = std.fmt.parseInt(u16, remaining[port_start..port_end], 10) catch result.port;
+        }
+
+        if (result.host.len == 0) return null;
+        return result;
+    }
 };
 
-pub const Request = struct {
-    method: HttpMethod,
-    path: []const u8,
-    headers: []const Header,
-    body: ?[]const u8,
-};
-
-pub const Response = struct {
-    status: u16,
-    body: []const u8,
-};
+// ============================================================================
+// Types
+// ============================================================================
 
 pub const HttpMethod = enum {
     get,
@@ -214,38 +352,71 @@ pub const HttpMethod = enum {
     patch,
 };
 
-pub const Header = struct {
-    key: []const u8,
-    value: []const u8,
+pub const Response = struct {
+    status: u16,
+    body: []const u8,
 };
 
-pub const HttpClient = struct {};
-
 pub const PendingRequest = struct {
-    request: Request,
+    method: HttpMethod,
+    path: []const u8,
+    body: ?[]const u8,
     retry_count: u32,
     created_at: i64,
 };
 
+pub const ApiError = struct {
+    kind: ErrorKind,
+    message: []const u8,
+};
+
+pub const ErrorKind = enum {
+    network_error,
+    server_error,
+    timeout,
+    authentication_failed,
+};
+
+const ParsedUrl = struct {
+    host: []const u8,
+    port: u16,
+    is_https: bool,
+};
+
+// ============================================================================
+// Tests
+// ============================================================================
+
 const testing = std.testing;
 
 test "ApiClient.init should initialize correctly" {
-    var client = ApiClient.init(std.heap.page_allocator, "https://api.example.com", "test_key");
+    var client = ApiClient.init(testing.allocator, "https://api.example.com", "test_key");
     defer client.deinit();
     try testing.expectEqualStrings("https://api.example.com", client.endpoint);
     try testing.expectEqualStrings("test_key", client.api_key);
     try testing.expectEqual(false, client.is_connected);
+    try testing.expectEqual(@as(usize, 0), client.getPendingCount());
 }
 
-test "Request should store correct values" {
-    const request = Request{
-        .method = .get,
-        .path = "/api/test",
-        .headers = &.{},
-        .body = null,
-    };
-    try testing.expectEqual(.get, request.method);
-    try testing.expectEqualStrings("/api/test", request.path);
+test "parseUrl should parse https URL correctly" {
+    const result = ApiClient.parseUrl("https://api.gameparlour.com");
+    try testing.expect(result != null);
+    try testing.expectEqualStrings("api.gameparlour.com", result.?.host);
+    try testing.expectEqual(@as(u16, 443), result.?.port);
+    try testing.expectEqual(true, result.?.is_https);
+}
+
+test "parseUrl should parse http URL with port" {
+    const result = ApiClient.parseUrl("http://localhost:8080/api");
+    try testing.expect(result != null);
+    try testing.expectEqualStrings("localhost", result.?.host);
+    try testing.expectEqual(@as(u16, 8080), result.?.port);
+    try testing.expectEqual(false, result.?.is_https);
+}
+
+test "parseUrl should handle invalid URL" {
+    const result = ApiClient.parseUrl("not-a-url");
+    try testing.expectEqual(@as(?ParsedUrl, null), result);
 }
 
 test "Response should store correct values" {
@@ -255,4 +426,17 @@ test "Response should store correct values" {
     };
     try testing.expectEqual(@as(u16, 200), response.status);
     try testing.expectEqualStrings("OK", response.body);
+}
+
+test "PendingRequest should store correct values" {
+    const pending = PendingRequest{
+        .method = .post,
+        .path = "/api/violations",
+        .body = "{}",
+        .retry_count = 0,
+        .created_at = 1000,
+    };
+    try testing.expectEqual(HttpMethod.post, pending.method);
+    try testing.expectEqualStrings("/api/violations", pending.path);
+    try testing.expectEqual(@as(u32, 0), pending.retry_count);
 }

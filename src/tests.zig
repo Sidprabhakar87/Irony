@@ -110,6 +110,12 @@ test {
     _ = @import("dll/rendering/rendering.zig");
     _ = @import("dll/rendering/shapes.zig");
 
+    _ = @import("dll/api/client.zig");
+    _ = @import("dll/core/coach.zig");
+    _ = @import("dll/core/coach_report.zig");
+    _ = @import("dll/core/match_stats.zig");
+    _ = @import("dll/core/referee.zig");
+
     _ = @import("dll/ui/about_window.zig");
     _ = @import("dll/ui/camera.zig");
     _ = @import("dll/ui/collision_spheres.zig");

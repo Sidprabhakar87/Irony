@@ -1,3 +1,4 @@
+pub const api = @import("api/root.zig");
 pub const core = @import("core/root.zig");
 pub const game = @import("game/root.zig");
 pub const model = @import("model/root.zig");

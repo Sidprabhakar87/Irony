@@ -13,6 +13,7 @@ pub const Core = struct {
     move_measurer: core.MoveMeasurer,
     automation: core.Automation(.{}),
     controller: core.Controller,
+    referee: core.Referee,
 
     const Self = @This();
 
@@ -25,11 +26,13 @@ pub const Core = struct {
             .move_measurer = .{},
             .automation = .{},
             .controller = core.Controller.init(allocator),
+            .referee = core.Referee.init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.controller.deinit();
+        self.referee.deinit();
     }
 
     pub fn tick(
@@ -48,6 +51,12 @@ pub const Core = struct {
         self.move_detector.detect(&frame);
         self.move_measurer.measure(&frame);
         self.automation.processFrame(base_dir, &settings.automation, &self.controller, &frame);
+
+        if (settings.referee.enabled) {
+            self.referee.settings = settings.referee;
+            self.referee.tick(&frame);
+        }
+
         self.controller.processFrame(&frame, context, processFrame);
     }
 
